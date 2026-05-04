@@ -212,7 +212,7 @@ export function useTeamHolidayRequests(
         status: r.status as "approved" | "pending_tl",
         holiday_date: r.holiday_date,
         holiday_name: r.holiday_name,
-        displayName: nameMap[r.employee_id] ?? r.employee_id,
+        displayName: nameMap[r.employee_id] ?? "Unknown employee",
       }));
     },
     enabled: !!campaignId && !!holidayDate,
@@ -359,8 +359,8 @@ async function enrichHolidayRequests(
     holiday_name: r.holiday_name,
     status: r.status as HRHolidayRequest["status"],
     requested_at: r.requested_at,
-    displayName: nameMap[r.employee_id] ?? r.employee_id,
-    campaignName: campMap[r.campaign_id] ?? r.campaign_id,
+    displayName: nameMap[r.employee_id] ?? "Unknown employee",
+    campaignName: campMap[r.campaign_id] ?? "Unknown campaign",
   }));
 }
 
