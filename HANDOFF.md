@@ -14,6 +14,11 @@ Quick reference for picking the project back up on a new machine.
 2. ~~Mystery Supabase project in history (`hipxsmawxvlxjzotsgfj`).~~ ✅ Confirmed dead 2026-04-20 — the project doesn't exist on Supabase, so the key is inert. Cleared out of git history during the same scrub.
 3. **Put the Supabase + Gmail keys in Vercel's Environment Variables panel** (Project Settings → Environment Variables). Never commit them again.
 4. **Agent browser smoke-test.** SQL-level RLS simulation passed 6/6, but a real agent walk-through in the browser is pending. Do this once a dedicated agent test account is ready.
+5. **Go-live domain switch (pending Jacque's team deploying to Vercel).** Once `app.justoutsource.it` is live, update in Supabase dashboard:
+   - Auth → URL Configuration → Site URL → `https://app.justoutsource.it`
+   - Auth → URL Configuration → Redirect URLs → add `https://app.justoutsource.it/**`
+   - Edge Function secrets: `APP_URL` → `https://app.justoutsource.it`, `APP_DOMAIN` → `app.justoutsource.it`, `ALLOWED_ORIGIN` → `https://app.justoutsource.it`
+   - Env vars already sent to Jacque: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (2026-05-04).
 5. ~~**Flip DRY_RUN=false on both email edge functions.**~~ ✅ Done 2026-04-27. `DRY_RUN_EOD=false` set on `send-eod-digest` and `DRY_RUN_COMPLIANCE=false` set on `compliance-notifications` via Supabase dashboard secrets. Both functions are now sending real emails.
 6. **Run `supabase/dev-seed/02_teardown_mock_dashboard.sql`** to clean the 7 mock Torro agents (DEV_MOCK_TORRO_SLOC campaign) before public launch.
 7. **Re-run RLS audit after any new migration that touches tables, policies, or views.** Migration file + audit doc pattern: `supabase/migrations/<stamp>_<name>.sql` + `docs/security/rls-audit-<date>.md`.
@@ -223,8 +228,9 @@ Files in `supabase/dev-seed/` that contain D's real employee and salary data. Th
 - ~~**A3b real email delivery.**~~ ✅ Done 2026-04-27. `DRY_RUN_EOD=false` and `DRY_RUN_COMPLIANCE=false` both set in Supabase dashboard secrets. Cron is healthy (200s confirmed). Emails are live.
 - ~~**Multi-tenancy Phase 4 — SECURITY DEFINER helper hardening.**~~ ✅ COMPLETE 2026-04-27. All 6 helpers (`is_leadership`, `is_team_lead`, `my_tl_campaign_ids`, `my_team_member_ids`, `tl_employee_on_my_team`, `my_client_campaign_ids`) now carry an explicit org guard.
 - ~~**Multi-tenancy Phase 5 — Org provisioning UI.**~~ ✅ COMPLETE 2026-04-27 (PR #85). `provision-org` edge function + `/admin/provision-org` owner-only page. Per-org employee ID prefix stored on `organizations.employee_id_prefix`; `assign_employee_id()` trigger reads it at insert time so new orgs get their own prefix (e.g. `ACME-0001`) instead of `JOI-XXXX`.
-- ~~**Agent smoke-test nav fixes.**~~ ✅ COMPLETE 2026-04-27 (PR #86). Dashboard link added as first item in agent + TL sidebar. `/solicitudes` route restored in App.tsx. "Time Off Requests" nav item re-added to agent sidebar.
-- ~~**Holiday request rules.**~~ ✅ COMPLETE 2026-04-27 (PRs #87 + migration). `company_holidays.requires_request` column added — Christmas and New Year's set to `false` (mandatory days off, no request button shown). Next-year holidays show a disabled button with "Requests open Dec 2" until within 30 days of Jan 1 of that year.
+- ~~**Agent smoke-test nav fixes.**~~ ✅ COMPLETE 2026-04-27 (PR #86, merged 2026-05-04). Dashboard link added as first item in agent + TL sidebar. `/solicitudes` route restored in App.tsx. "Time Off Requests" nav item re-added to agent sidebar.
+- ~~**Holiday request rules.**~~ ✅ COMPLETE 2026-04-27 (PR #87 merged 2026-05-04 + migration applied 2026-04-27). `company_holidays.requires_request` column added — Christmas and New Year's set to `false` (mandatory days off, no request button shown). Next-year holidays show a disabled button with "Requests open Dec 2" until within 30 days of Jan 1 of that year.
+- ~~**Holiday UUID display fix.**~~ ✅ COMPLETE (PR #84, merged 2026-05-04). `employees_no_pay` returning no match now shows "Unknown employee" instead of raw UUID. Same fix for `campaignName` in `enrichHolidayRequests`.
 - ~~**Cron 401 fix.**~~ ✅ COMPLETE 2026-04-27. `send-eod-digest`, `compliance-notifications`, and `holiday-notifications` all had `verify_jwt = false` already set in the dashboard but `CRON_SECRET` env var was mismatched. Set correct value (`joi-eod-cron-2026-04-19-xK9mP2vL`) on all three. Crons now return 200. Added `verify_jwt = false` to `supabase/config.toml` so the setting survives future deploys.
 
 **Audit followups — ALL SHIPPED 2026-04-21 (PRs #32, #37–#41). See `docs/hr-roadmap.md` § Followups for details.**
