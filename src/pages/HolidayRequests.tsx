@@ -20,6 +20,7 @@ interface CompanyHoliday {
   date: string;
   name: string;
   is_statutory: boolean;
+  requires_request: boolean;
 }
 
 export default function HolidayRequests() {
@@ -49,7 +50,7 @@ export default function HolidayRequests() {
       const today = todayLocal();
       const { data, error } = await supabase
         .from("company_holidays")
-        .select("id, date, name, is_statutory")
+        .select("id, date, name, is_statutory, requires_request")
         .gt("date", today)
         .order("date", { ascending: true });
       if (error) throw error;
@@ -162,6 +163,12 @@ export default function HolidayRequests() {
               cancelMutation.isPending &&
               cancelMutation.variables?.id === myRequest?.id;
 
+            // Change 2: lock next-year holidays until Dec 2 of the prior year
+            const holidayYear = new Date(holiday.date).getFullYear();
+            const currentYear = new Date().getFullYear();
+            const openDate = new Date(holidayYear - 1, 11, 2); // Dec 2 of prior year
+            const isNextYearLocked = holidayYear > currentYear && new Date() < openDate;
+
             return (
               <div
                 key={holiday.id}
@@ -196,8 +203,19 @@ export default function HolidayRequests() {
                 </div>
 
                 {/* Agent action area */}
-                {!myRequest && (
-                  capHit ? (
+                {!holiday.requires_request ? (
+                  <Badge variant="secondary" className="text-xs">
+                    Mandatory day off
+                  </Badge>
+                ) : !myRequest && (
+                  isNextYearLocked ? (
+                    <div className="space-y-1">
+                      <Button size="sm" disabled>
+                        Request Day Off
+                      </Button>
+                      <p className="text-xs text-muted-foreground">Requests open Dec 2</p>
+                    </div>
+                  ) : capHit ? (
                     <p className="text-sm text-muted-foreground">
                       No slots available — speak with your TL to request this holiday.
                     </p>
