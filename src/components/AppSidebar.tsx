@@ -72,8 +72,10 @@ const teamLeadItems = [
 
 // Agent — only their own stuff
 const agentItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "My Timeclock", url: "/reloj", icon: Timer },
   { title: "My EOD History", url: "/eod", icon: ClipboardCheck },
+  { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
   { title: "My Policies", url: "/policies", icon: ScrollText },
   { title: "Vacation", url: "/vacation", icon: CalendarDays },
   { title: "Holiday Requests", url: "/holidays", icon: CalendarCheck },
