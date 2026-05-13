@@ -52,9 +52,26 @@ These are project-level secrets accessible to all edge functions. Set them under
 | `GMAIL_APP_PASSWORD` | Gmail App Password (not the account password) | (generated in Google account security) |
 | `DRY_RUN_EOD` | Set to `false` to enable real EOD digest emails | `false` |
 | `DRY_RUN_COMPLIANCE` | Set to `false` to enable real compliance notification emails | `false` |
-| `ALLOWED_ORIGIN` | CORS origin for `provision-org` edge function | `https://joi-payroll-hr.vercel.app` |
+| `DRY_RUN_HOLIDAY` | Set to `false` to enable real holiday/PTO notification emails | `false` |
+| `ALLOWED_ORIGIN` | CORS origin for edge functions (used by `provision-org`, `holiday-notifications`, `compliance-notifications`, `notify-hr-request-filed`, `get-hr-document-signed-url`) | `https://app.justoutsource.it` |
+| `APP_SUPABASE_KEY` | Anon/publishable key for edge functions that need user-scoped clients. See "Edge function anon key pattern" below. | `sb_publishable_...` |
 
 > **Note:** All of the above are already set on the current JOI Supabase project. If standing up a fresh Supabase project, every secret needs to be re-entered.
+
+### Edge function anon key pattern
+
+Supabase auto-injects a `SUPABASE_ANON_KEY` env var into every edge function. Historically this contained the legacy JWT-format anon key. With the rollout of `sb_publishable_...` keys (legacy keys retire end of 2026), edge functions that need an anon key should read `APP_SUPABASE_KEY` first and fall back to the auto-injected var:
+
+```ts
+const SUPABASE_ANON_KEY =
+  Deno.env.get("APP_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+```
+
+This decouples our functions from the legacy/publishable transition: when the legacy key is disabled, the functions keep working because they're reading our explicit secret. Drop the second fallback once the legacy key is fully retired.
+
+**Use the anon key when:** verifying a caller's JWT (`auth.getUser(token)`) or creating a user-scoped client that respects RLS. **Use `SUPABASE_SERVICE_ROLE_KEY` instead when:** the function needs to bypass RLS (reading across users, generating signed URLs from storage, writing to leadership-only tables).
+
+Currently using this pattern: `holiday-notifications`, `get-hr-document-signed-url`.
 
 ---
 

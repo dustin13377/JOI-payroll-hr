@@ -16,7 +16,7 @@
  * Returns 200: { orgId, orgSlug, inviteEmail }
  *
  * Required env vars (project secrets):
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY  — auto-provided
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — auto-provided
  *   ALLOWED_ORIGIN  — CORS origin allowlist (default "*")
  */
 
@@ -24,7 +24,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
 const CORS_HEADERS = {
