@@ -152,18 +152,138 @@ export function useUpdateEmployee() {
   });
 }
 
+// Lifecycle status the UI exposes when offboarding.
+export type EmploymentStatus = "active" | "terminated" | "resigned" | "on_leave";
+
+export interface TerminateEmployeeInput {
+  employeeId: string;                   // employees.employee_id (the readable one)
+  status: Exclude<EmploymentStatus, "active">;
+  reason: string;                       // short label, e.g. "No call no show"
+  notes?: string;                       // longer free-text context
+  rehireEligible: boolean | null;       // null = needs review
+  lastWorkedDay?: string | null;        // YYYY-MM-DD
+}
+
+/**
+ * Soft-delete kept for back-compat. New callers should use
+ * useTerminateEmployee instead so we capture WHY + rehire eligibility.
+ */
 export function useRemoveEmployee() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (employeeId: string) => {
-      // Soft delete
       const { error } = await supabase
         .from("employees")
-        .update({ is_active: false })
+        .update({
+          employment_status: "terminated",
+          // is_active is mirrored by the DB trigger; we set it here too
+          // so type checks pass against older type defs.
+          is_active: false,
+        })
         .eq("employee_id", employeeId);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+  });
+}
+
+/**
+ * Full offboarding flow — sets status, reason, rehire flag, last worked day.
+ * is_active and terminated_at/by are stamped by the DB trigger.
+ */
+export function useTerminateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: TerminateEmployeeInput) => {
+      const { error } = await supabase
+        .from("employees")
+        .update({
+          employment_status: input.status,
+          termination_reason: input.reason,
+          termination_notes: input.notes ?? null,
+          rehire_eligible: input.rehireEligible,
+          last_worked_day: input.lastWorkedDay ?? null,
+          is_active: false, // mirror; trigger will set this anyway
+        })
+        .eq("employee_id", input.employeeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["inactive-employees"] });
+    },
+  });
+}
+
+/**
+ * Reactivate a previously terminated/resigned/on-leave employee.
+ * Trigger clears terminated_at + terminated_by but keeps the reason / notes
+ * / rehire flag for history.
+ */
+export function useReactivateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (employeeId: string) => {
+      const { error } = await supabase
+        .from("employees")
+        .update({
+          employment_status: "active",
+          is_active: true,
+        })
+        .eq("employee_id", employeeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["inactive-employees"] });
+    },
+  });
+}
+
+/**
+ * List inactive (terminated/resigned/on_leave) employees for the offboarded
+ * view. Separate query keeps the active roster fast.
+ */
+export function useInactiveEmployees() {
+  return useQuery({
+    queryKey: ["inactive-employees"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select(
+          "id, employee_id, full_name, curp, rfc, date_of_birth, employment_status, termination_reason, termination_notes, rehire_eligible, terminated_at, last_worked_day, title, campaigns!employees_campaign_id_fkey(name)"
+        )
+        .neq("employment_status", "active")
+        .order("terminated_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export type InactiveEmployeeRow = NonNullable<
+  ReturnType<typeof useInactiveEmployees>["data"]
+>[number];
+
+/**
+ * Rehire check — wraps the check_rehire RPC. Pass any of curp / name / DOB;
+ * returns matching past records so the Add Employee flow can warn.
+ */
+export function useCheckRehire() {
+  return useMutation({
+    mutationFn: async (input: {
+      curp?: string | null;
+      fullName?: string | null;
+      dateOfBirth?: string | null;
+    }) => {
+      const { data, error } = await supabase.rpc("check_rehire", {
+        p_curp: input.curp ?? null,
+        p_full_name: input.fullName ?? null,
+        p_date_of_birth: input.dateOfBirth ?? null,
+      });
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 }
 
