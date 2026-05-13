@@ -41,6 +41,7 @@ Employee offboarding feature (H-series), bundled into this handoff commit:
 - [ ] Anon key rotation Stage 2: swap Vercel to publishable key (`sb_publishable_u4XONGCOC2lwDjS0k3cwAQ_n6ZkJbe8`), test, then disable legacy key. Wait until prod is stable for 24-48h (so do Wed/Thu next week at earliest).
 - [ ] Resolve two-GitHub-accounts confusion: `sandoval-art` owns the repo, `sandoval028-ctrl` is the Mac's default. Caused push failures today. Pick one and stick with it.
 - [ ] Resolve two-clones-of-repo problem: `~/JOI-payroll-hr` is a stale clean clone, `/Users/admin/Desktop/JOI/JOI Payroll and HR app` is the active one. Delete the stale one to prevent committing in the wrong place.
+- [ ] Reconcile migration history. The repo files `20260513100001_h1_*` and `20260513110001_h2_*` are functionally applied to prod, but Supabase's migration tracker registered them under auto-generated versions (`20260513203624`, `20260513204410`) via MCP `apply_migration`. There's also a third tracked migration `20260513205139_h2_employment_history_trigger_security_definer` that's NOT in the repo (a follow-up fix that made the trigger SECURITY DEFINER). Fix path: pull the SQL of the third tracked migration into a new repo file, then rename the existing h1/h2 files to match the tracked versions (or delete the repo files entirely and rely on the tracker). Not urgent — only matters when rebuilding schema from scratch (white-label staging, dev DB resets).
 
 ## Next step when you come back
 
