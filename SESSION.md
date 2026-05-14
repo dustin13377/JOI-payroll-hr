@@ -1,55 +1,38 @@
 # Session Handoff
 
-**Saved:** 2026-05-14T21:43:42+00:00
-**Machine:** claude (sandbox writer; D committed from his Mac)
+**Saved:** 2026-05-14T23:31:02+00:00
+**Machine:** cowork-sandbox (claude)
 **Branch:** main
-**Last commit:** 947a7be feat: 30-day reviews + system users + vercel SPA rewrites
+**Last commit:** 690816d session-handoff: 30-day reviews + system users shipped, awaiting Vercel deploy
 
 ## What we were doing
 
-Shipped two features end-to-end: the 30-day probationary review system (i1 + i2) and the system-users concept (i3) for non-employee logins. Migrations applied, edge function deployed, frontend pushed. Waiting on Vercel to finish the deploy so D can test live (emails link to the production URL, not localhost).
+Debugged a 400 error on the Add Employee form ("Edge Function returned a non-2xx status code") while trying to add Jose Guadalupe Renteria Gonzalez. Traced it to the `create-employee` edge function not being idempotent — a prior attempt left a ghost auth user with no employees row / no user_profiles link, and every retry bounced off "user already registered." Cleaned up the ghost user and patched the function so this class of half-failure can't strand future retries.
 
 ## Files in flight
 
-Nothing in flight — working tree is clean. Everything from this session is in commit `947a7be`. Files shipped:
-
-- `supabase/migrations/20260514100001_i1_thirty_day_reviews.sql` — agent_reviews table + RPCs (`complete_agent_review`, `extend_agent_review`, `confirm_review_termination`)
-- `supabase/migrations/20260514110001_i2_review_notifications.sql` — dedupe table + helper functions + 2 pg_cron jobs
-- `supabase/migrations/20260514120001_i3_system_users.sql` — `is_system_user` boolean on employees + check constraint (admin/owner only)
-- `supabase/functions/review-notifications/index.ts` — Deno edge function, 2 modes (`tl_daily` and `escalation`)
-- `src/pages/AgentReviews.tsx`, `src/hooks/useAgentReviews.ts`, `src/components/employee-profile/ThirtyDayReviewCard.tsx`
-- `src/pages/SystemUsers.tsx` — Owner-only page at `/admin/system-users`
-- `vercel.json` — SPA rewrite so `/reviews` and `/admin/system-users` direct links don't 404
-- Filters added to `useEmployees`, `usePayrollComputed`, `Campaigns.tsx`, `CampaignDetail.tsx` (3 spots)
-- `employees_no_pay` view updated server-side (covers TLDashboard / Attendance / Performance)
+- `supabase/functions/create-employee/index.ts` — newly tracked in repo. Previously the function only lived in Supabase (deployed via MCP, not GH Actions). Source now lives in the repo so future edits flow through git like the other functions.
 
 ## Decisions made this session
 
-- 30-day clock starts from `hire_date` (calendar days), not worked days
-- Outcomes: keep / let_go / extend; extension days configurable 1–60
-- Let-go is NEVER auto-actioned — TL files recommendation, HR confirms via separate RPC, only then employee flips to `terminated`
-- Agents CAN see their own completed reviews (pending let-go is hidden until HR confirms)
-- Notifications are email-only (no in-app badges)
-- TL gets re-emailed daily until completed; week-4 escalation goes to manager + HR + owner on day-29 evening (6 PM CDMX)
-- System users hidden everywhere except `/admin/system-users`; only Owner can manage them; only Admin/Owner roles allowed
-- System-user notes reuse `termination_notes` column rather than adding a new column (slightly off-name reuse, flagged for future cleanup if usage grows)
+- The `create-employee` edge function should be idempotent against orphaned auth users. If `inviteUserByEmail` says "already registered," look the user up via `auth.admin.listUsers` and continue instead of erroring out.
+- Pre-flight check: if an `employees` row already exists for the email, return 409 with a clear "edit that record instead" message — don't silently dupe.
+- Only roll back the auth user on failure if *this call* created it. Never blow away a pre-existing auth user.
+- If the existing auth user is already linked to a different employee via `user_profiles`, return 409 instead of overwriting.
 
 ## Open todos
 
-- [ ] **Verify `DRY_RUN_REVIEW=false` in Supabase Edge Functions Secrets** when ready for real review emails to send. Currently defaults to true — function only logs "would send". Path: Project Settings (gear icon) → Edge Functions → Secrets, OR sidebar Edge Functions → "Manage Secrets" button.
-- [ ] **Double-check `DRY_RUN_HOLIDAY=false`** while in the Secrets panel (older outstanding item per memory).
-- [ ] **Test 30-day reviews live**: set a recent `hire_date` on a test employee, confirm 4 review rows seeded, fill out a Week 1 review, then a Week 4 with let-go to verify the HR confirmation flow.
-- [ ] **Test system users live**: as Owner, add a test admin with a different email of yours; verify they're absent from `/empleados`, `/asistencia`, `/desempeno`, payroll. Then test login + remove flow.
-- [ ] **Run `graphify update .`** locally to refresh the knowledge graph with the new files.
+- [ ] D needs to actually retry the Add Employee form for Joe Renteria and confirm the patched function works end-to-end (invite email arrives, employees row created, user_profiles linked).
+- [ ] Confirm the Title field selection in the form — screenshot showed "Manager" but Joe may actually be an agent. Verify before submit.
+- [ ] Optional: save a memory note about the auth-user-orphan pattern as feedback so we don't rediscover it next time (D was offered, didn't answer before /save-session).
 
 ## Next step when you come back
 
-Wait for the Vercel deploy from commit `947a7be` to finish, then run through the test plan for 30-day reviews first (set a `hire_date` on a test employee → check `/reviews` shows the 4 rows). After that, flip `DRY_RUN_REVIEW=false` in Supabase secrets when you want real review emails to start sending.
+Open app.justoutsource.it → Employees → New Employee, fill in Jose Guadalupe Renteria Gonzalez with email `joe.renteria@justoutsource.it`. Double-check the Title (Manager vs Agent) before submit. Submit and confirm: (a) no 400 toast, (b) employees row appears in the list, (c) invite email lands at the address.
 
 ## Watch out for
 
-- **Cron jobs are firing already** but in DRY_RUN mode — they hit the live function at 9 AM and 6 PM CDMX every day. Logs will show "[DRY RUN] Would send..." entries. Safe but worth knowing if you're checking edge function logs.
-- **`employees_no_pay` view filter is permanent** — system users will not show up there even with `OR id = my_employee_id()`. Not a bug; consequence of the design. If a future system user needs a self-lookup via this view, we'd need to revisit.
-- **System-user add flow has a millisecond visibility window** in `/empleados` between `create-employee` returning and the follow-up `is_system_user=true` UPDATE. Acceptable but documented.
-- **Pre-existing ESLint `any` errors** in `usePayrollComputed.ts` and `useSupabasePayroll.ts` are NOT from this session — they were already there. Don't try to "fix" them as part of this work.
-- **Sandbox can't write through to `.git/index.lock`** — D committed manually from his Mac terminal because the sandbox couldn't run git commit. If you see lock-file errors next session, that's why; D handles git operations.
+- The patched function is **deployed (v23) but not tested live yet** — D needs to actually run the form to confirm it works.
+- The ghost auth user `bf1f32bf-2314-42e6-8415-00eb7010582e` (joe.renteria@justoutsource.it) was deleted from `auth.users` this session. If D had already triggered an invite email from the prior failed attempts, those links are now dead — a fresh invite will go out on the next successful submit.
+- The function has `verify_jwt: false` and handles its own auth via the Authorization header. The deploy preserved this — do not flip `verify_jwt` to true without auditing the code, it'll break callers.
+- `create-employee` source previously only existed in Supabase. Now in repo at `supabase/functions/create-employee/index.ts`. If you redeploy via GH Actions later, make sure the workflow picks it up — the other functions in `supabase/functions/` all deploy from there.
