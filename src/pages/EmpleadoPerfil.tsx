@@ -44,6 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDateMX } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequestsCard";
+import { EmploymentHistoryCard } from "@/components/employee-profile/EmploymentHistoryCard";
 
 // ── A1: Personal & Tax Info validation ──────────────────────────────
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
@@ -112,7 +113,54 @@ export default function EmpleadoPerfil() {
     enabled: needsTlFallback,
   });
 
-  const empRecord = empFromList ?? tlFallback ?? undefined;
+  // H1 fallback: useEmployees() filters to is_active=true, so terminated /
+  // resigned / on-leave folks aren't in that cache. When leadership clicks an
+  // inactive employee from the Inactive tab, fetch the full row directly.
+  const needsInactiveFallback = !empFromList && !isLoading && isLeadership && !!id;
+  const { data: inactiveFallback, isLoading: inactiveFallbackLoading } = useQuery({
+    queryKey: ["inactive-profile-fallback", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("*, campaigns!employees_campaign_id_fkey(name), departments(name)")
+        .eq("employee_id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return {
+        id: data.employee_id,
+        nombre: data.full_name,
+        sueldoBase: Number(data.monthly_base_salary) || 0,
+        descuentoPorDia: Number(data.daily_discount_rate) || 0,
+        kpiMonto: Number(data.kpi_bonus_amount) || 0,
+        title: (data.title || "agent") as import("@/types/payroll").EmpTitle,
+        reportsTo: data.reports_to || null,
+        _uuid: data.id,
+        _campaignId: data.campaign_id || undefined,
+        _campaignName: (data as any).campaigns?.name || undefined,
+        _curp: data.curp ?? null,
+        _rfc: data.rfc ?? null,
+        _address: data.address ?? null,
+        _phone: data.phone ?? null,
+        _bankClabe: data.bank_clabe ?? null,
+        _complianceGraceUntil: data.compliance_grace_until ?? null,
+        _workName: data.work_name ?? null,
+        _personalEmail: data.personal_email ?? null,
+        _hireDate: data.hire_date ?? null,
+        _emergencyContact: data.emergency_contact ?? null,
+        _bankName: data.bank_name ?? null,
+        _dateOfBirth: data.date_of_birth ?? null,
+        _maritalStatus: data.marital_status ?? null,
+        _nss: data.nss ?? null,
+        _lastWorkedDay: data.last_worked_day ?? null,
+        _departmentId: data.department_id ?? null,
+        _departmentName: (data as any).departments?.name ?? null,
+      } satisfies EmployeeWithMeta;
+    },
+    enabled: needsInactiveFallback,
+  });
+
+  const empRecord = empFromList ?? tlFallback ?? inactiveFallback ?? undefined;
   const empUuid = empRecord?._uuid ?? null;
   const compliance = useComplianceStatus(isLeadership ? empUuid : undefined);
 
@@ -247,6 +295,9 @@ export default function EmpleadoPerfil() {
     return <div className="flex items-center justify-center py-20"><LogoLoadingIndicator /></div>;
   }
   if (needsTlFallback && !tlFallback && tlFallbackLoading) {
+    return <div className="flex items-center justify-center py-20"><LogoLoadingIndicator /></div>;
+  }
+  if (needsInactiveFallback && !inactiveFallback && inactiveFallbackLoading) {
     return <div className="flex items-center justify-center py-20"><LogoLoadingIndicator /></div>;
   }
 
@@ -606,6 +657,9 @@ export default function EmpleadoPerfil() {
 
       {/* C1: Policy Acknowledgments — leadership only */}
       {isLeadership && <PolicyAckCard agentId={emp._uuid!} agentCampaignId={campaignId} agentRole={emp.title} />}
+
+      {/* H2: Employment History — leadership only */}
+      {isLeadership && emp._uuid && <EmploymentHistoryCard employeeUuid={emp._uuid} />}
 
       {/* Biweekly Breakdown — leadership only */}
       {isLeadership && (

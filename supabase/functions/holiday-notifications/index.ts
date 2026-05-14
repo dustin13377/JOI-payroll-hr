@@ -39,7 +39,11 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD") ?? "";
 const DRY_RUN = Deno.env.get("DRY_RUN_HOLIDAY") !== "false"; // safe default: true
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+// Prefer the custom APP_SUPABASE_KEY secret (publishable key) so this function
+// is decoupled from Supabase's auto-injected legacy anon key. Falls back to the
+// auto-injected SUPABASE_ANON_KEY until legacy keys are retired.
+const SUPABASE_ANON_KEY =
+  Deno.env.get("APP_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const APP_DOMAIN = Deno.env.get("APP_DOMAIN") ?? (() => { throw new Error("APP_DOMAIN not set"); })();
 const REPLY_TO_EMAIL = Deno.env.get("REPLY_TO_EMAIL") ?? (() => { throw new Error("REPLY_TO_EMAIL not set"); })();
 

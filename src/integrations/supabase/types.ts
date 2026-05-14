@@ -877,6 +877,53 @@ export type Database = {
           },
         ]
       }
+      employment_history: {
+        Row: {
+          id: string
+          employee_id: string
+          from_status: "active" | "terminated" | "resigned" | "on_leave" | null
+          to_status: "active" | "terminated" | "resigned" | "on_leave"
+          reason: string | null
+          notes: string | null
+          rehire_eligible: boolean | null
+          last_worked_day: string | null
+          changed_by: string | null
+          changed_at: string
+        }
+        Insert: {
+          id?: string
+          employee_id: string
+          from_status?: "active" | "terminated" | "resigned" | "on_leave" | null
+          to_status: "active" | "terminated" | "resigned" | "on_leave"
+          reason?: string | null
+          notes?: string | null
+          rehire_eligible?: boolean | null
+          last_worked_day?: string | null
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Update: {
+          id?: string
+          employee_id?: string
+          from_status?: "active" | "terminated" | "resigned" | "on_leave" | null
+          to_status?: "active" | "terminated" | "resigned" | "on_leave"
+          reason?: string | null
+          notes?: string | null
+          rehire_eligible?: boolean | null
+          last_worked_day?: string | null
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           address: string | null
@@ -892,6 +939,7 @@ export type Database = {
           email: string | null
           emergency_contact: string | null
           employee_id: string
+          employment_status: "active" | "terminated" | "resigned" | "on_leave"
           full_name: string
           hire_date: string | null
           id: string
@@ -903,9 +951,14 @@ export type Database = {
           nss: string | null
           personal_email: string | null
           phone: string | null
+          rehire_eligible: boolean | null
           reports_to: string | null
           rfc: string | null
           shift_type: string | null
+          terminated_at: string | null
+          terminated_by: string | null
+          termination_notes: string | null
+          termination_reason: string | null
           title: string
           work_name: string | null
         }
@@ -923,6 +976,7 @@ export type Database = {
           email?: string | null
           emergency_contact?: string | null
           employee_id: string
+          employment_status?: "active" | "terminated" | "resigned" | "on_leave"
           full_name: string
           hire_date?: string | null
           id?: string
@@ -934,9 +988,14 @@ export type Database = {
           nss?: string | null
           personal_email?: string | null
           phone?: string | null
+          rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
           shift_type?: string | null
+          terminated_at?: string | null
+          terminated_by?: string | null
+          termination_notes?: string | null
+          termination_reason?: string | null
           title?: string
           work_name?: string | null
         }
@@ -954,6 +1013,7 @@ export type Database = {
           email?: string | null
           emergency_contact?: string | null
           employee_id?: string
+          employment_status?: "active" | "terminated" | "resigned" | "on_leave"
           full_name?: string
           hire_date?: string | null
           id?: string
@@ -965,9 +1025,14 @@ export type Database = {
           nss?: string | null
           personal_email?: string | null
           phone?: string | null
+          rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
           shift_type?: string | null
+          terminated_at?: string | null
+          terminated_by?: string | null
+          termination_notes?: string | null
+          termination_reason?: string | null
           title?: string
           work_name?: string | null
         }
@@ -2415,6 +2480,26 @@ export type Database = {
           digest_fire_time: string
           eod_digest_timezone: string
           eod_morning_bundle_time: string
+        }[]
+      }
+      check_rehire: {
+        Args: {
+          p_curp?: string | null
+          p_full_name?: string | null
+          p_date_of_birth?: string | null
+        }
+        Returns: {
+          id: string
+          employee_id: string
+          full_name: string
+          curp: string | null
+          date_of_birth: string | null
+          employment_status: "active" | "terminated" | "resigned" | "on_leave"
+          termination_reason: string | null
+          termination_notes: string | null
+          rehire_eligible: boolean | null
+          terminated_at: string | null
+          match_type: string
         }[]
       }
       detect_holiday_no_shows: { Args: { p_date: string }; Returns: number }

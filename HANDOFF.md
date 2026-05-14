@@ -31,6 +31,24 @@ These are items D has reviewed and chosen to defer. Future sessions should not f
 - **Rotate Gmail App Password** (account security → revoke + regenerate, then update `send-eod-digest` + `compliance-notifications` env vars). Paired with the anon key rotation for the same maintenance window. Not required before deploy.
 - **MFA on owner/admin Supabase auth.** Worth adding before granting production access to other humans, but D has deferred for now.
 
+## Supabase Security Advisor warnings — READ BEFORE "FIXING"
+
+As of 2026-05-13, the Supabase advisor flags 3 CRITICAL `security_definer_view` warnings:
+
+- `public.employees_no_pay`
+- `public.employees_client_view`
+- `public.eod_logs_client_view`
+
+**These are false positives. Do NOT flip `security_invoker = on` to silence them — you will break the client portal and the TL dashboard.**
+
+**Why they're intentional.** All three views are declared `WITH (security_invoker = off)` deliberately. Clients (and in some cases TLs) do not have RLS access to the base `employees` / `eod_logs` tables, so an invoker-rights view would return empty. Instead, the security boundary is the **WHERE clause** inside each view, which calls SECURITY DEFINER helpers (`is_client()`, `my_client_id()`, `my_client_campaign_ids()`, `my_org_id()`, `is_leadership()`, `is_team_lead()`, `my_tl_campaign_ids()`, `my_employee_id()`) to enforce scoping. Migration comments in `20260424300001_e1_client_portal_data_model.sql` and `20260427500001_mt_phase2_root_tables.sql` document this explicitly.
+
+**Why the linter still complains.** The Supabase advisor can't see WHERE-clause scoping and flags any non-invoker view as a generic antipattern. The remediation URL it points to literally allows "or enforce equivalent checks in your view definition" — which is what we did.
+
+**The real risk to mind.** Since the security boundary now lives in those helper functions, **the helpers themselves are load-bearing.** A careless edit to `is_client()`, `my_client_id()`, `my_org_id()`, `is_leadership()`, etc. could silently leak data across clients or orgs. Migration `20260427800001_mt_phase4_harden_helper_functions.sql` did a dedicated hardening pass on these — preserve that work. Treat any future change to a `is_*` or `my_*` SECURITY DEFINER helper as security-critical and pair it with an RLS audit.
+
+**If the advisor noise bothers you,** suppress per-view rather than per-project so a real future regression still surfaces. Don't blanket-disable.
+
 ## Getting set up on a new computer
 
 Clone the repo, install, and run the dev server:
@@ -533,7 +551,7 @@ npx tsc --noEmit     # type-check without emitting
 - `.git/index.lock` can get stuck if a terminal is closed mid-commit. Fix: `rm -f .git/index.lock`.
 - **PostgREST embed ambiguity.** Any table with more than one FK to the same related table will return HTTP 300 + PGRST201 on a bare `table(...)` embed. Write the FK explicitly, e.g. `campaigns!employees_campaign_id_fkey(name)`. Current known case: `employees` ↔ `campaigns`.
 - **`time_clock` column is `late_minutes`**, not `minutes_late`. Easy transposition. Same for any new code touching the table.
-- **Views on RLS-protected tables need `WITH (security_invoker = on)`.** Postgres defaults views to run with the view owner's privileges, which bypasses RLS entirely. `employees_no_pay` sets it explicitly. If you add a new view over `employees` or any other sensitive table, set this flag or you will leak data.
+- **Views on RLS-protected tables: pick one of two valid patterns.** Postgres defaults views to run with the view owner's privileges, which bypasses RLS. Two valid patterns in this codebase: (1) `WITH (security_invoker = on)` — the view respects the caller's RLS on the base table; (2) `WITH (security_invoker = off)` + a role-gated WHERE clause inside the view using SECURITY DEFINER helpers (`is_client()`, `my_org_id()`, etc.) — the WHERE clause IS the security boundary. `employees_no_pay`, `employees_client_view`, and `eod_logs_client_view` all use pattern (2) deliberately. **See the "Supabase Security Advisor warnings" section above before changing any of these.** If you add a brand new view, picking pattern (1) is safer and simpler unless you have a specific reason to bypass RLS.
 - The `employees` table has `campaign_id` (FK to `campaigns`). The `clients` table is the billing parent. A client like Torro has multiple campaigns (SLOC Weekday, MCA, etc.). Invoices roll up at the client level; agents are assigned at the campaign level.
 - shadcn Table uses `<TableHeader>` as the `<thead>` wrapper and `<TableHead>` as the `<th>` cell. Easy to swap by accident.
 - `user_profiles.role` is auto-synced from `employees.title` by a trigger (`trg_sync_user_profile_role`). Don't write to `role` directly — update `title` and let the trigger handle it.

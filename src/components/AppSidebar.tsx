@@ -172,6 +172,9 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+        {/* TODO: re-enable when multi-tenancy / white-label provisioning is in scope.
+            The /admin/provision-org route + ProvisionOrg page + provision-org edge
+            function are all still wired up — only the nav entry is hidden here.
         {isOwner && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-[11px] uppercase tracking-widest text-sidebar-foreground/30 font-medium">Settings</SidebarGroupLabel>
@@ -193,6 +196,7 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+        */}
       </SidebarContent>
       <SidebarFooter className="p-2">
         {!collapsed && user && (

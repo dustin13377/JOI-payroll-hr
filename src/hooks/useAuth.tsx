@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type UserTitle = "owner" | "admin" | "manager" | "team_lead" | "agent";
 
@@ -100,7 +101,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setProfile(null);
         } else {
-          setProfile(data as UserProfileData);
+          const p = data as UserProfileData;
+
+          // H1: block inactive (terminated/resigned/on_leave) employees.
+          // Clients (role='client') skip this check — they're not on the
+          // employees table.
+          if (p.role !== "client" && p.employee_id) {
+            const { data: emp, error: empErr } = await supabase
+              .from("employees")
+              .select("employment_status, full_name")
+              .eq("id", p.employee_id)
+              .maybeSingle();
+            if (!cancelled && !empErr && emp && emp.employment_status !== "active") {
+              toast.error(
+                `This account is ${emp.employment_status.replace("_", " ")} and can't sign in. Talk to your manager if this is wrong.`,
+                { duration: 8000 }
+              );
+              await supabase.auth.signOut();
+              setProfile(null);
+              return;
+            }
+          }
+
+          setProfile(p);
         }
       } catch (err) {
         if (cancelled) return;
