@@ -41,6 +41,8 @@ import TimeOff from "@/pages/TimeOff";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientCampaignDetail from "@/pages/ClientCampaignDetail";
 import ProvisionOrg from "@/pages/ProvisionOrg";
+import AgentReviews from "@/pages/AgentReviews";
+import SystemUsers from "@/pages/SystemUsers";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
@@ -140,6 +142,7 @@ const App = () => (
                     <Route path="/asistencia" element={<RequireTeamLeadOrAbove><Attendance /></RequireTeamLeadOrAbove>} />
                     <Route path="/desempeno" element={<RequireTeamLeadOrAbove><Performance /></RequireTeamLeadOrAbove>} />
                     <Route path="/team-lead/dashboard" element={<RequireTeamLeadOrAbove><TLDashboard /></RequireTeamLeadOrAbove>} />
+                    <Route path="/reviews" element={<RequireTeamLeadOrAbove><AgentReviews /></RequireTeamLeadOrAbove>} />
                     <Route path="/settings/shifts" element={<RequireTeamLeadOrAbove><ShiftSettings /></RequireTeamLeadOrAbove>} />
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
                     <Route path="/campaigns/:id" element={<RequireLeadership><CampaignDetail /></RequireLeadership>} />
@@ -155,6 +158,7 @@ const App = () => (
                     <Route path="/policies" element={<MyPolicies />} />
                     <Route path="/account" element={<Account />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
+                    <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </AppLayout>

@@ -61,7 +61,7 @@ export default function Campaigns() {
         await Promise.all([
           supabase.from('clients').select('id, name, prefix').order('name'),
           supabase.from('campaigns').select('id, client_id, name').order('name'),
-          supabase.from('employees').select('campaign_id').eq('is_active', true),
+          supabase.from('employees').select('campaign_id').eq('is_active', true).eq('is_system_user', false),
           supabase.from('shift_settings').select('campaign_id, shift_name'),
         ]);
 

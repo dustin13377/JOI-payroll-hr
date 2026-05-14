@@ -45,6 +45,7 @@ import { formatDateMX } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequestsCard";
 import { EmploymentHistoryCard } from "@/components/employee-profile/EmploymentHistoryCard";
+import { ThirtyDayReviewCard } from "@/components/employee-profile/ThirtyDayReviewCard";
 
 // ── A1: Personal & Tax Info validation ──────────────────────────────
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
@@ -660,6 +661,9 @@ export default function EmpleadoPerfil() {
 
       {/* H2: Employment History — leadership only */}
       {isLeadership && emp._uuid && <EmploymentHistoryCard employeeUuid={emp._uuid} />}
+
+      {/* I1: 30-Day Review — TL of own team + leadership */}
+      {(isLeadership || isTeamLead) && emp._uuid && <ThirtyDayReviewCard employeeId={emp._uuid} />}
 
       {/* Biweekly Breakdown — leadership only */}
       {isLeadership && (

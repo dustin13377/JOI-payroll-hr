@@ -229,6 +229,211 @@ export type Database = {
           },
         ]
       }
+      agent_review_notifications_sent: {
+        Row: {
+          id: string
+          notification_type: Database["public"]["Enums"]["review_notification_type"]
+          recipient_email: string
+          recipient_employee_id: string
+          review_id: string
+          send_date: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          notification_type: Database["public"]["Enums"]["review_notification_type"]
+          recipient_email: string
+          recipient_employee_id: string
+          review_id: string
+          send_date: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          notification_type?: Database["public"]["Enums"]["review_notification_type"]
+          recipient_email?: string
+          recipient_employee_id?: string
+          review_id?: string
+          send_date?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_review_notifications_sent_recipient_employee_id_fkey"
+            columns: ["recipient_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_review_notifications_sent_recipient_employee_id_fkey"
+            columns: ["recipient_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_review_notifications_sent_recipient_employee_id_fkey"
+            columns: ["recipient_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_review_notifications_sent_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "agent_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_reviews: {
+        Row: {
+          attendance_score: number | null
+          attitude_score: number | null
+          campaign_id: string
+          completed_at: string | null
+          created_at: string
+          decision: Database["public"]["Enums"]["review_decision"] | null
+          decision_reason: string | null
+          due_date: string
+          employee_id: string
+          extension_days: number | null
+          hr_decided_at: string | null
+          hr_decided_by: string | null
+          hr_decision_notes: string | null
+          id: string
+          kpi_score: number | null
+          notes: string | null
+          reviewed_by: string | null
+          termination_status:
+            | Database["public"]["Enums"]["review_termination_status"]
+            | null
+          updated_at: string
+          week_number: number
+        }
+        Insert: {
+          attendance_score?: number | null
+          attitude_score?: number | null
+          campaign_id: string
+          completed_at?: string | null
+          created_at?: string
+          decision?: Database["public"]["Enums"]["review_decision"] | null
+          decision_reason?: string | null
+          due_date: string
+          employee_id: string
+          extension_days?: number | null
+          hr_decided_at?: string | null
+          hr_decided_by?: string | null
+          hr_decision_notes?: string | null
+          id?: string
+          kpi_score?: number | null
+          notes?: string | null
+          reviewed_by?: string | null
+          termination_status?:
+            | Database["public"]["Enums"]["review_termination_status"]
+            | null
+          updated_at?: string
+          week_number: number
+        }
+        Update: {
+          attendance_score?: number | null
+          attitude_score?: number | null
+          campaign_id?: string
+          completed_at?: string | null
+          created_at?: string
+          decision?: Database["public"]["Enums"]["review_decision"] | null
+          decision_reason?: string | null
+          due_date?: string
+          employee_id?: string
+          extension_days?: number | null
+          hr_decided_at?: string | null
+          hr_decided_by?: string | null
+          hr_decision_notes?: string | null
+          id?: string
+          kpi_score?: number | null
+          notes?: string | null
+          reviewed_by?: string | null
+          termination_status?:
+            | Database["public"]["Enums"]["review_termination_status"]
+            | null
+          updated_at?: string
+          week_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_reviews_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_hr_decided_by_fkey"
+            columns: ["hr_decided_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_hr_decided_by_fkey"
+            columns: ["hr_decided_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_hr_decided_by_fkey"
+            columns: ["hr_decided_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_config: {
         Row: {
           key: string
@@ -483,6 +688,7 @@ export type Database = {
           eod_reply_to_email: string | null
           id: string
           name: string
+          organization_id: string
           requires_holiday_coverage: boolean
           team_lead_id: string | null
         }
@@ -495,6 +701,7 @@ export type Database = {
           eod_reply_to_email?: string | null
           id?: string
           name: string
+          organization_id: string
           requires_holiday_coverage?: boolean
           team_lead_id?: string | null
         }
@@ -507,6 +714,7 @@ export type Database = {
           eod_reply_to_email?: string | null
           id?: string
           name?: string
+          organization_id?: string
           requires_holiday_coverage?: boolean
           team_lead_id?: string | null
         }
@@ -516,6 +724,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
@@ -667,6 +882,7 @@ export type Database = {
           created_at: string | null
           id: string
           name: string
+          organization_id: string
           prefix: string
           subtitle: string | null
         }
@@ -676,6 +892,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name: string
+          organization_id: string
           prefix: string
           subtitle?: string | null
         }
@@ -685,10 +902,19 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
+          organization_id?: string
           prefix?: string
           subtitle?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       company_holidays: {
         Row: {
@@ -698,6 +924,8 @@ export type Database = {
           id: string
           is_statutory: boolean
           name: string
+          organization_id: string
+          requires_request: boolean
         }
         Insert: {
           created_at?: string
@@ -706,6 +934,8 @@ export type Database = {
           id?: string
           is_statutory?: boolean
           name: string
+          organization_id: string
+          requires_request?: boolean
         }
         Update: {
           created_at?: string
@@ -714,8 +944,18 @@ export type Database = {
           id?: string
           is_statutory?: boolean
           name?: string
+          organization_id?: string
+          requires_request?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "company_holidays_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       compliance_notifications_sent: {
         Row: {
@@ -776,6 +1016,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          organization_id: string
           sort_order: number
           updated_at: string
         }
@@ -784,6 +1025,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          organization_id: string
           sort_order?: number
           updated_at?: string
         }
@@ -792,10 +1034,19 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          organization_id?: string
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "departments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employee_documents: {
         Row: {
@@ -877,53 +1128,6 @@ export type Database = {
           },
         ]
       }
-      employment_history: {
-        Row: {
-          id: string
-          employee_id: string
-          from_status: "active" | "terminated" | "resigned" | "on_leave" | null
-          to_status: "active" | "terminated" | "resigned" | "on_leave"
-          reason: string | null
-          notes: string | null
-          rehire_eligible: boolean | null
-          last_worked_day: string | null
-          changed_by: string | null
-          changed_at: string
-        }
-        Insert: {
-          id?: string
-          employee_id: string
-          from_status?: "active" | "terminated" | "resigned" | "on_leave" | null
-          to_status: "active" | "terminated" | "resigned" | "on_leave"
-          reason?: string | null
-          notes?: string | null
-          rehire_eligible?: boolean | null
-          last_worked_day?: string | null
-          changed_by?: string | null
-          changed_at?: string
-        }
-        Update: {
-          id?: string
-          employee_id?: string
-          from_status?: "active" | "terminated" | "resigned" | "on_leave" | null
-          to_status?: "active" | "terminated" | "resigned" | "on_leave"
-          reason?: string | null
-          notes?: string | null
-          rehire_eligible?: boolean | null
-          last_worked_day?: string | null
-          changed_by?: string | null
-          changed_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "employment_history_employee_id_fkey"
-            columns: ["employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       employees: {
         Row: {
           address: string | null
@@ -939,16 +1143,18 @@ export type Database = {
           email: string | null
           emergency_contact: string | null
           employee_id: string
-          employment_status: "active" | "terminated" | "resigned" | "on_leave"
+          employment_status: Database["public"]["Enums"]["employment_status"]
           full_name: string
           hire_date: string | null
           id: string
           is_active: boolean | null
+          is_system_user: boolean
           kpi_bonus_amount: number | null
           last_worked_day: string | null
           marital_status: string | null
           monthly_base_salary: number | null
           nss: string | null
+          organization_id: string
           personal_email: string | null
           phone: string | null
           rehire_eligible: boolean | null
@@ -976,16 +1182,18 @@ export type Database = {
           email?: string | null
           emergency_contact?: string | null
           employee_id: string
-          employment_status?: "active" | "terminated" | "resigned" | "on_leave"
+          employment_status?: Database["public"]["Enums"]["employment_status"]
           full_name: string
           hire_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_system_user?: boolean
           kpi_bonus_amount?: number | null
           last_worked_day?: string | null
           marital_status?: string | null
           monthly_base_salary?: number | null
           nss?: string | null
+          organization_id: string
           personal_email?: string | null
           phone?: string | null
           rehire_eligible?: boolean | null
@@ -1013,16 +1221,18 @@ export type Database = {
           email?: string | null
           emergency_contact?: string | null
           employee_id?: string
-          employment_status?: "active" | "terminated" | "resigned" | "on_leave"
+          employment_status?: Database["public"]["Enums"]["employment_status"]
           full_name?: string
           hire_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_system_user?: boolean
           kpi_bonus_amount?: number | null
           last_worked_day?: string | null
           marital_status?: string | null
           monthly_base_salary?: number | null
           nss?: string | null
+          organization_id?: string
           personal_email?: string | null
           phone?: string | null
           rehire_eligible?: boolean | null
@@ -1052,6 +1262,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "employees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "employees_reports_to_fkey"
             columns: ["reports_to"]
             isOneToOne: false
@@ -1068,6 +1285,67 @@ export type Database = {
           {
             foreignKeyName: "employees_reports_to_fkey"
             columns: ["reports_to"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employment_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          employee_id: string
+          from_status: Database["public"]["Enums"]["employment_status"] | null
+          id: string
+          last_worked_day: string | null
+          notes: string | null
+          reason: string | null
+          rehire_eligible: boolean | null
+          to_status: Database["public"]["Enums"]["employment_status"]
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          employee_id: string
+          from_status?: Database["public"]["Enums"]["employment_status"] | null
+          id?: string
+          last_worked_day?: string | null
+          notes?: string | null
+          reason?: string | null
+          rehire_eligible?: boolean | null
+          to_status: Database["public"]["Enums"]["employment_status"]
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          employee_id?: string
+          from_status?: Database["public"]["Enums"]["employment_status"] | null
+          id?: string
+          last_worked_day?: string | null
+          notes?: string | null
+          reason?: string | null
+          rehire_eligible?: boolean | null
+          to_status?: Database["public"]["Enums"]["employment_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employment_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employment_history_employee_id_fkey"
+            columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees_no_pay"
             referencedColumns: ["id"]
@@ -1507,11 +1785,36 @@ export type Database = {
         }
         Relationships: []
       }
+      organizations: {
+        Row: {
+          created_at: string
+          employee_id_prefix: string
+          id: string
+          name: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id_prefix?: string
+          id?: string
+          name: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          employee_id_prefix?: string
+          id?: string
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       payroll_periods: {
         Row: {
           created_at: string | null
           end_date: string
           id: string
+          organization_id: string
           period_type: string
           start_date: string
           status: string | null
@@ -1520,6 +1823,7 @@ export type Database = {
           created_at?: string | null
           end_date: string
           id?: string
+          organization_id: string
           period_type: string
           start_date: string
           status?: string | null
@@ -1528,11 +1832,20 @@ export type Database = {
           created_at?: string | null
           end_date?: string
           id?: string
+          organization_id?: string
           period_type?: string
           start_date?: string
           status?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payroll_periods_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payroll_records: {
         Row: {
@@ -1737,6 +2050,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_global: boolean
+          organization_id: string
           scoped_campaign_ids: string[] | null
           sort_order: number
           title: string
@@ -1749,6 +2063,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_global?: boolean
+          organization_id: string
           scoped_campaign_ids?: string[] | null
           sort_order?: number
           title: string
@@ -1761,12 +2076,21 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_global?: boolean
+          organization_id?: string
           scoped_campaign_ids?: string[] | null
           sort_order?: number
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "policy_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       required_document_types: {
         Row: {
@@ -2175,6 +2499,7 @@ export type Database = {
           created_at: string | null
           employee_id: string | null
           id: string
+          organization_id: string
           role: string
         }
         Insert: {
@@ -2182,6 +2507,7 @@ export type Database = {
           created_at?: string | null
           employee_id?: string | null
           id: string
+          organization_id: string
           role: string
         }
         Update: {
@@ -2189,6 +2515,7 @@ export type Database = {
           created_at?: string | null
           employee_id?: string | null
           id?: string
+          organization_id?: string
           role?: string
         }
         Relationships: [
@@ -2218,6 +2545,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -2484,28 +2818,87 @@ export type Database = {
       }
       check_rehire: {
         Args: {
-          p_curp?: string | null
-          p_full_name?: string | null
-          p_date_of_birth?: string | null
+          p_curp?: string
+          p_date_of_birth?: string
+          p_full_name?: string
         }
         Returns: {
-          id: string
+          curp: string
+          date_of_birth: string
           employee_id: string
+          employment_status: Database["public"]["Enums"]["employment_status"]
           full_name: string
-          curp: string | null
-          date_of_birth: string | null
-          employment_status: "active" | "terminated" | "resigned" | "on_leave"
-          termination_reason: string | null
-          termination_notes: string | null
-          rehire_eligible: boolean | null
-          terminated_at: string | null
+          id: string
           match_type: string
+          rehire_eligible: boolean
+          terminated_at: string
+          termination_notes: string
+          termination_reason: string
         }[]
+      }
+      complete_agent_review: {
+        Args: {
+          p_attendance_score: number
+          p_attitude_score: number
+          p_decision?: Database["public"]["Enums"]["review_decision"]
+          p_decision_reason?: string
+          p_extension_days?: number
+          p_kpi_score: number
+          p_notes?: string
+          p_review_id: string
+        }
+        Returns: undefined
+      }
+      confirm_review_termination: {
+        Args: { p_confirm: boolean; p_hr_notes?: string; p_review_id: string }
+        Returns: undefined
       }
       detect_holiday_no_shows: { Args: { p_date: string }; Returns: number }
       eod_before_cutoff: {
         Args: { p_campaign_id: string; p_date: string }
         Returns: boolean
+      }
+      extend_agent_review: {
+        Args: { p_employee_id: string; p_extra_days?: number }
+        Returns: string
+      }
+      find_pending_escalation_emails: {
+        Args: { p_send_date: string }
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          completed_weeks: number
+          due_date: string
+          employee_id: string
+          employee_name: string
+          prior_attendance_avg: number
+          prior_attitude_avg: number
+          prior_kpi_avg: number
+          recipient_email: string
+          recipient_id: string
+          recipient_name: string
+          recipient_title: string
+          review_id: string
+          tl_id: string
+          tl_name: string
+        }[]
+      }
+      find_pending_tl_review_emails: {
+        Args: { p_send_date: string }
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          days_overdue: number
+          due_date: string
+          employee_id: string
+          employee_name: string
+          employee_work_name: string
+          review_id: string
+          tl_email: string
+          tl_id: string
+          tl_name: string
+          week_number: number
+        }[]
       }
       get_campaign_holiday_capacities: {
         Args: { p_campaign_id: string }
@@ -2580,9 +2973,20 @@ export type Database = {
       is_client: { Args: never; Returns: boolean }
       is_leadership: { Args: never; Returns: boolean }
       is_team_lead: { Args: never; Returns: boolean }
+      mark_review_notification_sent: {
+        Args: {
+          p_notification_type: Database["public"]["Enums"]["review_notification_type"]
+          p_recipient_email: string
+          p_recipient_employee_id: string
+          p_review_id: string
+          p_send_date: string
+        }
+        Returns: string
+      }
       my_client_campaign_ids: { Args: never; Returns: string[] }
       my_client_id: { Args: never; Returns: string }
       my_employee_id: { Args: never; Returns: string }
+      my_org_id: { Args: never; Returns: string }
       my_team_member_ids: { Args: never; Returns: string[] }
       my_tl_campaign_ids: { Args: never; Returns: string[] }
       request_holiday_off: {
@@ -2593,13 +2997,48 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["holiday_request_status"]
       }
+      request_vacation_off: {
+        Args: {
+          p_campaign_id: string
+          p_employee_id: string
+          p_end_date: string
+          p_notes?: string
+          p_start_date: string
+        }
+        Returns: {
+          campaign_id: string
+          created_at: string
+          days_requested: number
+          denial_reason: string | null
+          employee_id: string
+          end_date: string
+          hr_reviewed_at: string | null
+          hr_reviewed_by: string | null
+          id: string
+          notes: string | null
+          start_date: string
+          status: string
+          tl_reviewed_at: string | null
+          tl_reviewed_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vacation_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       tl_employee_on_my_team: {
         Args: { p_employee_id: string }
         Returns: boolean
       }
     }
     Enums: {
+      employment_status: "active" | "terminated" | "resigned" | "on_leave"
       holiday_request_status: "approved" | "pending_tl" | "denied" | "cancelled"
+      review_decision: "keep" | "let_go" | "extend"
+      review_notification_type: "tl_due" | "escalation_day29"
+      review_termination_status: "pending" | "confirmed" | "denied"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2727,7 +3166,11 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      employment_status: ["active", "terminated", "resigned", "on_leave"],
       holiday_request_status: ["approved", "pending_tl", "denied", "cancelled"],
+      review_decision: ["keep", "let_go", "extend"],
+      review_notification_type: ["tl_due", "escalation_day29"],
+      review_termination_status: ["pending", "confirmed", "denied"],
     },
   },
 } as const

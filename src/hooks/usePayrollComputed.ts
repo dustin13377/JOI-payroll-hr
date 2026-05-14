@@ -59,7 +59,8 @@ export function usePayrollComputed(
         .select(
           "id, employee_id, full_name, campaign_id, monthly_base_salary, daily_discount_rate, kpi_bonus_amount, campaigns!employees_campaign_id_fkey(name)"
         )
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("is_system_user", false);  // partners/auditors are not on payroll
 
       if (employeeId) {
         empQuery = empQuery.eq("id", employeeId);
