@@ -1,56 +1,55 @@
 # Session Handoff
 
-**Saved:** 2026-05-13T17:50:01-06:00
-**Machine:** Diomedess-Mac-mini
+**Saved:** 2026-05-14T21:43:42+00:00
+**Machine:** claude (sandbox writer; D committed from his Mac)
 **Branch:** main
-**Last commit:** 34be89b refactor(edge-functions): decouple from auto-injected SUPABASE_ANON_KEY
+**Last commit:** 947a7be feat: 30-day reviews + system users + vercel SPA rewrites
 
 ## What we were doing
 
-JOI production went live on `app.justoutsource.it` via Jacque's team (Vercel). Spent most of the day on go-live cleanup: Supabase URL/auth config, edge function secrets, an anon-key decoupling refactor so we're insulated from the legacy JWT key retirement (end of 2026), and started building the employee offboarding / rehire-check feature. The offboarding feature is partially built — DB migrations already applied to prod, frontend code committed in this handoff but untested in role-scoped views.
+Shipped two features end-to-end: the 30-day probationary review system (i1 + i2) and the system-users concept (i3) for non-employee logins. Migrations applied, edge function deployed, frontend pushed. Waiting on Vercel to finish the deploy so D can test live (emails link to the production URL, not localhost).
 
 ## Files in flight
 
-Employee offboarding feature (H-series), bundled into this handoff commit:
+Nothing in flight — working tree is clean. Everything from this session is in commit `947a7be`. Files shipped:
 
-- `src/components/TerminateEmployeeDialog.tsx` — new dialog: status (terminated/resigned/on_leave), reason, notes, Do-Not-Rehire toggle
-- `src/components/employee-profile/EmploymentHistoryCard.tsx` — new card on agent profile showing employment_history rows
-- `src/hooks/useEmploymentHistory.ts` — new hook reading employment_history
-- `src/pages/Empleados.tsx` — ~621 line diff, big changes (add-employee flow now runs check_rehire RPC, list filters by employment_status)
-- `src/pages/EmpleadoPerfil.tsx` — wire in TerminateEmployeeDialog + EmploymentHistoryCard
-- `src/hooks/useAuth.tsx`, `src/hooks/useSupabasePayroll.ts`, `src/integrations/supabase/types.ts` — type regen + minor adjustments
-- `src/components/ui/input.tsx`, `src/pages/Auth.tsx`, `src/pages/ResetPassword.tsx`, `public/favicon.ico` — incidental tweaks
-- `supabase/migrations/20260513100001_h1_employee_offboarding_fields.sql` — already applied to prod
-- `supabase/migrations/20260513110001_h2_employment_history.sql` — already applied to prod
+- `supabase/migrations/20260514100001_i1_thirty_day_reviews.sql` — agent_reviews table + RPCs (`complete_agent_review`, `extend_agent_review`, `confirm_review_termination`)
+- `supabase/migrations/20260514110001_i2_review_notifications.sql` — dedupe table + helper functions + 2 pg_cron jobs
+- `supabase/migrations/20260514120001_i3_system_users.sql` — `is_system_user` boolean on employees + check constraint (admin/owner only)
+- `supabase/functions/review-notifications/index.ts` — Deno edge function, 2 modes (`tl_daily` and `escalation`)
+- `src/pages/AgentReviews.tsx`, `src/hooks/useAgentReviews.ts`, `src/components/employee-profile/ThirtyDayReviewCard.tsx`
+- `src/pages/SystemUsers.tsx` — Owner-only page at `/admin/system-users`
+- `vercel.json` — SPA rewrite so `/reviews` and `/admin/system-users` direct links don't 404
+- Filters added to `useEmployees`, `usePayrollComputed`, `Campaigns.tsx`, `CampaignDetail.tsx` (3 spots)
+- `employees_no_pay` view updated server-side (covers TLDashboard / Attendance / Performance)
 
 ## Decisions made this session
 
-- Edge functions now read `APP_SUPABASE_KEY` first, fall back to auto-injected `SUPABASE_ANON_KEY`. Pattern documented in `docs/developer-handoff.md`. Affects `holiday-notifications`, `get-hr-document-signed-url`. `provision-org` had dead declaration, removed.
-- Anon key rotation deferred to next week. Stage 1 (swap consumers to publishable key) is half-done — Vercel still uses legacy key, edge function code is ready but secret value points at publishable already. Don't click "Disable JWT-based API keys" until Vercel is swapped + smoke-tested.
-- The 3 "Security Definer View" CRITICAL warnings from Supabase advisor are intentional, documented in `HANDOFF.md`. Do NOT flip `security_invoker = on`.
-- Owner password (`diomedes.sandoval@justoutsource.it`) was reset to `test123` mid-day to unstick a login issue, then changed to a real password via in-app flow after go-live. Memory updated — owner is NOT a test123 account.
-- "New Organization" sidebar nav is commented out (white-label feature parked).
-- Offboarding feature: `employment_status` enum is source of truth; `is_active` mirrors it via trigger for back-compat. `employment_history` is append-only, leadership-read-only, writes via trigger only.
+- 30-day clock starts from `hire_date` (calendar days), not worked days
+- Outcomes: keep / let_go / extend; extension days configurable 1–60
+- Let-go is NEVER auto-actioned — TL files recommendation, HR confirms via separate RPC, only then employee flips to `terminated`
+- Agents CAN see their own completed reviews (pending let-go is hidden until HR confirms)
+- Notifications are email-only (no in-app badges)
+- TL gets re-emailed daily until completed; week-4 escalation goes to manager + HR + owner on day-29 evening (6 PM CDMX)
+- System users hidden everywhere except `/admin/system-users`; only Owner can manage them; only Admin/Owner roles allowed
+- System-user notes reuse `termination_notes` column rather than adding a new column (slightly off-name reuse, flagged for future cleanup if usage grows)
 
 ## Open todos
 
-- [ ] Reply to Jaxon about (1) webhook sync vs hourly cron, (2) Vercel/fork ownership clarification, (3) env-var-as-secret confirmation. Draft is in chat history.
-- [ ] Smoke test offboarding feature in prod: terminate a test agent, verify `employment_history` row appears, verify `check_rehire` warns when trying to re-add the same person.
-- [ ] Smoke test offboarding in TL and agent role-scoped views (these have bitten us before — see `feedback_auth_loading_guard.md`).
-- [ ] Verify `DRY_RUN_HOLIDAY` value in Supabase Edge Function secrets — may still be set to `true` and silently dropping holiday emails. See `project_dry_run_holiday_check.md` memory.
-- [ ] Anon key rotation Stage 2: swap Vercel to publishable key (`sb_publishable_u4XONGCOC2lwDjS0k3cwAQ_n6ZkJbe8`), test, then disable legacy key. Wait until prod is stable for 24-48h (so do Wed/Thu next week at earliest).
-- [ ] Resolve two-GitHub-accounts confusion: `sandoval-art` owns the repo, `sandoval028-ctrl` is the Mac's default. Caused push failures today. Pick one and stick with it.
-- [ ] Resolve two-clones-of-repo problem: `~/JOI-payroll-hr` is a stale clean clone, `/Users/admin/Desktop/JOI/JOI Payroll and HR app` is the active one. Delete the stale one to prevent committing in the wrong place.
-- [ ] Reconcile migration history. The repo files `20260513100001_h1_*` and `20260513110001_h2_*` are functionally applied to prod, but Supabase's migration tracker registered them under auto-generated versions (`20260513203624`, `20260513204410`) via MCP `apply_migration`. There's also a third tracked migration `20260513205139_h2_employment_history_trigger_security_definer` that's NOT in the repo (a follow-up fix that made the trigger SECURITY DEFINER). Fix path: pull the SQL of the third tracked migration into a new repo file, then rename the existing h1/h2 files to match the tracked versions (or delete the repo files entirely and rely on the tracker). Not urgent — only matters when rebuilding schema from scratch (white-label staging, dev DB resets).
+- [ ] **Verify `DRY_RUN_REVIEW=false` in Supabase Edge Functions Secrets** when ready for real review emails to send. Currently defaults to true — function only logs "would send". Path: Project Settings (gear icon) → Edge Functions → Secrets, OR sidebar Edge Functions → "Manage Secrets" button.
+- [ ] **Double-check `DRY_RUN_HOLIDAY=false`** while in the Secrets panel (older outstanding item per memory).
+- [ ] **Test 30-day reviews live**: set a recent `hire_date` on a test employee, confirm 4 review rows seeded, fill out a Week 1 review, then a Week 4 with let-go to verify the HR confirmation flow.
+- [ ] **Test system users live**: as Owner, add a test admin with a different email of yours; verify they're absent from `/empleados`, `/asistencia`, `/desempeno`, payroll. Then test login + remove flow.
+- [ ] **Run `graphify update .`** locally to refresh the knowledge graph with the new files.
 
 ## Next step when you come back
 
-Open `app.justoutsource.it` as owner, navigate to Empleados, click into an agent profile, and click the new Terminate button. Walk through the dialog. Confirm: (1) employee row updates with `employment_status = 'terminated'`, (2) a new row lands in `employment_history`, (3) the agent no longer appears in the active list, (4) re-adding an employee with the same CURP or name+DOB triggers a rehire-check warning. If any of those fail, that's the first thing to fix.
+Wait for the Vercel deploy from commit `947a7be` to finish, then run through the test plan for 30-day reviews first (set a `hire_date` on a test employee → check `/reviews` shows the 4 rows). After that, flip `DRY_RUN_REVIEW=false` in Supabase secrets when you want real review emails to start sending.
 
 ## Watch out for
 
-- **Offboarding feature is shipped but untested.** Vercel will auto-deploy this push within ~1 hour (hourly fork-sync). Tomorrow morning, real users (Paty, TLs) may interact with it before you've smoke-tested. Be ready to roll back if something explodes — `git revert HEAD~1` will undo this commit cleanly (the edge-function commit before it is safe to keep).
-- **The `Empleados.tsx` diff is 621 lines.** Worth eyeballing the diff once tomorrow in a calm headspace before users hit it.
-- **`employment_history` RLS is leadership-only read.** If TL or agent views start showing employment history, that's an RLS leak — file it immediately.
-- **The two-clones / two-accounts problems are still unresolved.** If you push from `~/JOI-payroll-hr` by mistake tomorrow, work will silently disappear.
-- **Anon key Stage 2 is a HIGH-risk click.** The "Disable JWT-based API keys" button breaks everything still using the legacy key. Don't click it until Vercel is on the publishable key AND all 3 anon-key-reading edge functions are confirmed working on `APP_SUPABASE_KEY`.
+- **Cron jobs are firing already** but in DRY_RUN mode — they hit the live function at 9 AM and 6 PM CDMX every day. Logs will show "[DRY RUN] Would send..." entries. Safe but worth knowing if you're checking edge function logs.
+- **`employees_no_pay` view filter is permanent** — system users will not show up there even with `OR id = my_employee_id()`. Not a bug; consequence of the design. If a future system user needs a self-lookup via this view, we'd need to revisit.
+- **System-user add flow has a millisecond visibility window** in `/empleados` between `create-employee` returning and the follow-up `is_system_user=true` UPDATE. Acceptable but documented.
+- **Pre-existing ESLint `any` errors** in `usePayrollComputed.ts` and `useSupabasePayroll.ts` are NOT from this session — they were already there. Don't try to "fix" them as part of this work.
+- **Sandbox can't write through to `.git/index.lock`** — D committed manually from his Mac terminal because the sandbox couldn't run git commit. If you see lock-file errors next session, that's why; D handles git operations.
