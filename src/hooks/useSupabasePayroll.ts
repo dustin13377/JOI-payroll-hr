@@ -47,6 +47,7 @@ export function useEmployees() {
         .from("employees")
         .select("*, campaigns!employees_campaign_id_fkey(name), departments(name)")
         .eq("is_active", true)
+        .eq("is_system_user", false)  // hide partners/auditors from payroll/HR lists; they live on /admin/system-users
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data || []).map(mapEmployee);

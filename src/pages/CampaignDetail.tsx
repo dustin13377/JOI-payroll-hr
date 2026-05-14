@@ -275,6 +275,7 @@ export default function CampaignDetail() {
         .select('id, employee_id, full_name, work_name, title, reports_to')
         .eq('campaign_id', id!)
         .eq('is_active', true)
+        .eq('is_system_user', false)
         .order('full_name');
       if (error) throw error;
       return data as AssignedAgent[];
@@ -290,6 +291,7 @@ export default function CampaignDetail() {
         .from('employees')
         .select('id, employee_id, full_name, work_name, campaign_id')
         .eq('is_active', true)
+        .eq('is_system_user', false)
         .order('full_name');
       if (error) throw error;
       return data as AvailableEmployee[];
@@ -307,6 +309,7 @@ export default function CampaignDetail() {
         .from('employees')
         .select('id, full_name, title')
         .eq('is_active', true)
+        .eq('is_system_user', false)
         .in('title', ['team_lead', 'manager', 'admin', 'owner'])
         .order('full_name');
       if (error) throw error;

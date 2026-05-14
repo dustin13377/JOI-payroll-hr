@@ -20,6 +20,10 @@ Quick reference for picking the project back up on a new machine.
    - Edge Function secrets: `APP_URL` → `https://app.justoutsource.it`, `APP_DOMAIN` → `app.justoutsource.it`, `ALLOWED_ORIGIN` → `https://app.justoutsource.it`
    - Env vars already sent to Jacque: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (2026-05-04).
 5. ~~**Flip DRY_RUN=false on both email edge functions.**~~ ✅ Done 2026-04-27. `DRY_RUN_EOD=false` set on `send-eod-digest` and `DRY_RUN_COMPLIANCE=false` set on `compliance-notifications` via Supabase dashboard secrets. Both functions are now sending real emails.
+5b. **Configure `review-notifications` edge function (deployed 2026-05-14, currently DRY RUN).** New 30-day review email function. Set these in Supabase dashboard → Edge Functions → review-notifications → Secrets:
+   - `DRY_RUN_REVIEW=false` — flip when ready to send real emails (defaults to dry run for safety)
+   - All other secrets (`GMAIL_USER`, `GMAIL_APP_PASSWORD`, `CRON_SECRET`, `APP_URL`, `APP_DOMAIN`) are shared across edge functions and are already set.
+   Two cron jobs already scheduled: `review-notifications-tl-daily` (9 AM CDMX) for daily TL nudges, and `review-notifications-escalation-eve` (6 PM CDMX) for week-4 manager+HR+owner escalation. Dedupe table `agent_review_notifications_sent` prevents double-sends.
 6. **Run `supabase/dev-seed/02_teardown_mock_dashboard.sql`** to clean the 7 mock Torro agents (DEV_MOCK_TORRO_SLOC campaign) before public launch.
 7. **Re-run RLS audit after any new migration that touches tables, policies, or views.** Migration file + audit doc pattern: `supabase/migrations/<stamp>_<name>.sql` + `docs/security/rls-audit-<date>.md`.
 

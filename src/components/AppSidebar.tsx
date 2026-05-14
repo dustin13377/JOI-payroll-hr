@@ -18,6 +18,8 @@ import {
   ScrollText,
   CalendarCheck,
   PlusSquare,
+  ClipboardEdit,
+  ShieldCheck,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,6 +51,7 @@ const leadershipItems = [
 const hrItems = [
   { title: "Attendance", url: "/asistencia", icon: Clock },
   { title: "Performance", url: "/desempeno", icon: BarChart3 },
+  { title: "30-Day Reviews", url: "/reviews", icon: ClipboardEdit },
   { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
   { title: "Document Types", url: "/settings/document-types", icon: FileCheck },
   { title: "Departments", url: "/settings/departments", icon: Building2 },
@@ -63,6 +66,7 @@ const hrItems = [
 const teamLeadItems = [
   { title: "Home", url: "/", icon: LayoutDashboard },
   { title: "My Team", url: "/asistencia", icon: Users },
+  { title: "30-Day Reviews", url: "/reviews", icon: ClipboardEdit },
   { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
   { title: "Shift Settings", url: "/settings/shifts", icon: Settings },
   { title: "My Policies", url: "/policies", icon: ScrollText },
@@ -168,6 +172,28 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {/* Owner-only admin section */}
+        {isOwner && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[11px] uppercase tracking-widest text-sidebar-foreground/30 font-medium">Owner</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to="/admin/system-users"
+                      className="hover:bg-sidebar-accent"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold"
+                    >
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>System Users</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
