@@ -54,12 +54,19 @@ Deno.serve(async (req: Request) => {
 
     const { data: profile } = await anonClient
       .from("user_profiles")
-      .select("role")
+      .select("role, organization_id")
       .eq("id", caller.id)
       .single();
     const role = profile?.role;
+    const organizationId = profile?.organization_id;
     if (!role || !["owner", "admin", "manager"].includes(role)) {
       return json({ error: "Forbidden: leadership only" }, 403);
+    }
+    if (!organizationId) {
+      return json(
+        { error: "Could not determine your organization. Your user profile is missing organization_id." },
+        400,
+      );
     }
 
     // Parse body
@@ -165,6 +172,7 @@ Deno.serve(async (req: Request) => {
         monthly_base_salary: monthly_base_salary || 0,
         daily_discount_rate: daily_discount_rate || 0,
         kpi_bonus_amount: kpi_bonus_amount || 0,
+        organization_id: organizationId,
       })
       .select("id, employee_id")
       .single();
@@ -180,7 +188,11 @@ Deno.serve(async (req: Request) => {
     // ---- Step 3: link user_profiles ----
     const { error: profileError } = await adminClient
       .from("user_profiles")
-      .insert({ id: authUserId, employee_id: employee.id });
+      .insert({
+        id: authUserId,
+        employee_id: employee.id,
+        organization_id: organizationId,
+      });
 
     if (profileError) {
       await adminClient.from("employees").delete().eq("id", employee.id);
