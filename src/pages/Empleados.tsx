@@ -56,6 +56,7 @@ export default function Empleados() {
   const [form, setForm] = useState({
     nombre: "",
     email: "",
+    personalEmail: "",
     curp: "",
     dateOfBirth: "",
     sueldoBase: 0,
@@ -111,6 +112,7 @@ export default function Empleados() {
     setForm({
       nombre: "",
       email: "",
+      personalEmail: "",
       curp: "",
       dateOfBirth: "",
       sueldoBase: 0,
@@ -127,7 +129,7 @@ export default function Empleados() {
 
   const doCreateEmployee = () => {
     if (!form.nombre || !form.email) {
-      toast.error("Name and email are required");
+      toast.error("Name and work email are required");
       return;
     }
     addEmployee.mutate(
@@ -138,6 +140,7 @@ export default function Empleados() {
         kpiMonto: form.kpiMonto,
         title: form.title,
         email: form.email,
+        personalEmail: form.personalEmail.trim() || null,
         campaignId: form.campaignId,
       },
       {
@@ -460,17 +463,31 @@ export default function Empleados() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Email</Label>
+                      <Label>Work Email</Label>
                       <Input
                         type="email"
-                        placeholder="employee@example.com"
+                        placeholder="name@yourdomain.com"
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                         autoComplete="off"
-                        name="new-emp-email"
+                        name="new-emp-work-email"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Used for login. An invite will be sent to set their password.
+                        Used for login, password resets, and account verification. Use the company-issued address, not a personal one.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Personal Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                      <Input
+                        type="email"
+                        placeholder="name@gmail.com"
+                        value={form.personalEmail}
+                        onChange={(e) => setForm({ ...form, personalEmail: e.target.value })}
+                        autoComplete="off"
+                        name="new-emp-personal-email"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        For HR contact only. Never used for login or password resets.
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">

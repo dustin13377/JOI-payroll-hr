@@ -73,6 +73,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const {
       email,
+      personal_email,
       full_name,
       campaign_id,
       title,
@@ -82,7 +83,7 @@ Deno.serve(async (req: Request) => {
     } = body;
 
     if (!email || !full_name) {
-      return json({ error: "email and full_name are required" }, 400);
+      return json({ error: "work email and full_name are required" }, 400);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -166,7 +167,8 @@ Deno.serve(async (req: Request) => {
       .from("employees")
       .insert({
         full_name,
-        email,
+        email, // work email — used for login and password resets
+        personal_email: personal_email || null,
         campaign_id: campaign_id || null,
         title: title || "agent",
         monthly_base_salary: monthly_base_salary || 0,
