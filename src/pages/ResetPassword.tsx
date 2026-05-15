@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { initialAuthHash } from "@/lib/initialAuthHash";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +23,10 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const hash = window.location.hash;
+    // initialAuthHash was captured at app boot (in main.tsx, before Supabase
+    // could clear it). Falls back to live window.location.hash in case the
+    // capture happened after Supabase consumed it for some reason.
+    const hash = initialAuthHash || window.location.hash;
     if (hash.includes("type=recovery")) {
       setFlowType("recovery");
     } else if (hash.includes("type=invite") || hash.includes("type=signup")) {
