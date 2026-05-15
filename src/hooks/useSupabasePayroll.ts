@@ -58,12 +58,13 @@ export function useEmployees() {
 export function useAddEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (emp: Omit<Employee, "_uuid" | "id"> & { campaignId?: string | null; email?: string | null }) => {
+    mutationFn: async (emp: Omit<Employee, "_uuid" | "id"> & { campaignId?: string | null; email?: string | null; personalEmail?: string | null }) => {
       if (emp.email) {
         // Use edge function for atomic auth user + employee + profile creation
         const { data, error } = await supabase.functions.invoke("create-employee", {
           body: {
             email: emp.email,
+            personal_email: emp.personalEmail ?? null,
             full_name: emp.nombre,
             campaign_id: emp.campaignId ?? null,
             title: emp.title ?? "agent",
