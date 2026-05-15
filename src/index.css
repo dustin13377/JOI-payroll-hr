@@ -139,4 +139,29 @@
       transform: translateY(0);
     }
   }
+
+  /* Subtle scrollbars — the default macOS / WebKit bar is chunky and gray.
+   * Keep them visible (so users know content scrolls) but make them thin
+   * and unobtrusive so they don't compete for visual weight. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(220 8% 78% / 0.5);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(220 8% 60% / 0.7);
+  }
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(220 8% 78% / 0.5) transparent;
+  }
 }

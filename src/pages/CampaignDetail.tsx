@@ -175,6 +175,11 @@ export default function CampaignDetail() {
   const [sendingTestDigest, setSendingTestDigest] = useState(false);
   const [sendingManualDigest, setSendingManualDigest] = useState(false);
 
+  // Early Release state (manager+ only feature)
+  const [earlyReleaseEnabled, setEarlyReleaseEnabled] = useState(false);
+  const [earlyReleaseCriteria, setEarlyReleaseCriteria] = useState('');
+  const [earlyReleaseDirty, setEarlyReleaseDirty] = useState(false);
+
   // Holiday Coverage toggle mutation
   const holidayCoverageMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -206,11 +211,11 @@ export default function CampaignDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('campaigns')
-        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, clients(id, name, prefix)')
+        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, early_release_enabled, early_release_criteria, clients(id, name, prefix)')
         .eq('id', id!)
         .single();
       if (error) throw error;
-      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; clients: { id: string; name: string; prefix: string } | null };
+      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; early_release_enabled: boolean; early_release_criteria: string | null; clients: { id: string; name: string; prefix: string } | null };
     },
     enabled: !!id,
   });
@@ -603,8 +608,32 @@ export default function CampaignDetail() {
       setDigestReplyTo(campaign.eod_reply_to_email ?? '');
       setDigestReplyToError('');
       setDigestDirty(false);
+      setEarlyReleaseEnabled(campaign.early_release_enabled ?? false);
+      setEarlyReleaseCriteria(campaign.early_release_criteria ?? '');
+      setEarlyReleaseDirty(false);
     }
   }, [campaign]);
+
+  const saveEarlyReleaseMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('campaigns')
+        .update({
+          early_release_enabled: earlyReleaseEnabled,
+          early_release_criteria: earlyReleaseCriteria.trim() || null,
+        })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateCampaign();
+      setEarlyReleaseDirty(false);
+      toast.success('Early release settings saved');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    },
+  });
 
   const saveDigestMutation = useMutation({
     mutationFn: async () => {
@@ -987,6 +1016,58 @@ export default function CampaignDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Early Release (manager+ only) */}
+      {isLeadership && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Early Release</CardTitle>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Allow agents on this campaign to clock out before shift end if they hit the campaign's metric target.
+              Day still counts as a full shift for payroll. EOD submission is queued and batched with the rest of the team at end of day.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="early-release-switch" className="cursor-pointer">
+                Enable Early Release
+              </Label>
+              <Switch
+                id="early-release-switch"
+                checked={earlyReleaseEnabled}
+                onCheckedChange={(v) => { setEarlyReleaseEnabled(v); setEarlyReleaseDirty(true); }}
+              />
+            </div>
+            {earlyReleaseEnabled && (
+              <div className="space-y-1.5">
+                <Label htmlFor="early-release-criteria">Criteria (shown to agent)</Label>
+                <Input
+                  id="early-release-criteria"
+                  placeholder='e.g. "10 credit pulls" or "all tickets resolved, no open escalations"'
+                  value={earlyReleaseCriteria}
+                  onChange={(e) => { setEarlyReleaseCriteria(e.target.value); setEarlyReleaseDirty(true); }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Plain language. Agents see this when they choose to leave early, and it's stored in the audit trail so the client report can be checked against the claim.
+                </p>
+              </div>
+            )}
+            {earlyReleaseDirty && (
+              <Button
+                onClick={() => saveEarlyReleaseMutation.mutate()}
+                disabled={saveEarlyReleaseMutation.isPending || (earlyReleaseEnabled && !earlyReleaseCriteria.trim())}
+              >
+                {saveEarlyReleaseMutation.isPending ? 'Saving...' : 'Save Early Release'}
+              </Button>
+            )}
+            {earlyReleaseDirty && earlyReleaseEnabled && !earlyReleaseCriteria.trim() && (
+              <p className="text-xs text-amber-600">
+                Add a criteria description before saving — agents need to know what they're claiming.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* EOD Digest Recipients */}
       <Card>

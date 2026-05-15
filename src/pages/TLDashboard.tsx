@@ -185,6 +185,26 @@ export default function TLDashboard() {
     enabled: !!activeCampaignId,
   });
 
+  // --- Early-release time_clock rows for today (agents who left early after
+  //     self-reporting they hit metrics) ---
+  const agentIdsList = useMemo(() => agents.map((a) => a.id), [agents]);
+  const { data: earlyReleaseToday = [] } = useQuery({
+    queryKey: ["tl-dash-early-release", activeCampaignId, today, agentIdsList.join(",")],
+    queryFn: async () => {
+      if (!activeCampaignId || agentIdsList.length === 0) return [];
+      const { data, error } = await supabase
+        .from("time_clock")
+        .select("id, employee_id, clock_in, clock_out")
+        .eq("date", today)
+        .eq("early_release", true)
+        .in("employee_id", agentIdsList);
+      if (error) throw error;
+      return (data ?? []) as { id: string; employee_id: string; clock_in: string; clock_out: string | null }[];
+    },
+    enabled: !!activeCampaignId && agentIdsList.length > 0,
+    refetchInterval: 60000, // refresh every minute so it appears in near-real-time
+  });
+
   // --- Coaching notes ---
   const { data: coachingNotes = [] } = useQuery({
     queryKey: ["tl-dash-coaching", activeCampaignId],
@@ -418,6 +438,49 @@ export default function TLDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Early Release Today — only renders when someone has left early.
+          Read-only visibility for TLs; client report later confirms the claim. */}
+      {earlyReleaseToday.length > 0 && (
+        <Card className="border-emerald-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+              Left Early Today ({earlyReleaseToday.length})
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Agents who self-reported hitting metrics. Their EOD is queued and will go out with the team's digest at end of day.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Clocked In</TableHead>
+                  <TableHead>Clocked Out</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {earlyReleaseToday.map((row) => {
+                  const agent = agents.find((a) => a.id === row.employee_id);
+                  const fmt = (iso: string | null) =>
+                    iso
+                      ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+                      : "—";
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium">{agent ? getDisplayName(agent) : row.employee_id}</TableCell>
+                      <TableCell>{fmt(row.clock_in)}</TableCell>
+                      <TableCell>{fmt(row.clock_out)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Widget 2: Leaderboard */}
       <Card>

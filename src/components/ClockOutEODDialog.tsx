@@ -47,8 +47,9 @@ interface Props {
   campaignId: string;
   campaignName?: string;
   kpiFields: KPIField[];
-  /** Called after EOD submission succeeds — parent should fire the actual clock-out. */
-  onSubmitted: () => void;
+  /** Called after EOD submission succeeds — parent should fire the actual clock-out.
+   *  Passes whether the agent selected "early release" so parent can flag the time_clock row. */
+  onSubmitted: (opts?: { earlyRelease?: boolean }) => void;
   /** When set, the dialog submits an EOD for this date instead of today and
    *  marks the time_clock row as eod_completed. No clock-out side-effect. */
   backfillDate?: string;
@@ -58,6 +59,12 @@ interface Props {
   initialValues?: FormValues;
   /** Pre-filled notes for amend mode. */
   initialNotes?: string;
+  /** When true, agent can mark this as "I hit my metrics, leaving early."
+   *  Parent decides eligibility (campaign setting + current time vs shift end). */
+  earlyReleaseAvailable?: boolean;
+  /** What the agent must have achieved to leave early. Shown in the dialog
+   *  when the switch is on, and stored in eod_logs.notes for audit. */
+  earlyReleaseCriteria?: string | null;
 }
 
 /**
@@ -80,10 +87,21 @@ export function ClockOutEODDialog({
   amendLogId,
   initialValues,
   initialNotes,
+  earlyReleaseAvailable = false,
+  earlyReleaseCriteria,
 }: Props) {
   const [values, setValues] = useState<FormValues>({});
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Early release only applies to the normal clock-out flow (not backfill/amend).
+  const earlyReleaseShown =
+    !!earlyReleaseAvailable && !backfillDate && !amendLogId;
+  const [isEarlyRelease, setIsEarlyRelease] = useState(false);
+
+  // Reset early-release switch when dialog re-opens
+  useEffect(() => {
+    if (!open) setIsEarlyRelease(false);
+  }, [open]);
 
   // Initialize defaults (or pre-fill for amend mode)
   useEffect(() => {
@@ -114,12 +132,21 @@ export function ClockOutEODDialog({
       } else {
         // Insert mode (backfill uses backfillDate, normal uses today)
         const date = backfillDate ?? todayLocal();
+        // If agent selected early-release, prepend the criteria snapshot to notes
+        // so the audit trail captures what was claimed at the time (criteria can
+        // change on the campaign later).
+        const finalNotes = isEarlyRelease && earlyReleaseShown
+          ? `[Early release — claimed: ${earlyReleaseCriteria ?? "metrics hit"}]${notes ? "\n\n" + notes : ""}`
+          : (notes || null);
         const { error } = await supabase.from("eod_logs").insert({
           employee_id: employeeId,
           date,
           campaign_id: campaignId,
           metrics: values,
-          notes: notes || null,
+          notes: finalNotes,
+          // released_at is left to default (NULL). The digest function already
+          // waits for shift_end + grace + 5min before firing, so early-release
+          // EODs naturally batch with the rest of the team's submissions.
         });
         if (error) throw error;
 
@@ -134,7 +161,7 @@ export function ClockOutEODDialog({
       }
     },
     onSuccess: () => {
-      onSubmitted();
+      onSubmitted(earlyReleaseShown ? { earlyRelease: isEarlyRelease } : undefined);
     },
   });
 
@@ -190,6 +217,35 @@ export function ClockOutEODDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {earlyReleaseShown && (
+            <div className={`rounded-lg border p-3 ${isEarlyRelease ? "border-emerald-300 bg-emerald-50" : "border-border bg-muted/40"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="early-release" className="font-medium cursor-pointer">
+                    Leaving early — I hit my metrics
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Day still counts as a full shift. Your EOD will be sent to the client with the rest of the team at end of day.
+                  </p>
+                </div>
+                <Switch
+                  id="early-release"
+                  checked={isEarlyRelease}
+                  onCheckedChange={setIsEarlyRelease}
+                />
+              </div>
+              {isEarlyRelease && earlyReleaseCriteria && (
+                <div className="mt-3 pt-3 border-t border-emerald-200 text-sm">
+                  <span className="font-medium">You're claiming:</span>{" "}
+                  <span className="text-muted-foreground">{earlyReleaseCriteria}</span>
+                  <p className="text-xs text-amber-700 mt-1.5 flex items-start gap-1">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    The client's report will be checked against this. False claims may cost you the privilege.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           {kpiFields.map((field) => {
             const value = values[field.field_name];
             const hasError = !!errors[field.field_name];
@@ -303,7 +359,15 @@ export function ClockOutEODDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitMutation.isPending}>
-            {submitMutation.isPending ? "Submitting..." : amendLogId ? "Update EOD" : backfillDate ? "Submit EOD" : "Submit & Clock Out"}
+            {submitMutation.isPending
+              ? "Submitting..."
+              : amendLogId
+              ? "Update EOD"
+              : backfillDate
+              ? "Submit EOD"
+              : isEarlyRelease
+              ? "Submit & Leave Early"
+              : "Submit & Clock Out"}
           </Button>
         </DialogFooter>
       </DialogContent>

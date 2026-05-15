@@ -173,18 +173,23 @@ export default function Timeclock() {
     enabled: !!employee?.campaign_id,
   });
 
-  // Campaign name for the dialog header
+  // Campaign info for the dialog header + early-release settings
   const { data: campaign } = useQuery({
     queryKey: ["campaign-name", employee?.campaign_id],
     queryFn: async () => {
       if (!employee?.campaign_id) return null;
       const { data, error } = await supabase
         .from("campaigns")
-        .select("id, name")
+        .select("id, name, early_release_enabled, early_release_criteria")
         .eq("id", employee.campaign_id)
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string; name: string } | null;
+      return data as {
+        id: string;
+        name: string;
+        early_release_enabled: boolean;
+        early_release_criteria: string | null;
+      } | null;
     },
     enabled: !!employee?.campaign_id,
   });
@@ -336,9 +341,10 @@ export default function Timeclock() {
     onSuccess: invalidate,
   });
 
-  // Clock Out
+  // Clock Out — accepts optional early_release flag (set from the EOD dialog
+  // when agent self-reports they hit metrics and is leaving early).
   const clockOutMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { earlyRelease?: boolean }) => {
       if (!todayEntry) throw new Error("Not clocked in");
       if (getActiveBreak(todayEntry)) throw new Error("End your current break before clocking out");
       // Phase C will gate on eod_completed; for now we let it through.
@@ -352,10 +358,14 @@ export default function Timeclock() {
       const netMinutes = Math.max(0, grossMinutes - lunchMinutes);
       const totalHours = parseFloat((netMinutes / 60).toFixed(2));
 
-      return updateEntry({
+      const patch: Record<string, unknown> = {
         clock_out: now.toISOString(),
         total_hours: totalHours,
-      });
+      };
+      if (opts?.earlyRelease) {
+        patch.early_release = true;
+      }
+      return updateEntry(patch);
     },
     onSuccess: invalidate,
   });
@@ -817,9 +827,17 @@ export default function Timeclock() {
           campaignId={employee.campaign_id}
           campaignName={campaign?.name}
           kpiFields={kpiFields}
-          onSubmitted={() => {
+          earlyReleaseAvailable={
+            !!campaign?.early_release_enabled &&
+            // Only "early" if clocking out before today's scheduled shift end.
+            // shift_end_expected is set at clock-in; fall back to false if missing.
+            !!todayEntry?.shift_end_expected &&
+            currentTime < new Date(todayEntry.shift_end_expected)
+          }
+          earlyReleaseCriteria={campaign?.early_release_criteria}
+          onSubmitted={(opts) => {
             setEodDialogOpen(false);
-            clockOutMutation.mutate();
+            clockOutMutation.mutate(opts);
           }}
         />
       )}
