@@ -105,6 +105,7 @@ export default function ResetPassword() {
                 required
                 minLength={6}
                 autoComplete="new-password"
+                className="placeholder:text-muted-foreground/40 focus:placeholder:text-transparent"
               />
             </div>
             <div className="space-y-2">
@@ -118,6 +119,7 @@ export default function ResetPassword() {
                 required
                 minLength={6}
                 autoComplete="new-password"
+                className="placeholder:text-muted-foreground/40 focus:placeholder:text-transparent"
               />
             </div>
             <Button
