@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   BarChart,
   Bar,
@@ -34,6 +38,8 @@ import {
   Upload,
 } from "lucide-react";
 import { useEmployeeDocuments, useUploadDocument } from "@/hooks/useEmployeeDocuments";
+import { useMyGoal } from "@/hooks/useSupabasePayroll";
+import { GoalPromptDialog } from "@/components/GoalPromptDialog";
 import { DocumentStatusBadge } from "@/components/DocumentStatusBadge";
 import { useComplianceStatus } from "@/hooks/useComplianceStatus";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -194,6 +200,113 @@ export default function EmployeeHome() {
     enabled: !!employeeId,
     refetchInterval: 30000,
   });
+
+  // Shift settings (for grace-period warning + auto-late on clock-in)
+  const { data: shiftSettings } = useQuery({
+    queryKey: ["home-shift-settings", employee?.campaign_id],
+    queryFn: async () => {
+      if (!employee?.campaign_id) return null;
+      const { data, error } = await supabase
+        .from("shift_settings")
+        .select("start_time, end_time, grace_minutes")
+        .eq("campaign_id", employee.campaign_id)
+        .maybeSingle();
+      if (error && error.code !== "PGRST116") throw error;
+      return (data || null) as { start_time: string; end_time: string; grace_minutes: number } | null;
+    },
+    enabled: !!employee?.campaign_id,
+  });
+
+  // Confirm dialog + direct clock-in mutation (so user doesn't have to navigate
+  // to the timeclock page and click clock-in again).
+  const [confirmClockInOpen, setConfirmClockInOpen] = useState(false);
+  const clockInMutation = useMutation({
+    mutationFn: async () => {
+      if (!employeeId || !employee?.campaign_id) throw new Error("Missing employee/campaign");
+      const nowDate = new Date();
+      const today = todayLocal(nowDate);
+
+      const { data: existing } = await supabase
+        .from("time_clock")
+        .select("id")
+        .eq("employee_id", employeeId)
+        .eq("date", today)
+        .maybeSingle();
+      if (existing) throw new Error("Already clocked in today");
+
+      let isLate = false;
+      let lateMinutes = 0;
+      let shiftEndExpected: string | null = null;
+      if (shiftSettings?.start_time) {
+        const [sh, sm] = shiftSettings.start_time.split(":").map(Number);
+        const shiftStart = new Date(nowDate);
+        shiftStart.setHours(sh, sm, 0, 0);
+        const lateTime = new Date(shiftStart.getTime() + (shiftSettings.grace_minutes || 0) * 60000);
+        if (nowDate > lateTime) {
+          isLate = true;
+          lateMinutes = Math.floor((nowDate.getTime() - lateTime.getTime()) / 60000);
+        }
+        if (shiftSettings.end_time) {
+          const [eh, em] = shiftSettings.end_time.split(":").map(Number);
+          const end = new Date(nowDate);
+          end.setHours(eh, em, 0, 0);
+          // If end_time is before start_time, treat shift as crossing midnight.
+          if (end <= shiftStart) end.setDate(end.getDate() + 1);
+          shiftEndExpected = end.toISOString();
+        }
+      }
+
+      const { data, error } = await supabase
+        .from("time_clock")
+        .insert({
+          employee_id: employeeId,
+          clock_in: nowDate.toISOString(),
+          date: today,
+          is_late: isLate,
+          late_minutes: isLate ? lateMinutes : null,
+          shift_end_expected: shiftEndExpected,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["home-today", employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["home-week", employeeId] });
+      toast({ title: "Clocked in", description: `Welcome, ${firstName} — have a great day.` });
+    },
+    onError: (err) => {
+      toast({ title: "Clock-in failed", description: (err as Error).message, variant: "destructive" });
+    },
+  });
+
+  // Personal goal: shows first-login prompt if not set + not dismissed.
+  const { data: myGoal } = useMyGoal(employeeId);
+  const [goalPromptOpen, setGoalPromptOpen] = useState(false);
+  useEffect(() => {
+    // Open the prompt once on first render where they qualify, then leave it
+    // alone. If they dismiss, goal_prompt_dismissed gets set server-side so
+    // we never re-open on subsequent visits.
+    if (myGoal && !myGoal.personal_goal && !myGoal.goal_prompt_dismissed) {
+      setGoalPromptOpen(true);
+    }
+  }, [myGoal?.personal_goal, myGoal?.goal_prompt_dismissed]);
+
+  // Grace-period status (used on the dashboard pre-clock-in)
+  let pastGracePeriod = false;
+  let minutesPastGrace = 0;
+  if (!todayEntry && shiftSettings?.start_time) {
+    const [sh, sm] = shiftSettings.start_time.split(":").map(Number);
+    const grace = shiftSettings.grace_minutes || 0;
+    const lateBoundary = new Date(now);
+    lateBoundary.setHours(sh, sm, 0, 0);
+    lateBoundary.setMinutes(lateBoundary.getMinutes() + grace);
+    if (now > lateBoundary) {
+      pastGracePeriod = true;
+      minutesPastGrace = Math.floor((now.getTime() - lateBoundary.getTime()) / 60000);
+    }
+  }
 
   // Week's entries
   const weekStart = startOfWeek(now);
@@ -361,6 +474,27 @@ export default function EmployeeHome() {
         </Badge>
       </div>
 
+      {/* Personal goal reminder — shows only once the agent has set one.
+          Small, subtle, encouraging. NOT shown every clock-in (that's the
+          design call). Clickable to edit. */}
+      {myGoal?.personal_goal && (
+        <Card
+          className="border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+          onClick={() => setGoalPromptOpen(true)}
+          title="Tap to update your goal"
+        >
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Working toward
+              </p>
+              <p className="text-sm font-medium truncate">{myGoal.personal_goal}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* C2: Policies to review */}
       {unackedPolicyCount > 0 && (
         <Card className="border-amber-300 bg-amber-50">
@@ -474,14 +608,32 @@ export default function EmployeeHome() {
           </CardHeader>
           <CardContent>
             {!todayEntry && (
-              <div className="text-center py-8">
-                <Timer className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground mb-4">
-                  You haven't clocked in yet today.
+              <div className="text-center py-6">
+                <div
+                  className={`text-5xl font-bold font-mono mb-1 ${
+                    pastGracePeriod ? "text-destructive" : ""
+                  }`}
+                >
+                  {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })}
                 </p>
-                <Button asChild size="lg">
-                  <Link to="/reloj">Clock In</Link>
-                </Button>
+                {pastGracePeriod && (
+                  <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
+                    <AlertCircle className="h-4 w-4" />
+                    {formatMinutesVerbose(minutesPastGrace)} past grace — clock in now
+                  </div>
+                )}
+                <div>
+                  <Button
+                    size="lg"
+                    onClick={() => setConfirmClockInOpen(true)}
+                    disabled={clockInMutation.isPending}
+                  >
+                    {clockInMutation.isPending ? "Clocking in..." : "Clock In"}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -849,6 +1001,43 @@ export default function EmployeeHome() {
           </CardContent>
         </Card>
       )}
+
+      {/* First-login goal prompt. Once set or dismissed, won't reopen. */}
+      {employeeId && (
+        <GoalPromptDialog
+          open={goalPromptOpen}
+          onOpenChange={setGoalPromptOpen}
+          employeeId={employeeId}
+          firstName={firstName}
+        />
+      )}
+
+      {/* Clock-in confirm dialog. Brief prompt so users don't fat-finger their day open. */}
+      <AlertDialog open={confirmClockInOpen} onOpenChange={setConfirmClockInOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clock in now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              {pastGracePeriod && ` · ${formatMinutesVerbose(minutesPastGrace)} past grace (this will be marked late)`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clockInMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                clockInMutation.mutate(undefined, {
+                  onSuccess: () => setConfirmClockInOpen(false),
+                });
+              }}
+              disabled={clockInMutation.isPending}
+            >
+              {clockInMutation.isPending ? "Clocking in..." : "Clock in"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

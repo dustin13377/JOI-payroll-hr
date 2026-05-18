@@ -113,6 +113,161 @@ export function useAddEmployeesBulk() {
   });
 }
 
+// Read the current agent's personal goal + prompt-dismissed flag.
+// Used to decide whether to show the first-login goal prompt and to display
+// the goal on their profile/dashboard.
+export function useMyGoal(employeeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["my-goal", employeeId],
+    queryFn: async () => {
+      if (!employeeId) return null;
+      const { data, error } = await supabase
+        .from("employees")
+        .select("personal_goal, goal_set_at, goal_visible_to_tl, goal_prompt_dismissed")
+        .eq("id", employeeId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as {
+        personal_goal: string | null;
+        goal_set_at: string | null;
+        goal_visible_to_tl: boolean;
+        goal_prompt_dismissed: boolean;
+      } | null;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+// Update the current agent's personal goal. Only writes goal-related columns.
+export function useUpdateMyGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      personal_goal?: string | null;
+      goal_visible_to_tl?: boolean;
+      dismiss_prompt?: boolean; // true when the user clicks "skip" on the first-login dialog
+    }) => {
+      const update: Record<string, unknown> = {};
+      if (input.personal_goal !== undefined) {
+        update.personal_goal = input.personal_goal?.trim() || null;
+        if (input.personal_goal && input.personal_goal.trim().length > 0) {
+          update.goal_set_at = new Date().toISOString();
+          update.goal_prompt_dismissed = true;
+        }
+      }
+      if (input.goal_visible_to_tl !== undefined) {
+        update.goal_visible_to_tl = input.goal_visible_to_tl;
+      }
+      if (input.dismiss_prompt) {
+        update.goal_prompt_dismissed = true;
+      }
+      const { error } = await supabase
+        .from("employees")
+        .update(update)
+        .eq("id", input.employee_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-goal"] });
+    },
+  });
+}
+
+// Change an employee's role (title) and keep user_profiles.role in sync.
+// Wraps the change_employee_role RPC which handles the title + nudge dance
+// (see feedback_role_change_via_title memory).
+export function useChangeEmployeeRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      new_title: "agent" | "team_lead" | "manager" | "admin" | "owner";
+    }) => {
+      const { data, error } = await supabase.rpc("change_employee_role", {
+        p_employee_id: input.employee_id,
+        p_new_title: input.new_title,
+      });
+      if (error) throw error;
+      return data as {
+        employee_id: string;
+        old_title: string;
+        new_title: string;
+        auth_user_synced: boolean;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["employee_profile"] });
+    },
+  });
+}
+
+// Edit / create a time_clock row via the edit-time-clock edge function.
+// Used by HR / TL / manager to fix missing or wrong punches with an audit trail.
+export function useEditTimeClock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      date: string;            // YYYY-MM-DD
+      reason: string;          // required, min 3 chars
+      clock_in?: string | null;
+      clock_out?: string | null;
+      lunch_start?: string | null;
+      lunch_end?: string | null;
+      break1_start?: string | null;
+      break1_end?: string | null;
+      break2_start?: string | null;
+      break2_end?: string | null;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("edit-time-clock", {
+        body: input,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        time_clock: Record<string, unknown>;
+        audit_id: string;
+        action: "insert" | "update";
+        warning?: string;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance"] });
+      qc.invalidateQueries({ queryKey: ["time_clock"] });
+    },
+  });
+}
+
+// Resend the "Welcome to JOI" invite email to one or more existing employees.
+// Internally handles stale auth users + user_profiles linkage so role guards work.
+//
+// Accepts an array of employee row UUIDs (employees.id, not employee_id text).
+// Returns per-employee status: sent | skipped | error.
+export function useResendInvite() {
+  return useMutation({
+    mutationFn: async (employeeIds: string[]) => {
+      if (!employeeIds.length) throw new Error("No employees selected");
+      const { data, error } = await supabase.functions.invoke("resend-invite", {
+        body: { employee_ids: employeeIds },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        results: Array<{
+          employee_id: string;
+          email: string | null;
+          full_name: string | null;
+          status: "sent" | "skipped" | "error";
+          message?: string;
+          auth_user_id?: string;
+        }>;
+      };
+    },
+  });
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
