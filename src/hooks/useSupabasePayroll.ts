@@ -25,6 +25,7 @@ function mapEmployee(row: any): EmployeeWithMeta {
     // A1b: expanded employee record
     _workName: row.work_name ?? null,
     _personalEmail: row.personal_email ?? null,
+    _email: row.email ?? null,
     _hireDate: row.hire_date ?? null,
     _emergencyContact: row.emergency_contact ?? null,
     _bankName: row.bank_name ?? null,
@@ -309,7 +310,7 @@ export function useUpdateEmployeePersonalInfo() {
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ employeeId, data }: { employeeId: string; data: Partial<EmployeeWithMeta> & { curp?: string; rfc?: string; address?: string; phone?: string; bank_clabe?: string; compliance_grace_until?: string | null; work_name?: string; personal_email?: string; hire_date?: string | null; emergency_contact?: string; bank_name?: string; date_of_birth?: string | null; marital_status?: string; nss?: string; last_worked_day?: string | null; department_id?: string | null } }) => {
+    mutationFn: async ({ employeeId, data }: { employeeId: string; data: Partial<EmployeeWithMeta> & { curp?: string; rfc?: string; address?: string; phone?: string; bank_clabe?: string; compliance_grace_until?: string | null; work_name?: string; personal_email?: string; hire_date?: string | null; emergency_contact?: string; bank_name?: string; date_of_birth?: string | null; marital_status?: string; nss?: string; last_worked_day?: string | null; department_id?: string | null; email?: string | null } }) => {
       const update: Record<string, unknown> = {};
       if (data.nombre !== undefined) update.full_name = data.nombre;
       if (data.sueldoBase !== undefined) update.monthly_base_salary = data.sueldoBase;
@@ -334,6 +335,10 @@ export function useUpdateEmployee() {
       if (data.nss !== undefined) update.nss = data.nss;
       if (data.last_worked_day !== undefined) update.last_worked_day = data.last_worked_day;
       if (data.department_id !== undefined) update.department_id = data.department_id;
+      // Work email (login). Leadership-only via UI guard. Empty string = clear.
+      if (data.email !== undefined) {
+        update.email = (data.email && data.email.trim().length > 0) ? data.email.trim() : null;
+      }
       const { error } = await supabase
         .from("employees")
         .update(update)

@@ -57,7 +57,7 @@ const PHONE_RE = /^\d{10}$/;
 const NSS_RE = /^\d{10,11}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function validateTaxFields(fields: { curp: string; rfc: string; phone: string; bank_clabe: string; nss: string; personal_email: string }) {
+function validateTaxFields(fields: { curp: string; rfc: string; phone: string; bank_clabe: string; nss: string; personal_email: string; email?: string }) {
   const errors: Record<string, string> = {};
   if (fields.curp && !CURP_RE.test(fields.curp)) errors.curp = "CURP must be 18 characters (e.g. GARC850101HDFRRL09)";
   if (fields.rfc && !RFC_RE.test(fields.rfc)) errors.rfc = "RFC must be 13 characters (e.g. GARC850101AB3)";
@@ -68,6 +68,7 @@ function validateTaxFields(fields: { curp: string; rfc: string; phone: string; b
   }
   if (fields.nss && !NSS_RE.test(fields.nss)) errors.nss = "NSS must be 10-11 digits";
   if (fields.personal_email && !EMAIL_RE.test(fields.personal_email)) errors.personal_email = "Invalid email format";
+  if (fields.email && !EMAIL_RE.test(fields.email)) errors.email = "Invalid email format";
   return errors;
 }
 
@@ -157,6 +158,7 @@ export default function EmpleadoPerfil() {
         _complianceGraceUntil: data.compliance_grace_until ?? null,
         _workName: data.work_name ?? null,
         _personalEmail: data.personal_email ?? null,
+        _email: data.email ?? null,
         _hireDate: data.hire_date ?? null,
         _emergencyContact: data.emergency_contact ?? null,
         _bankName: data.bank_name ?? null,
@@ -250,6 +252,9 @@ export default function EmpleadoPerfil() {
     nss: "",
     last_worked_day: "",
     department_id: "",
+    // Work email — only writable when currently NULL (initial assignment).
+    // Once set, treat as read-only because changing it requires syncing auth.users.email.
+    email: "",
   });
   const [taxErrors, setTaxErrors] = useState<Record<string, string>>({});
   const [changeRoleOpen, setChangeRoleOpen] = useState(false);
@@ -280,6 +285,8 @@ export default function EmpleadoPerfil() {
   const empNss = emp?._nss ?? "";
   const empLastWorkedDay = emp?._lastWorkedDay ?? "";
   const empDepartmentId = emp?._departmentId ?? "";
+  const empEmail = emp?._email ?? "";
+  const emailIsLocked = !!empEmail; // already set — UI shows read-only
 
   useEffect(() => {
     // B-02: skip sync when user has unsaved edits — prevents refetch clobber
@@ -300,8 +307,9 @@ export default function EmpleadoPerfil() {
       nss: empNss || "",
       last_worked_day: empLastWorkedDay || "",
       department_id: empDepartmentId || "",
+      email: empEmail || "",
     });
-  }, [empCurp, empRfc, empAddress, empPhone, empBankClabe, empWorkName, empPersonalEmail, empHireDate, empEmergencyContact, empBankName, empDateOfBirth, empMaritalStatus, empNss, empLastWorkedDay, empDepartmentId]);
+  }, [empCurp, empRfc, empAddress, empPhone, empBankClabe, empWorkName, empPersonalEmail, empHireDate, empEmergencyContact, empBankName, empDateOfBirth, empMaritalStatus, empNss, empLastWorkedDay, empDepartmentId, empEmail]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20"><LogoLoadingIndicator /></div>;
@@ -341,15 +349,22 @@ export default function EmpleadoPerfil() {
     setTaxErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
+    // Email handling: only send `email` in the payload when it's currently
+    // unset AND the form has a non-empty value. Once an email is set, the
+    // field is read-only in the UI; we drop it from the payload to be safe.
+    const { email: formEmail, ...rest } = normalized;
+    const includeEmail = !emailIsLocked && formEmail && formEmail.trim().length > 0;
+
     updateEmployee.mutate(
       {
         employeeId: emp.id,
         data: {
-          ...normalized,
-          hire_date: normalized.hire_date || null,
-          date_of_birth: normalized.date_of_birth || null,
-          last_worked_day: normalized.last_worked_day || null,
-          department_id: normalized.department_id || null,
+          ...rest,
+          hire_date: rest.hire_date || null,
+          date_of_birth: rest.date_of_birth || null,
+          last_worked_day: rest.last_worked_day || null,
+          department_id: rest.department_id || null,
+          ...(includeEmail ? { email: formEmail.trim() } : {}),
         },
       },
       {
@@ -515,6 +530,33 @@ export default function EmpleadoPerfil() {
             {/* ── Employment ─�� */}
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Employment</p>
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* Work Email — editable only when currently unset (initial assignment).
+                  Once set, login email changes are non-trivial (need to sync
+                  auth.users.email), so we display it read-only. */}
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Work Email <span className="text-muted-foreground font-normal">(login)</span></Label>
+                {emailIsLocked ? (
+                  <>
+                    <div className="p-2.5 rounded-md border bg-muted/30 text-sm">{empEmail}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Already set. Changing the login email after sign-in requires extra steps — ping dev to update it safely.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      type="email"
+                      value={taxForm.email}
+                      onChange={(e) => setTaxFormDirty((f) => ({ ...f, email: e.target.value }))}
+                      placeholder="name@yourdomain.com"
+                    />
+                    {taxErrors.email && <p className="text-xs text-destructive">{taxErrors.email}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      No login yet. After you save here, click the envelope icon on the Employees list to send the invite.
+                    </p>
+                  </>
+                )}
+              </div>
               <div className="grid gap-2">
                 <Label>Hire Date</Label>
                 <Input

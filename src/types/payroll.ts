@@ -24,6 +24,7 @@ export interface EmployeeWithMeta extends Employee {
   // A1b: expanded employee record
   _workName?: string | null;
   _personalEmail?: string | null;
+  _email?: string | null; // work/auth login email; nullable until invite is sent
   _hireDate?: string | null;
   _emergencyContact?: string | null;
   _bankName?: string | null;

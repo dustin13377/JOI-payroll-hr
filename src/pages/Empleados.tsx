@@ -129,10 +129,15 @@ export default function Empleados() {
   };
 
   const doCreateEmployee = () => {
-    if (!form.nombre || !form.email) {
-      toast.error("Name and work email are required");
+    if (!form.nombre) {
+      toast.error("Name is required");
       return;
     }
+    // Work email is optional — common workflow is to create the profile first
+    // and add the work email a week later once the hire is confirmed. The
+    // useAddEmployee hook handles both paths (with-email = auth user + invite,
+    // without-email = plain employee row).
+    const emailTrimmed = form.email.trim();
     addEmployee.mutate(
       {
         nombre: form.nombre,
@@ -140,7 +145,7 @@ export default function Empleados() {
         descuentoPorDia: form.descuentoPorDia,
         kpiMonto: form.kpiMonto,
         title: form.title,
-        email: form.email,
+        email: emailTrimmed || undefined,
         personalEmail: form.personalEmail.trim() || null,
         campaignId: form.campaignId,
       },
@@ -464,7 +469,7 @@ export default function Empleados() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Work Email</Label>
+                      <Label>Work Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
                       <Input
                         type="email"
                         placeholder="name@yourdomain.com"
@@ -474,7 +479,7 @@ export default function Empleados() {
                         name="new-emp-work-email"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Used for login, password resets, and account verification. Use the company-issued address, not a personal one.
+                        Used for login, password resets, and account verification. Use the company-issued address, not a personal one. Leave blank if you want to add it later (e.g. after the new hire is confirmed) — you can set it from their profile and then send the invite.
                       </p>
                     </div>
                     <div className="grid gap-2">
