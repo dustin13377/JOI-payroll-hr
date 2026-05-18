@@ -113,6 +113,67 @@ export function useAddEmployeesBulk() {
   });
 }
 
+// Read the current agent's personal goal + prompt-dismissed flag.
+// Used to decide whether to show the first-login goal prompt and to display
+// the goal on their profile/dashboard.
+export function useMyGoal(employeeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["my-goal", employeeId],
+    queryFn: async () => {
+      if (!employeeId) return null;
+      const { data, error } = await supabase
+        .from("employees")
+        .select("personal_goal, goal_set_at, goal_visible_to_tl, goal_prompt_dismissed")
+        .eq("id", employeeId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as {
+        personal_goal: string | null;
+        goal_set_at: string | null;
+        goal_visible_to_tl: boolean;
+        goal_prompt_dismissed: boolean;
+      } | null;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+// Update the current agent's personal goal. Only writes goal-related columns.
+export function useUpdateMyGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      personal_goal?: string | null;
+      goal_visible_to_tl?: boolean;
+      dismiss_prompt?: boolean; // true when the user clicks "skip" on the first-login dialog
+    }) => {
+      const update: Record<string, unknown> = {};
+      if (input.personal_goal !== undefined) {
+        update.personal_goal = input.personal_goal?.trim() || null;
+        if (input.personal_goal && input.personal_goal.trim().length > 0) {
+          update.goal_set_at = new Date().toISOString();
+          update.goal_prompt_dismissed = true;
+        }
+      }
+      if (input.goal_visible_to_tl !== undefined) {
+        update.goal_visible_to_tl = input.goal_visible_to_tl;
+      }
+      if (input.dismiss_prompt) {
+        update.goal_prompt_dismissed = true;
+      }
+      const { error } = await supabase
+        .from("employees")
+        .update(update)
+        .eq("id", input.employee_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-goal"] });
+    },
+  });
+}
+
 // Change an employee's role (title) and keep user_profiles.role in sync.
 // Wraps the change_employee_role RPC which handles the title + nudge dance
 // (see feedback_role_change_via_title memory).

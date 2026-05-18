@@ -38,6 +38,8 @@ import {
   Upload,
 } from "lucide-react";
 import { useEmployeeDocuments, useUploadDocument } from "@/hooks/useEmployeeDocuments";
+import { useMyGoal } from "@/hooks/useSupabasePayroll";
+import { GoalPromptDialog } from "@/components/GoalPromptDialog";
 import { DocumentStatusBadge } from "@/components/DocumentStatusBadge";
 import { useComplianceStatus } from "@/hooks/useComplianceStatus";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -279,6 +281,18 @@ export default function EmployeeHome() {
     },
   });
 
+  // Personal goal: shows first-login prompt if not set + not dismissed.
+  const { data: myGoal } = useMyGoal(employeeId);
+  const [goalPromptOpen, setGoalPromptOpen] = useState(false);
+  useEffect(() => {
+    // Open the prompt once on first render where they qualify, then leave it
+    // alone. If they dismiss, goal_prompt_dismissed gets set server-side so
+    // we never re-open on subsequent visits.
+    if (myGoal && !myGoal.personal_goal && !myGoal.goal_prompt_dismissed) {
+      setGoalPromptOpen(true);
+    }
+  }, [myGoal?.personal_goal, myGoal?.goal_prompt_dismissed]);
+
   // Grace-period status (used on the dashboard pre-clock-in)
   let pastGracePeriod = false;
   let minutesPastGrace = 0;
@@ -459,6 +473,27 @@ export default function EmployeeHome() {
           {statusBadge.label}
         </Badge>
       </div>
+
+      {/* Personal goal reminder — shows only once the agent has set one.
+          Small, subtle, encouraging. NOT shown every clock-in (that's the
+          design call). Clickable to edit. */}
+      {myGoal?.personal_goal && (
+        <Card
+          className="border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+          onClick={() => setGoalPromptOpen(true)}
+          title="Tap to update your goal"
+        >
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Working toward
+              </p>
+              <p className="text-sm font-medium truncate">{myGoal.personal_goal}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* C2: Policies to review */}
       {unackedPolicyCount > 0 && (
@@ -965,6 +1000,16 @@ export default function EmployeeHome() {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* First-login goal prompt. Once set or dismissed, won't reopen. */}
+      {employeeId && (
+        <GoalPromptDialog
+          open={goalPromptOpen}
+          onOpenChange={setGoalPromptOpen}
+          employeeId={employeeId}
+          firstName={firstName}
+        />
       )}
 
       {/* Clock-in confirm dialog. Brief prompt so users don't fat-finger their day open. */}
