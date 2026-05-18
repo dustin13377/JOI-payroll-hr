@@ -11,7 +11,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Clock, AlertTriangle, UserCheck, UserX } from "lucide-react";
+import { Users, Clock, AlertTriangle, UserCheck, UserX, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EditPunchDialog } from "@/components/EditPunchDialog";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,6 +58,14 @@ export default function Attendance() {
   const { user, role, employeeId, isLeadership, isTeamLead } = useAuth();
   const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const [campaigns, setCampaigns] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Edit-punch dialog state. Opened from the pencil button on each row.
+  const [editPunchTarget, setEditPunchTarget] = useState<{
+    employee_id: string;
+    employee_name: string;
+    clock_in: string | null;
+    clock_out: string | null;
+  } | null>(null);
 
   // Check authorization
   if (role === "agent") {
@@ -330,6 +340,7 @@ export default function Attendance() {
                   <TableHead>Clock Out</TableHead>
                   <TableHead>Hours</TableHead>
                   <TableHead>Late By</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -378,11 +389,28 @@ export default function Attendance() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={employee.clock_in ? "Edit punch" : "Add missing punch"}
+                          onClick={() =>
+                            setEditPunchTarget({
+                              employee_id: employee.id,
+                              employee_name: employee.name,
+                              clock_in: employee.clock_in,
+                              clock_out: employee.clock_out,
+                            })
+                          }
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       No attendance data
                     </TableCell>
                   </TableRow>
@@ -392,6 +420,26 @@ export default function Attendance() {
           </div>
         </CardContent>
       </Card>
+
+      {editPunchTarget && (
+        <EditPunchDialog
+          open={!!editPunchTarget}
+          onOpenChange={(open) => !open && setEditPunchTarget(null)}
+          employeeId={editPunchTarget.employee_id}
+          employeeName={editPunchTarget.employee_name}
+          date={todayLocal()}
+          existing={{
+            clock_in: editPunchTarget.clock_in,
+            clock_out: editPunchTarget.clock_out,
+            lunch_start: null,
+            lunch_end: null,
+            break1_start: null,
+            break1_end: null,
+            break2_start: null,
+            break2_end: null,
+          }}
+        />
+      )}
     </div>
   );
 }

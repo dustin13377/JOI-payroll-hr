@@ -113,6 +113,43 @@ export function useAddEmployeesBulk() {
   });
 }
 
+// Edit / create a time_clock row via the edit-time-clock edge function.
+// Used by HR / TL / manager to fix missing or wrong punches with an audit trail.
+export function useEditTimeClock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      date: string;            // YYYY-MM-DD
+      reason: string;          // required, min 3 chars
+      clock_in?: string | null;
+      clock_out?: string | null;
+      lunch_start?: string | null;
+      lunch_end?: string | null;
+      break1_start?: string | null;
+      break1_end?: string | null;
+      break2_start?: string | null;
+      break2_end?: string | null;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("edit-time-clock", {
+        body: input,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        time_clock: Record<string, unknown>;
+        audit_id: string;
+        action: "insert" | "update";
+        warning?: string;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance"] });
+      qc.invalidateQueries({ queryKey: ["time_clock"] });
+    },
+  });
+}
+
 // Resend the "Welcome to JOI" invite email to one or more existing employees.
 // Internally handles stale auth users + user_profiles linkage so role guards work.
 //
