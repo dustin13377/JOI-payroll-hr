@@ -57,7 +57,7 @@ export function usePayrollComputed(
       let empQuery = supabase
         .from("employees")
         .select(
-          "id, employee_id, full_name, campaign_id, monthly_base_salary, daily_discount_rate, kpi_bonus_amount, campaigns!employees_campaign_id_fkey(name)"
+          "id, employee_id, full_name, campaign_id, monthly_base_salary, daily_discount_rate, kpi_bonus_amount, hire_date, terminated_at, campaigns!employees_campaign_id_fkey(name)"
         )
         .eq("is_active", true)
         .eq("is_system_user", false);  // partners/auditors are not on payroll
@@ -156,9 +156,29 @@ export function usePayrollComputed(
         const campaignId: string | null = emp.campaign_id ?? null;
         const daysOfWeek = (campaignId && shiftMap.get(campaignId)) || [1, 2, 3, 4, 5];
 
-        // Scheduled days: dates whose day-of-week is in daysOfWeek
+        // Clamp window: an employee can't be absent before they were hired or
+        // after they were terminated. terminated_at is a timestamptz — convert
+        // to YYYY-MM-DD using local components so the boundary matches the
+        // date strings we compare against.
+        const hireDate: string | null = (emp.hire_date as string | null) ?? null;
+        const termTs: string | null = (emp.terminated_at as string | null) ?? null;
+        const termDate: string | null = termTs ? fmtDate(new Date(termTs)) : null;
+
+        // Scheduled days: dates whose day-of-week is in daysOfWeek, minus:
+        //   - days before hire_date
+        //   - days after termination_at
+        //   - Mexican holidays (holidaySet)
+        // Without these exclusions, every Mon-Fri before an agent was hired
+        // counts as an absence and inflates payroll deductions. Same for
+        // holidays — the company doesn't expect anyone to clock in.
         const scheduledDays = new Set(
-          allDates.filter((d) => daysOfWeek.includes(parseDate(d).getDay()))
+          allDates.filter((d) => {
+            if (!daysOfWeek.includes(parseDate(d).getDay())) return false;
+            if (hireDate && d < hireDate) return false;
+            if (termDate && d > termDate) return false;
+            if (holidaySet.has(d)) return false;
+            return true;
+          })
         );
 
         const clocked = clockMap.get(uuid) ?? new Set<string>();
