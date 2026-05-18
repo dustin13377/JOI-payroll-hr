@@ -1,45 +1,51 @@
 # Session Handoff
 
-**Saved:** 2026-05-14T23:45:42+00:00
-**Machine:** cowork-sandbox (claude)
+**Saved:** 2026-05-18T17:32:06+00:00
+**Machine:** claude (Cowork sandbox)
 **Branch:** main
-**Last commit:** cd2d1cf session-handoff: patched create-employee for idempotency, untested
+**Last commit:** 4dd677a feat: Goals v1 — personal goal prompt + dashboard reminder
 
 ## What we were doing
 
-Continued debugging the Add Employee form after the previous handoff. The idempotency patch (v23/v24, GH Actions auto-deployed when you pushed) cleared the ghost-auth-user case, but the form was *still* 400ing. Pulled the actual error from your DevTools Network tab and found **two new problems**: (1) Supabase Auth's email rate limit is exceeded after all the failed retries today, and (2) the `employees` table has a NOT NULL `organization_id` column the edge function never populates — so even once the rate limit clears, the insert would fail.
-
-You picked Option 3 (custom SMTP via Google Workspace using `humanresources@justoutsource.it`) to fix both the rate limit AND make invite emails look professional. You're currently in the middle of setting up the App Password + Supabase SMTP config. I have NOT yet patched the `organization_id` bug — that's the next thing to do once SMTP is live.
+Started with two visual bug fixes (Carta PDF rendering black bars over employee data; invite button hidden behind a too-narrow column on the Employees page). That led into the bigger question of whether the app is ready to go live, which led to a full security audit by a sub-agent. We worked through every Critical and High finding from the audit and closed them all.
 
 ## Files in flight
 
-- `supabase/functions/create-employee/index.ts` — currently deployed as v24 (GH Actions deploy from main). Idempotency patch is live. **Still needs another patch:** look up the caller's `organization_id` from their `user_profiles.employee_id → employees.organization_id` chain, and include it in the new employee `INSERT`. Without this, the insert hits a NOT NULL violation.
+- `src/lib/pdf/pdfHelpers.ts` — added `setLineWidth(0.005)` at top of `drawMetadataTable`, explicit `"S"` stroke mode on value cells, defensive `setDrawColor`/`setTextColor` resets. Fixes Carta PDF (and by extension Acta + Renuncia packet, same helper) which was rendering label cells as solid black bars because jsPDF's default inch-mode line width is ~0.2" and was overdrawing the gray fill.
+- `src/pages/Empleados.tsx` — `TableHead className="w-12"` → `w-24 text-right` with visible "Actions" label. The Mail invite button was getting clipped because the column wasn't wide enough for two icons.
+- `SECURITY_AUDIT_2026-05-18.md` — full audit report from the sub-agent, kept at repo root for reference. 10 findings (2 Critical, 3 High, 3 Medium, 2 Low).
 
 ## Decisions made this session
 
-- Going with **Option 3 — custom SMTP via Google Workspace**, not waiting out the rate limit or using `generateLink`. Sender will be `humanresources@justoutsource.it` for an on-brand look.
-- `organization_id` for new employees will be pulled from the **caller's** employee record (via `user_profiles → employees.organization_id`), not hardcoded. Keeps the function multi-tenant-friendly even though JOI is single-org today.
-- The Postgres "column reference 'employee_id' is ambiguous" error I saw earlier in the logs was a red herring — happened in a different code path, not Joe's flow. Did not pursue further.
-- **D already has an App Password for `EOD@justoutsource.it`** (stored as `GMAIL_USER` + `GMAIL_APP_PASSWORD` Supabase secrets, used by `send-eod-digest`, `compliance-notifications`, `review-notifications`). Considered reusing it for Auth SMTP (30-sec setup) but rejected — "EOD" reads weird as the From address on a new-hire invite. Sticking with the plan to make a fresh App Password for `humanresources@`.
+- **Signups disabled in Supabase Auth.** Onboarding from now on is invite-only via the existing flows. Critical #1 (anyone on the internet could self-promote to org owner) is fully closed.
+- **Orphan auth user `jaxong@hfbtech.com` deleted via Supabase Dashboard** (D recognized them as a setup-time helper, no ongoing access needed).
+- **No new role tier created.** D briefly wanted a sub-TL role for jaxong, but since jaxong doesn't need ongoing access we deferred. Existing System Users pattern remains the path if external read-only accounts are needed later.
+- **Only managers and above can add employees** — confirmed by D when locking down `check_rehire`. `is_leadership()` gate is correct; team_leads don't need rehire-check access.
+- **`ALLOWED_ORIGIN` secret set to `https://app.justoutsource.it`** in Supabase Edge Functions secrets. The secret already existed (replaced via dashboard). App still works.
+- **Three policy/RPC migrations applied via Supabase MCP** with explicit user approval on each:
+  - `harden_time_clock_audit_select_policy`
+  - `lock_down_check_rehire_rpc`
+  - `tighten_shift_settings_audit_select_policy`
 
 ## Open todos
 
-- [ ] **D Step 1:** Generate Google App Password for `humanresources@justoutsource.it` (requires 2FA on that account). https://myaccount.google.com/apppasswords — label it "Supabase Auth", copy the 16-char password.
-- [ ] **D Step 2:** Supabase dashboard → Project Settings → Authentication → SMTP Settings → Enable Custom SMTP. Host `smtp.gmail.com`, port `587`, sender `humanresources@justoutsource.it`, sender name `JOI Human Resources`, username = sender email, password = App Password (no spaces). Save.
-- [ ] **D Step 2.5 (optional):** Customize the Invite User email template under Authentication → Email Templates for JOI branding.
-- [ ] **Claude Step 3:** Patch `supabase/functions/create-employee/index.ts` to fetch caller's `organization_id` and set it on BOTH the `employees` insert AND the `user_profiles` insert (not just one). Deploy.
-- [ ] **D Step 4:** Test the Add Employee form again with `joe.renteria@torro.com` (different person — the one that errored on the System Users page tonight) to confirm the end-to-end flow works for client-side hires.
-- [ ] **Frontend tweak:** Make the UI render `"JOI"` instead of `None`/blank as the client label for any employee where `title ∈ (manager, admin, owner)` and `campaign_id is null`. Touches Empleados table, employee profile card, edit form. See `project_joi_internal_staff_display` memory note.
+- [ ] Review the 3 Medium + 2 Low findings in `SECURITY_AUDIT_2026-05-18.md` (not yet walked through)
+- [ ] Decide on Group B CORS fix: 4 edge functions hardcode `Access-Control-Allow-Origin: "*"` and ignore the env var → `edit-time-clock`, `resend-invite`, `send-eod-digest`, `create-employee`. Not exploitable (auth checks are good) but best practice to patch.
+- [ ] Add timestamp/datestamp to Acta PDF — D is waiting on guidance from their stakeholder about exactly which section it goes in. Carta does NOT need one.
+- [ ] Eyeball-test the Acta and Renuncia packet PDFs to confirm they render cleanly now (same helper that had the carta black-bar bug).
+- [ ] When ready to actually send real emails: flip `DRY_RUN_HOLIDAY` → `false` and the `review-notifications` DRY_RUN flag → `false` (still in dry-run as of today).
+- [ ] Consider whether to gate the Mail/invite icon on `Empleados` so it only shows for employees without a confirmed auth account (would double as a "pending invite" visual indicator) — D said maybe later.
 
 ## Next step when you come back
 
-Knock out the Google App Password for `humanresources@justoutsource.it` first (turn on 2FA if needed, generate App Password at https://myaccount.google.com/apppasswords). Then plug into Supabase Auth → SMTP Settings (`smtp.gmail.com:587`). Ping Claude when SMTP is live, Claude patches the `organization_id` bug, you retry the Add Employee form for Joe Renteria.
+Open `SECURITY_AUDIT_2026-05-18.md`, scroll to the Medium Findings section, and ask Claude to walk through them one at a time the same way we did the Highs (show finding → propose SQL/code → approve → run → verify).
 
 ## Watch out for
 
-- **Joe IS in the DB now** as `joe.renteria@justoutsource.it` with title=manager, JOI-0108, password `test123!`. Created via direct SQL (DO block) bypassing the broken edge function. Email pre-confirmed so he can log in immediately. Tell Joe to change password on first login.
-- **Two NOT NULL `organization_id` columns, not one.** When we patch `create-employee` tomorrow, it needs to set `organization_id` on BOTH `employees` AND `user_profiles` inserts. First retry hit the user_profiles constraint after I'd only added org_id to employees.
-- **The org_id patch is not yet written.** Even after SMTP is configured, the form will fail with a NOT NULL violation until Claude lands the patch.
-- **v24 has `verify_jwt: true`** (set by GH Actions defaults). Versions 22-23 had it `false`. The function still handles its own auth via the Authorization header, so this works for the React app, but worth knowing if you ever invoke it from a tool that doesn't send a JWT.
-- **Custom SMTP setup will burn ~10-15 min of your time.** Google App Password requires 2FA on the humanresources account first if it's not already on.
-- **DRY_RUN_HOLIDAY check** — still on the open list from a prior session (verify the value and flip it to "false" so PTO emails actually send). Not related to this issue, but mentioning so it doesn't get lost.
+- **Signups are disabled** — if you (or anyone) try to onboard a new person via the public signup form, it will fail. All onboarding must go through invite flow (`create-employee` edge function or System Users page).
+- **CORS is now locked to `https://app.justoutsource.it`.** If you ever spin up a Vercel preview URL, staging domain, or local dev hitting prod, the 6 "Group A" edge functions (get-hr-document-signed-url, notify-hr-request-filed, holiday-notifications, review-notifications, compliance-notifications, provision-org) will reject those origins. Update the secret if needed.
+- **The three RLS/RPC migrations are applied to live prod** (project `jpaihltkrohdqkqlbqkf`), not just in local migration files. If you run `supabase db diff` or pull migrations, expect them to show up as untracked. The migration names are listed under "Decisions made" above.
+- **`check_rehire` is now leadership-only.** If a team lead ever tries to add an employee and the UI calls this RPC, they'll get empty results (not an error). If that turns out to be wrong, relax it by adding a `team_lead` branch to the `is_leadership()` check inside the function.
+- **PDF helper fix only verified via code inspection.** No one has regenerated and visually confirmed an Acta or Renuncia packet PDF yet — strongly recommended before trusting those.
+- **Group B CORS still wide open** in code (`"*"` hardcoded). Auth checks inside those functions are solid per the audit, so not actively exploitable, but flagged.
+- **Honest "is this ready to go live" answer as of today:** safe enough to run in parallel with your existing spreadsheets (option B). Not yet ready to be the sole system of record (option A) — payroll math edge cases and DRY_RUN email flags still need shaking out.
