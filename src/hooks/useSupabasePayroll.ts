@@ -269,6 +269,43 @@ export function useResendInvite() {
   });
 }
 
+/**
+ * Update the 5 whitelisted contact fields via the SECURITY DEFINER RPC.
+ * Used by TLs (for their team) and agents (self-edit). Leadership can use
+ * either this or useUpdateEmployee — same result, but useUpdateEmployee
+ * also supports the wider field set leadership has access to.
+ *
+ * Pass NULL for a field you want left alone. Pass '' to clear it.
+ */
+export function useUpdateEmployeePersonalInfo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employeeUuid: string;
+      work_name?: string | null;
+      personal_email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      emergency_contact?: string | null;
+    }) => {
+      const { error } = await supabase.rpc("update_employee_personal_info", {
+        p_employee_uuid: input.employeeUuid,
+        p_work_name: input.work_name ?? null,
+        p_personal_email: input.personal_email ?? null,
+        p_phone: input.phone ?? null,
+        p_address: input.address ?? null,
+        p_emergency_contact: input.emergency_contact ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["tl-profile-fallback"] });
+      qc.invalidateQueries({ queryKey: ["my-personal-info"] });
+    },
+  });
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({

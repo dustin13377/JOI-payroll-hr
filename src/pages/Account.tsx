@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, titleLabel } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,13 +8,31 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
 
 export default function Account() {
-  const { user, title } = useAuth();
+  const { user, title, employeeId, isClient } = useAuth();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+
+  // Load the agent's own 5 contact fields (RLS agents_select_own_employee allows it).
+  // Clients (no employeeId) skip this entirely.
+  const { data: myInfo } = useQuery({
+    queryKey: ["my-personal-info", employeeId],
+    queryFn: async () => {
+      if (!employeeId) return null;
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, work_name, personal_email, phone, address, emergency_contact")
+        .eq("id", employeeId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!employeeId && !isClient,
+  });
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +93,18 @@ export default function Account() {
           </div>
         </CardContent>
       </Card>
+
+      {employeeId && !isClient && myInfo && (
+        <PersonalInfoCard
+          employeeUuid={myInfo.id}
+          initialWorkName={myInfo.work_name ?? ""}
+          initialPersonalEmail={myInfo.personal_email ?? ""}
+          initialPhone={myInfo.phone ?? ""}
+          initialAddress={myInfo.address ?? ""}
+          initialEmergencyContact={myInfo.emergency_contact ?? ""}
+          description="Update your own contact info. Your work email, role, and pay are managed by HR."
+        />
+      )}
 
       <Card>
         <CardHeader>

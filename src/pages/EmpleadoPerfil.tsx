@@ -47,6 +47,7 @@ import { getDisplayName } from "@/lib/displayName";
 import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequestsCard";
 import { EmploymentHistoryCard } from "@/components/employee-profile/EmploymentHistoryCard";
 import { ThirtyDayReviewCard } from "@/components/employee-profile/ThirtyDayReviewCard";
+import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
 
 // ── A1: Personal & Tax Info validation ──────────────────────────────
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
@@ -92,9 +93,12 @@ export default function EmpleadoPerfil() {
   const { data: tlFallback, isLoading: tlFallbackLoading } = useQuery({
     queryKey: ["tl-profile-fallback", id],
     queryFn: async () => {
+      // Query employees directly (RLS tl_select_team_employees gates by team).
+      // We pull the 5 contact fields so the TL "Personal Info" card has values
+      // to display and edit.
       const { data, error } = await supabase
-        .from("employees_no_pay")
-        .select("id, employee_id, full_name, campaign_id, is_active, title, reports_to, email, campaigns!employees_campaign_id_fkey(name)")
+        .from("employees")
+        .select("id, employee_id, full_name, work_name, personal_email, phone, address, emergency_contact, campaign_id, is_active, title, reports_to, email, campaigns!employees_campaign_id_fkey(name)")
         .eq("employee_id", id!)
         .maybeSingle();
       if (error) throw error;
@@ -110,6 +114,11 @@ export default function EmpleadoPerfil() {
         _uuid: data.id,
         _campaignId: data.campaign_id || undefined,
         _campaignName: (data as Record<string, unknown> & { campaigns?: { name?: string } }).campaigns?.name || undefined,
+        _workName: data.work_name ?? null,
+        _personalEmail: data.personal_email ?? null,
+        _phone: data.phone ?? null,
+        _address: data.address ?? null,
+        _emergencyContact: data.emergency_contact ?? null,
       } satisfies EmployeeWithMeta;
     },
     enabled: needsTlFallback,
@@ -418,6 +427,19 @@ export default function EmpleadoPerfil() {
             </div>
           </CardContent>
         </Card>
+
+        {/* TL Personal Info card — limited edit for Team Leads on their team.
+            Leadership has the full Employee Record card below, so skip for them. */}
+        {isTeamLead && !isLeadership && emp._uuid && (
+          <PersonalInfoCard
+            employeeUuid={emp._uuid}
+            initialWorkName={empWorkName}
+            initialPersonalEmail={empPersonalEmail}
+            initialPhone={empPhone}
+            initialAddress={empAddress}
+            initialEmergencyContact={empEmergencyContact}
+          />
+        )}
 
         {/* A1 + A1b: Employee Record — leadership only */}
         {isLeadership && <Card>
