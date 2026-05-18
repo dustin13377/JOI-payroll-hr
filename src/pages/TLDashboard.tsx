@@ -26,10 +26,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BarChart3, Users, AlertCircle, TrendingUp, Calendar, MessageSquarePlus, Loader2, FileWarning, StickyNote,
+  BarChart3, Users, AlertCircle, TrendingUp, Calendar, MessageSquarePlus, Loader2, FileWarning, StickyNote, UserX,
 } from "lucide-react";
 import { getDisplayName } from "@/lib/displayName";
 import { formatDateMX } from "@/lib/localDate";
+import { SubmitEODForAgentDialog, type SubmitEODKPIField } from "@/components/SubmitEODForAgentDialog";
 
 // ---------------------------------------------------------------------------
 // Timezone helpers (same pattern as edge function)
@@ -74,6 +75,8 @@ interface KPIField {
   field_type: string;
   min_target: number | null;
   display_order: number;
+  is_required: boolean;
+  dropdown_options: string[] | null;
 }
 
 interface Agent {
@@ -108,6 +111,7 @@ export default function TLDashboard() {
   const [sortAsc, setSortAsc] = useState(true);
   const [noteAgent, setNoteAgent] = useState<Agent | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [submitEODForAgent, setSubmitEODForAgent] = useState<Agent | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -154,13 +158,36 @@ export default function TLDashboard() {
     enabled: !!activeCampaignId,
   });
 
+  // --- Agents on this campaign who have NO login yet ---
+  //     Uses a SECURITY DEFINER RPC because user_profiles RLS hides other
+  //     users' rows from TLs (only leadership/self can read profiles).
+  //     NOTE: After pulling this branch, regen types.ts so the cast below
+  //     can be removed:
+  //       npx supabase gen types typescript --project-id jpaihltkrohdqkqlbqkf \
+  //         > src/integrations/supabase/types.ts
+  const { data: noLoginAgentIds = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["tl-dash-no-login-agents", activeCampaignId],
+    queryFn: async () => {
+      if (!activeCampaignId) return new Set<string>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("employees_without_login", {
+        p_campaign_id: activeCampaignId,
+      });
+      if (error) throw error;
+      return new Set(
+        ((data ?? []) as { employee_id: string }[]).map((r) => r.employee_id),
+      );
+    },
+    enabled: !!activeCampaignId,
+  });
+
   // --- KPI fields ---
   const { data: kpiFields = [] } = useQuery({
     queryKey: ["tl-dash-kpi", activeCampaignId],
     queryFn: async () => {
       if (!activeCampaignId) return [];
       const { data, error } = await supabase.from("campaign_kpi_config")
-        .select("field_name, field_label, field_type, min_target, display_order")
+        .select("field_name, field_label, field_type, min_target, display_order, is_required, dropdown_options")
         .eq("campaign_id", activeCampaignId).eq("is_active", true).order("display_order");
       if (error) throw error;
       return data as KPIField[];
@@ -501,6 +528,7 @@ export default function TLDashboard() {
                       {sortCol === k.field_name && (sortAsc ? " ↑" : " ↓")}
                     </TableHead>
                   ))}
+                  <TableHead className="text-right w-[140px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -508,7 +536,25 @@ export default function TLDashboard() {
                   const weekDayCount = daysRange(weekStart, weekEnd).length;
                   return (
                     <TableRow key={agent.id}>
-                      <TableCell className="font-medium">{getDisplayName(agent)}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{getDisplayName(agent)}</span>
+                          {noLoginAgentIds.has(agent.id) && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 gap-1">
+                                  <UserX className="h-3 w-3" />
+                                  No login yet
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-xs">
+                                This agent doesn't have a Supabase account yet. You'll need to file
+                                their EOD on their behalf until they get their work email.
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </TableCell>
                       {numericKpis.map((k) => {
                         const val = sums[k.field_name] ?? 0;
                         const weekTarget = k.min_target !== null ? k.min_target * weekDayCount : null;
@@ -519,11 +565,22 @@ export default function TLDashboard() {
                           </TableCell>
                         );
                       })}
+                      <TableCell className="text-right">
+                        {noLoginAgentIds.has(agent.id) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSubmitEODForAgent(agent)}
+                          >
+                            Submit EOD
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
                 {sortedLeaderboard.length === 0 && (
-                  <TableRow><TableCell colSpan={numericKpis.length + 1} className="text-center py-6 text-muted-foreground">No agents on this campaign.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={numericKpis.length + 2} className="text-center py-6 text-muted-foreground">No agents on this campaign.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -686,6 +743,25 @@ export default function TLDashboard() {
           <p className="text-sm mt-1">Tier 2 metrics (client QA scores, CSAT, handle time) will appear here once integrated.</p>
         </CardContent>
       </Card>
+
+      {/* Submit EOD on behalf of a no-login agent */}
+      <SubmitEODForAgentDialog
+        open={!!submitEODForAgent}
+        onOpenChange={(o) => { if (!o) setSubmitEODForAgent(null); }}
+        agent={submitEODForAgent ? { id: submitEODForAgent.id, name: getDisplayName(submitEODForAgent) } : null}
+        campaignId={activeCampaignId}
+        kpiFields={kpiFields.map<SubmitEODKPIField>((k) => ({
+          field_name: k.field_name,
+          field_label: k.field_label,
+          field_type: k.field_type as SubmitEODKPIField["field_type"],
+          is_required: k.is_required,
+          dropdown_options: k.dropdown_options,
+        }))}
+        defaultDate={today}
+        onSubmitted={() => {
+          queryClient.invalidateQueries({ queryKey: ["tl-dash-eod"] });
+        }}
+      />
 
       {/* Add Note Dialog */}
       <Dialog open={!!noteAgent} onOpenChange={(o) => { if (!o) setNoteAgent(null); }}>

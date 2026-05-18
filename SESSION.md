@@ -1,51 +1,47 @@
 # Session Handoff
 
-**Saved:** 2026-05-18T17:32:06+00:00
-**Machine:** claude (Cowork sandbox)
+**Saved:** 2026-05-18T17:40:00-06:00
+**Machine:** Diomedes's Mac mini (admin@Diomedess-Mac-mini)
 **Branch:** main
-**Last commit:** 4dd677a feat: Goals v1 — personal goal prompt + dashboard reminder
+**Last commit:** 760355b feat(employees): work email optional at hire time, assign from profile later
 
 ## What we were doing
 
-Started with two visual bug fixes (Carta PDF rendering black bars over employee data; invite button hidden behind a too-narrow column on the Employees page). That led into the bigger question of whether the app is ready to go live, which led to a full security audit by a sub-agent. We worked through every Critical and High finding from the audit and closed them all.
+Built the full new-hire onboarding flow for agents who don't have a Supabase Auth account yet. Two halves shipped in three commits today: (1) TLs can submit EOD on behalf of no-login agents via a new edge function with audit trail; (2) the Add Employee form no longer requires a work email, and the work email can be assigned later from the Employee Profile. Together this lets you onboard a new hire on Day 1, have their TL cover punches + EOD during the 30-day probation, and only issue the work email + invite after the review passes.
 
 ## Files in flight
 
-- `src/lib/pdf/pdfHelpers.ts` — added `setLineWidth(0.005)` at top of `drawMetadataTable`, explicit `"S"` stroke mode on value cells, defensive `setDrawColor`/`setTextColor` resets. Fixes Carta PDF (and by extension Acta + Renuncia packet, same helper) which was rendering label cells as solid black bars because jsPDF's default inch-mode line width is ~0.2" and was overdrawing the gray fill.
-- `src/pages/Empleados.tsx` — `TableHead className="w-12"` → `w-24 text-right` with visible "Actions" label. The Mail invite button was getting clipped because the column wasn't wide enough for two icons.
-- `SECURITY_AUDIT_2026-05-18.md` — full audit report from the sub-agent, kept at repo root for reference. 10 findings (2 Critical, 3 High, 3 Medium, 2 Low).
+Nothing in flight from this session — everything was committed and pushed.
+
+Two reference-only files are sitting untracked at `docs/email-templates/`:
+- `supabase-invite-user.html` — pasted into Supabase Dashboard → Authentication → Email Templates → Invite User. Already done.
+- `supabase-reset-password.html` — pasted into Reset Password template. Already done.
+
+These are local docs. Commit them whenever you want a record in git; nothing else depends on them being tracked.
 
 ## Decisions made this session
 
-- **Signups disabled in Supabase Auth.** Onboarding from now on is invite-only via the existing flows. Critical #1 (anyone on the internet could self-promote to org owner) is fully closed.
-- **Orphan auth user `jaxong@hfbtech.com` deleted via Supabase Dashboard** (D recognized them as a setup-time helper, no ongoing access needed).
-- **No new role tier created.** D briefly wanted a sub-TL role for jaxong, but since jaxong doesn't need ongoing access we deferred. Existing System Users pattern remains the path if external read-only accounts are needed later.
-- **Only managers and above can add employees** — confirmed by D when locking down `check_rehire`. `is_leadership()` gate is correct; team_leads don't need rehire-check access.
-- **`ALLOWED_ORIGIN` secret set to `https://app.justoutsource.it`** in Supabase Edge Functions secrets. The secret already existed (replaced via dashboard). App still works.
-- **Three policy/RPC migrations applied via Supabase MCP** with explicit user approval on each:
-  - `harden_time_clock_audit_select_policy`
-  - `lock_down_check_rehire_rpc`
-  - `tighten_shift_settings_audit_select_policy`
+- **EOD-on-behalf went the "edge function + audit" route, not RLS-only.** Mirrors the existing `edit-time-clock` pattern. Required `reason` field, full audit trail in `eod_logs_audit`. Reasoning: when payroll disputes happen, "TL filed this EOD on agent's behalf because X" needs to be defensible, not inferred.
+- **TLs can only submit-for agents who have NO login yet** (no row in `user_profiles`). Once an agent gets their work email and account, only they (or HR/manager+) can file their own EOD. Forces a clean handoff.
+- **No expiration logic.** Works for as long as the agent has no login — not capped at 7 or 30 days. Auth check is "TL on same campaign," nothing time-based.
+- **TL dashboard shows a "No login yet" amber badge** + "Submit EOD" button per no-login agent. Driven by a new SECURITY DEFINER RPC `employees_without_login(p_campaign_id)` because the existing `user_profiles` RLS hides other users' rows from TLs (only leadership/self can read profiles).
+- **Work email is optional at hire and read-only once set.** Once an agent has logged in with a work email, changing it requires syncing `auth.users.email`, which is non-trivial. So the field is editable only on initial assignment.
+- **`types.ts` regen wiped the file** because `npx supabase gen types ...` errored on missing access token after the shell redirection had already truncated the file. Restored via `git checkout` from prior commit. Going forward: run `npx supabase login` once, and consider piping regen through a temp file (`> types.tmp && mv types.tmp ...`) so a failed command can't destroy the original.
 
 ## Open todos
 
-- [ ] Review the 3 Medium + 2 Low findings in `SECURITY_AUDIT_2026-05-18.md` (not yet walked through)
-- [ ] Decide on Group B CORS fix: 4 edge functions hardcode `Access-Control-Allow-Origin: "*"` and ignore the env var → `edit-time-clock`, `resend-invite`, `send-eod-digest`, `create-employee`. Not exploitable (auth checks are good) but best practice to patch.
-- [ ] Add timestamp/datestamp to Acta PDF — D is waiting on guidance from their stakeholder about exactly which section it goes in. Carta does NOT need one.
-- [ ] Eyeball-test the Acta and Renuncia packet PDFs to confirm they render cleanly now (same helper that had the carta black-bar bug).
-- [ ] When ready to actually send real emails: flip `DRY_RUN_HOLIDAY` → `false` and the `review-notifications` DRY_RUN flag → `false` (still in dry-run as of today).
-- [ ] Consider whether to gate the Mail/invite icon on `Empleados` so it only shows for employees without a confirmed auth account (would double as a "pending invite" visual indicator) — D said maybe later.
+- [ ] **Smoke test the new EOD flow in prod.** Log in as Adrian, Javier, or Deysi on SLOC Weekend → confirm the amber "No login yet" badge shows on the 8 no-profile agents → click Submit EOD → fill form → submit → verify `eod_logs_audit` got a row.
+- [ ] **Audit the 28 active employees in prod who have no user_profile.** Some are real new hires (the use case we just built for). Others may be stale data or real employees who got missed during onboarding. SLOC Weekend has the biggest concentration (8). The new badge will surface them per-campaign for visual triage.
+- [ ] **Back-fill the `time_clock_audit` migration.** Table exists in prod but has no migration in the repo — must've been created via the dashboard in an earlier session. If anyone ever rebuilds from scratch, audit silently breaks. Dump the current schema and commit it as a tracked migration.
+- [ ] **Regen `types.ts` properly** when you've got `npx supabase login` set up. Then drop the `(supabase.rpc as any)` workaround in `src/pages/TLDashboard.tsx`.
 
 ## Next step when you come back
 
-Open `SECURITY_AUDIT_2026-05-18.md`, scroll to the Medium Findings section, and ask Claude to walk through them one at a time the same way we did the Highs (show finding → propose SQL/code → approve → run → verify).
+Wait for Vercel to deploy `760355b`, then smoke-test the no-login flow: log in as a TL on SLOC Weekend, look for the amber "No login yet" badges, click Submit EOD on one of those agents, fill out the KPIs + reason, submit. Then verify in Supabase that `eod_logs_audit` has a fresh row with your `edited_by` and the reason you typed.
 
 ## Watch out for
 
-- **Signups are disabled** — if you (or anyone) try to onboard a new person via the public signup form, it will fail. All onboarding must go through invite flow (`create-employee` edge function or System Users page).
-- **CORS is now locked to `https://app.justoutsource.it`.** If you ever spin up a Vercel preview URL, staging domain, or local dev hitting prod, the 6 "Group A" edge functions (get-hr-document-signed-url, notify-hr-request-filed, holiday-notifications, review-notifications, compliance-notifications, provision-org) will reject those origins. Update the secret if needed.
-- **The three RLS/RPC migrations are applied to live prod** (project `jpaihltkrohdqkqlbqkf`), not just in local migration files. If you run `supabase db diff` or pull migrations, expect them to show up as untracked. The migration names are listed under "Decisions made" above.
-- **`check_rehire` is now leadership-only.** If a team lead ever tries to add an employee and the UI calls this RPC, they'll get empty results (not an error). If that turns out to be wrong, relax it by adding a `team_lead` branch to the `is_leadership()` check inside the function.
-- **PDF helper fix only verified via code inspection.** No one has regenerated and visually confirmed an Acta or Renuncia packet PDF yet — strongly recommended before trusting those.
-- **Group B CORS still wide open** in code (`"*"` hardcoded). Auth checks inside those functions are solid per the audit, so not actively exploitable, but flagged.
-- **Honest "is this ready to go live" answer as of today:** safe enough to run in parallel with your existing spreadsheets (option B). Not yet ready to be the sole system of record (option A) — payroll math edge cases and DRY_RUN email flags still need shaking out.
+- **`(supabase.rpc as any)` cast** in `src/pages/TLDashboard.tsx` around the `employees_without_login` RPC call. Cosmetic — it's there because `types.ts` doesn't know about the new RPC yet. Fix is `npx supabase login && npx supabase gen types typescript --project-id jpaihltkrohdqkqlbqkf > src/integrations/supabase/types.ts`. **Never redirect to `types.ts` directly without `supabase login` first** — the shell creates the empty file before running the command, and a failed command leaves you with a 0-byte types.ts and a broken build (this happened today, took two commits to recover).
+- **Last commit's body has literal escape sequences** instead of em-dashes on GitHub. Cosmetic only. zsh doesn't expand `—` inside double-quoted strings. For future commit messages, type real em-dashes or use `--`.
+- **Edge function CORS** — `submit-eod-for-agent` reads `ALLOWED_ORIGIN` from env (defaults to `*`). The org-wide secret is already set to `app.justoutsource.it` so it inherits the locked origin. If you ever add a new domain, update the secret.
+- **The 8 SLOC Weekend no-login agents are real**, not test data — they'll show up the moment a TL on that campaign opens the dashboard.

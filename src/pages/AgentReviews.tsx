@@ -33,6 +33,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, Clock, ClipboardCheck } fro
 import { useToast } from "@/hooks/use-toast";
 import { formatDateMX } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
+import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -66,28 +67,100 @@ function dayOfProbation(weekNumber: number): string {
   return "Extension";
 }
 
+/**
+ * Visual progress indicator for a single agent's probation — shows a dot per
+ * week with three states: done (green check), current (amber, highlighted),
+ * upcoming (muted outline). Hover gives the per-week status.
+ */
+function ProgressDots({
+  weeks,
+  currentReviewId,
+}: {
+  weeks: AgentReviewWithJoins[];
+  currentReviewId: string;
+}) {
+  return (
+    <div className="flex gap-1">
+      {weeks.map((r) => {
+        const s = reviewStatus(r);
+        const isDone = s === "completed";
+        const isCurrent = r.id === currentReviewId;
+        const label = r.week_number <= 4 ? String(r.week_number) : `E${r.week_number - 4}`;
+        return (
+          <div
+            key={r.id}
+            className={cn(
+              "h-5 min-w-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center transition-colors",
+              isDone && "bg-emerald-500 text-white",
+              !isDone && isCurrent && s === "overdue" && "bg-destructive text-destructive-foreground",
+              !isDone && isCurrent && s === "due_today" && "bg-amber-500 text-white",
+              !isDone && isCurrent && s === "upcoming" && "bg-foreground/80 text-background",
+              !isDone && !isCurrent && "border border-muted-foreground/30 text-muted-foreground",
+            )}
+            title={`${weekLabel(r.week_number)} · ${
+              isDone ? "Done" : s === "overdue" ? "Overdue" : s === "due_today" ? "Due today" : "Upcoming"
+            }`}
+          >
+            {isDone ? <CheckCircle2 className="h-3 w-3" /> : label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AgentReviews() {
   const { isLeadership } = useAuth();
-  const { data: openReviews = [], isLoading } = useAgentReviews({ onlyOpen: true });
+  // Pull ALL reviews (completed + open) so we can show progress dots per agent.
+  const { data: allReviews = [], isLoading } = useAgentReviews();
   const { data: pendingTerm = [] } = usePendingTerminationReviews();
 
   const [reviewToFill, setReviewToFill] = useState<AgentReviewWithJoins | null>(null);
   const [reviewToConfirm, setReviewToConfirm] = useState<AgentReviewWithJoins | null>(null);
 
-  // Sort: overdue first, then due_today, then upcoming, all by due_date asc
-  const sortedOpen = useMemo(() => {
-    const order: Record<string, number> = { overdue: 0, due_today: 1, upcoming: 2, completed: 3 };
-    return [...openReviews].sort((a, b) => {
-      const sa = order[reviewStatus(a)] ?? 9;
-      const sb = order[reviewStatus(b)] ?? 9;
+  // Group all reviews by employee, then for each agent pick the most urgent
+  // *open* review (overdue → due_today → next upcoming). Agents with zero open
+  // reviews are filtered out — they're done with probation.
+  const groupedByAgent = useMemo(() => {
+    const STATUS_ORDER: Record<string, number> = {
+      overdue: 0, due_today: 1, upcoming: 2, completed: 3,
+    };
+
+    const byEmployee = new Map<string, AgentReviewWithJoins[]>();
+    for (const r of allReviews) {
+      if (!byEmployee.has(r.employee_id)) byEmployee.set(r.employee_id, []);
+      byEmployee.get(r.employee_id)!.push(r);
+    }
+
+    const rows = Array.from(byEmployee.entries())
+      .map(([employeeId, reviews]) => {
+        const allWeeks = [...reviews].sort((a, b) => a.week_number - b.week_number);
+        const open = reviews.filter((r) => !r.completed_at);
+        if (open.length === 0) return null;
+        const nextReview = [...open].sort((a, b) => {
+          const sa = STATUS_ORDER[reviewStatus(a)] ?? 9;
+          const sb = STATUS_ORDER[reviewStatus(b)] ?? 9;
+          if (sa !== sb) return sa - sb;
+          return a.due_date.localeCompare(b.due_date);
+        })[0];
+        return { employeeId, nextReview, allWeeks };
+      })
+      .filter((row): row is { employeeId: string; nextReview: AgentReviewWithJoins; allWeeks: AgentReviewWithJoins[] } => row !== null);
+
+    // Sort agents by urgency of their next review
+    rows.sort((a, b) => {
+      const sa = STATUS_ORDER[reviewStatus(a.nextReview)] ?? 9;
+      const sb = STATUS_ORDER[reviewStatus(b.nextReview)] ?? 9;
       if (sa !== sb) return sa - sb;
-      return a.due_date.localeCompare(b.due_date);
+      return a.nextReview.due_date.localeCompare(b.nextReview.due_date);
     });
-  }, [openReviews]);
+
+    return rows;
+  }, [allReviews]);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -101,7 +174,7 @@ export default function AgentReviews() {
       <Tabs defaultValue="open" className="w-full">
         <TabsList>
           <TabsTrigger value="open">
-            Open ({sortedOpen.length})
+            Open ({groupedByAgent.length})
           </TabsTrigger>
           {isLeadership && (
             <TabsTrigger value="pending-hr">
@@ -116,12 +189,12 @@ export default function AgentReviews() {
         <TabsContent value="open" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Reviews needing your attention</CardTitle>
+              <CardTitle className="text-base">Agents needing your attention</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <p className="text-sm text-muted-foreground">Loading…</p>
-              ) : sortedOpen.length === 0 ? (
+              ) : groupedByAgent.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No open reviews. Nice work — you're caught up.
                 </p>
@@ -131,34 +204,50 @@ export default function AgentReviews() {
                     <TableRow>
                       <TableHead>Agent</TableHead>
                       <TableHead>Campaign</TableHead>
-                      <TableHead>Week</TableHead>
+                      <TableHead>Next review</TableHead>
                       <TableHead>Due</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedOpen.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">
-                          {r.employee ? getDisplayName(r.employee) : "(unknown)"}
-                        </TableCell>
-                        <TableCell>{r.campaign?.name ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-sm">{weekLabel(r.week_number)}</span>
-                            <span className="text-xs text-muted-foreground">{dayOfProbation(r.week_number)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatDateMX(r.due_date)}</TableCell>
-                        <TableCell>{statusBadge(r)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" onClick={() => setReviewToFill(r)}>
-                            Fill out
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {groupedByAgent.map(({ employeeId, nextReview, allWeeks }) => {
+                      const status = reviewStatus(nextReview);
+                      const isActionable = status === "due_today" || status === "overdue";
+                      return (
+                        <TableRow key={employeeId}>
+                          <TableCell className="font-medium">
+                            {nextReview.employee ? getDisplayName(nextReview.employee) : "(unknown)"}
+                          </TableCell>
+                          <TableCell>{nextReview.campaign?.name ?? "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-sm">
+                                {weekLabel(nextReview.week_number)}
+                                <span className="text-muted-foreground"> · {dayOfProbation(nextReview.week_number)}</span>
+                              </span>
+                              <ProgressDots weeks={allWeeks} currentReviewId={nextReview.id} />
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatDateMX(nextReview.due_date)}</TableCell>
+                          <TableCell>{statusBadge(nextReview)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              onClick={() => setReviewToFill(nextReview)}
+                              disabled={!isActionable}
+                              title={
+                                isActionable
+                                  ? undefined
+                                  : `Available on ${formatDateMX(nextReview.due_date)}`
+                              }
+                            >
+                              Fill out
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
