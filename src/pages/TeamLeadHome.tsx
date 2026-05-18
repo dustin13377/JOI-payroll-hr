@@ -104,6 +104,7 @@ function EODNoteCard({
   const noteQuery = useTodaysTLNote(campaign.id);
   const progress = useEODProgress(campaign.id);
   const saveMutation = useSaveTLNote();
+  const { isLeadership } = useAuth();
 
   const [draft, setDraft] = useState("");
   const [savedText, setSavedText] = useState("");
@@ -155,9 +156,23 @@ function EODNoteCard({
             Cutoff: {cutoffLabel}
           </Badge>
         ) : (
-          <Badge variant="outline" className="shrink-0 text-xs text-muted-foreground">
-            No cutoff set — configure in Campaign Settings
-          </Badge>
+          // Quick way for leadership to jump straight to the setting.
+          // Team leads can't access /campaigns/:id (it's RequireLeadership),
+          // so they see a static badge telling them to ping a manager.
+          isLeadership ? (
+            <Link to={`/campaigns/${campaign.id}`} className="shrink-0">
+              <Badge
+                variant="outline"
+                className="text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer"
+              >
+                No cutoff set — configure
+              </Badge>
+            </Link>
+          ) : (
+            <Badge variant="outline" className="shrink-0 text-xs text-muted-foreground">
+              No cutoff set — ask your manager
+            </Badge>
+          )
         )}
       </CardHeader>
       <CardContent className="space-y-3">

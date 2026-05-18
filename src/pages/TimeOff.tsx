@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CalendarDays, Check, X } from "lucide-react";
-import { formatDateMX } from "@/lib/localDate";
+import { formatDateMX, todayLocal } from "@/lib/localDate";
+import { toast } from "sonner";
 
 interface TimeOffRequest {
   id: string;
@@ -121,12 +122,26 @@ export default function TimeOff() {
     enabled: role === "team_lead" || role === "manager" || role === "admin" || role === "owner",
   });
 
+  // Client-side validation surfaced via toast. Mirrors the server-side
+  // expectations: both dates required, start cannot be in the past, end must
+  // be on or after start. Without this the date inputs accept anything the
+  // user types (including pasted text), so we can't rely on the browser
+  // native date picker alone.
+  const validateDates = (): string | null => {
+    if (!formData.startDate) return "Start date is required";
+    if (!formData.endDate) return "End date is required";
+    const today = todayLocal();
+    if (formData.startDate < today) return "Start date cannot be in the past";
+    if (formData.endDate < formData.startDate) return "End date must be on or after the start date";
+    return null;
+  };
+
   // Submit time off request
   const submitRequestMutation = useMutation({
     mutationFn: async () => {
-      if (!employeeId || !formData.startDate || !formData.endDate) {
-        throw new Error("Required fields missing");
-      }
+      if (!employeeId) throw new Error("Not signed in");
+      const validationError = validateDates();
+      if (validationError) throw new Error(validationError);
 
       const { data, error } = await supabase
         .from("time_off_requests")
@@ -148,6 +163,10 @@ export default function TimeOff() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["timeOffRequests", employeeId] });
       setFormData({ startDate: "", endDate: "", reason: "vacation", notes: "" });
+      toast.success("Time off request submitted");
+    },
+    onError: (err) => {
+      toast.error((err as Error).message);
     },
   });
 
@@ -224,10 +243,12 @@ export default function TimeOff() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
+                  <Label htmlFor="startDate">Start Date <span className="text-red-600">*</span></Label>
                   <Input
                     id="startDate"
                     type="date"
+                    required
+                    min={todayLocal()}
                     value={formData.startDate}
                     onChange={(e) =>
                       setFormData({ ...formData, startDate: e.target.value })
@@ -235,10 +256,12 @@ export default function TimeOff() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
+                  <Label htmlFor="endDate">End Date <span className="text-red-600">*</span></Label>
                   <Input
                     id="endDate"
                     type="date"
+                    required
+                    min={formData.startDate || todayLocal()}
                     value={formData.endDate}
                     onChange={(e) =>
                       setFormData({ ...formData, endDate: e.target.value })
@@ -275,9 +298,17 @@ export default function TimeOff() {
                 />
               </div>
 
+              {/* Inline error so the user sees the problem before clicking Submit. */}
+              {(() => {
+                const err = validateDates();
+                return err && (formData.startDate || formData.endDate) ? (
+                  <p className="text-sm text-red-600">{err}</p>
+                ) : null;
+              })()}
+
               <Button
                 onClick={() => submitRequestMutation.mutate()}
-                disabled={submitRequestMutation.isPending || !formData.startDate || !formData.endDate}
+                disabled={submitRequestMutation.isPending || !!validateDates()}
                 className="w-full"
               >
                 Submit Request
