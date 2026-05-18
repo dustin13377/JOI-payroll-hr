@@ -610,7 +610,7 @@ export default function Empleados() {
                 <TableHead>Campaign</TableHead>
                 <TableHead className="text-right">Base Salary</TableHead>
                 <TableHead className="text-right">Biweekly Net</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

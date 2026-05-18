@@ -93,6 +93,11 @@ export function drawMetadataTable(
   doc.setFontSize(fontSize);
   const lineH = (fontSize / 72) * 1.3;
 
+  // Hairline stroke — jsPDF's default in inch mode is ~0.2" which is
+  // wider than the cells are tall and fills them entirely black.
+  doc.setLineWidth(0.005);
+  doc.setDrawColor(0, 0, 0);
+
   for (const row of rows) {
     // Compute needed height
     doc.setFont("Helvetica", "normal");
@@ -108,10 +113,11 @@ export function drawMetadataTable(
     doc.setFillColor(230, 230, 230);
     doc.rect(x, y, labelWidth, cellH, "FD");
     doc.setFont("Helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
     doc.text(row.label, x + rowPadding, y + rowPadding + lineH * 0.8);
 
-    // Value cell
-    doc.rect(x + labelWidth, y, totalWidth - labelWidth, cellH);
+    // Value cell (stroke only — no fill)
+    doc.rect(x + labelWidth, y, totalWidth - labelWidth, cellH, "S");
     doc.setFont("Helvetica", "normal");
     let valY = y + rowPadding + lineH * 0.8;
     for (const line of valueLines) {

@@ -138,7 +138,13 @@ export function useMyGoal(employeeId: string | null | undefined) {
   });
 }
 
-// Update the current agent's personal goal. Only writes goal-related columns.
+// Update the current agent's personal goal. Calls the update_my_goal RPC
+// because RLS on public.employees has no UPDATE policy for agents on their
+// own row (a direct .update() returns success with 0 rows affected and the
+// prompt re-opens forever — see migration update_my_goal_rpc).
+// The employee_id input is kept for callsite ergonomics but the RPC ignores
+// it and uses my_employee_id() server-side, so an agent can only ever write
+// their own row.
 export function useUpdateMyGoal() {
   const qc = useQueryClient();
   return useMutation({
@@ -148,25 +154,20 @@ export function useUpdateMyGoal() {
       goal_visible_to_tl?: boolean;
       dismiss_prompt?: boolean; // true when the user clicks "skip" on the first-login dialog
     }) => {
-      const update: Record<string, unknown> = {};
-      if (input.personal_goal !== undefined) {
-        update.personal_goal = input.personal_goal?.trim() || null;
-        if (input.personal_goal && input.personal_goal.trim().length > 0) {
-          update.goal_set_at = new Date().toISOString();
-          update.goal_prompt_dismissed = true;
-        }
-      }
-      if (input.goal_visible_to_tl !== undefined) {
-        update.goal_visible_to_tl = input.goal_visible_to_tl;
-      }
-      if (input.dismiss_prompt) {
-        update.goal_prompt_dismissed = true;
-      }
-      const { error } = await supabase
-        .from("employees")
-        .update(update)
-        .eq("id", input.employee_id);
-      if (error) throw error;
+      const clearGoal = input.personal_goal === null;
+      // Cast: types.ts hasn't been regenerated to include this RPC yet.
+      // Run `npx supabase gen types typescript` to remove the cast.
+      const { error } = await (supabase.rpc as unknown as (
+        name: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ error: unknown }>)("update_my_goal", {
+        p_personal_goal: input.personal_goal ?? null,
+        p_goal_visible_to_tl:
+          input.goal_visible_to_tl === undefined ? null : input.goal_visible_to_tl,
+        p_dismiss: input.dismiss_prompt ?? false,
+        p_clear_goal: clearGoal,
+      });
+      if (error) throw error as Error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-goal"] });

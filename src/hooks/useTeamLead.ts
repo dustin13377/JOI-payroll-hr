@@ -608,13 +608,34 @@ export function useTLCampaigns(employeeId: string | null) {
     queryKey: ["tl-campaigns", employeeId],
     queryFn: async (): Promise<TLCampaign[]> => {
       if (!employeeId) return [];
-      const { data, error } = await supabase
-        .from("campaigns")
-        .select("id, name, eod_digest_cutoff_time, eod_digest_timezone")
-        .eq("team_lead_id", employeeId)
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as TLCampaign[];
+
+      // Two sources of TL→campaign linkage:
+      //   1. campaigns.team_lead_id  — single "primary" TL per campaign (legacy)
+      //   2. team_lead_campaigns     — many-to-many join table (added 2026-05-18)
+      // We union both, dedupe by campaign id, and sort by name.
+      const [primaryRes, joinRes] = await Promise.all([
+        supabase
+          .from("campaigns")
+          .select("id, name, eod_digest_cutoff_time, eod_digest_timezone")
+          .eq("team_lead_id", employeeId),
+        supabase
+          .from("team_lead_campaigns")
+          .select("campaign:campaigns(id, name, eod_digest_cutoff_time, eod_digest_timezone)")
+          .eq("team_lead_id", employeeId),
+      ]);
+      if (primaryRes.error) throw primaryRes.error;
+      if (joinRes.error) throw joinRes.error;
+
+      const primary = (primaryRes.data ?? []) as TLCampaign[];
+      const fromJoin = ((joinRes.data ?? []) as { campaign: TLCampaign | null }[])
+        .map((r) => r.campaign)
+        .filter((c): c is TLCampaign => c !== null);
+
+      const byId = new Map<string, TLCampaign>();
+      for (const c of [...primary, ...fromJoin]) {
+        if (!byId.has(c.id)) byId.set(c.id, c);
+      }
+      return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: !!employeeId,
   });
