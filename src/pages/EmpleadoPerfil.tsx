@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEmployees, useUpdateEmployee, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates, recordToConfig } from "@/hooks/useSupabasePayroll";
+import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -242,6 +243,7 @@ export default function EmpleadoPerfil() {
     department_id: "",
   });
   const [taxErrors, setTaxErrors] = useState<Record<string, string>>({});
+  const [changeRoleOpen, setChangeRoleOpen] = useState(false);
   // B-02: dirty flag prevents TanStack refetches from clobbering in-flight edits
   const taxFormDirty = useRef(false);
   const setTaxFormDirty: typeof setTaxForm = (update) => {
@@ -524,6 +526,25 @@ export default function EmpleadoPerfil() {
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, last_worked_day: e.target.value }))}
                 />
               </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label>Role</Label>
+                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                  <span className="text-sm capitalize">
+                    {String(emp.title || "agent").replace("_", " ")}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChangeRoleOpen(true)}
+                  >
+                    Change role
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Promotes/demotes the employee. App access updates after their next sign-in.
+                </p>
+              </div>
             </div>
 
             <Separator />
@@ -690,6 +711,16 @@ export default function EmpleadoPerfil() {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {emp._uuid && (
+        <ChangeRoleDialog
+          open={changeRoleOpen}
+          onOpenChange={setChangeRoleOpen}
+          employeeId={emp._uuid}
+          employeeName={emp.nombre}
+          currentTitle={(emp.title || "agent") as "agent" | "team_lead" | "manager" | "admin" | "owner"}
+        />
       )}
     </div>
   );

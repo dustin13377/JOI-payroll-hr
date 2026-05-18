@@ -113,6 +113,35 @@ export function useAddEmployeesBulk() {
   });
 }
 
+// Change an employee's role (title) and keep user_profiles.role in sync.
+// Wraps the change_employee_role RPC which handles the title + nudge dance
+// (see feedback_role_change_via_title memory).
+export function useChangeEmployeeRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      employee_id: string;
+      new_title: "agent" | "team_lead" | "manager" | "admin" | "owner";
+    }) => {
+      const { data, error } = await supabase.rpc("change_employee_role", {
+        p_employee_id: input.employee_id,
+        p_new_title: input.new_title,
+      });
+      if (error) throw error;
+      return data as {
+        employee_id: string;
+        old_title: string;
+        new_title: string;
+        auth_user_synced: boolean;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["employee_profile"] });
+    },
+  });
+}
+
 // Edit / create a time_clock row via the edit-time-clock edge function.
 // Used by HR / TL / manager to fix missing or wrong punches with an audit trail.
 export function useEditTimeClock() {
