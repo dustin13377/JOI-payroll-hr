@@ -176,10 +176,16 @@ export function ClockOutEODDialog({
     }
   };
 
+  // Defense in depth: if a campaign has KPI fields configured but none are
+  // flagged is_required, treat every non-boolean field as required. Without
+  // this, a future config mistake (or someone clearing the flags) would
+  // silently make EOD optional and agents could clock out with a blank form.
+  const anyRequired = kpiFields.some((f) => f.is_required);
   const validate = (): boolean => {
     const next: Record<string, string> = {};
     kpiFields.forEach((f) => {
-      if (!f.is_required) return;
+      const fieldIsRequired = anyRequired ? f.is_required : f.field_type !== "boolean";
+      if (!fieldIsRequired) return;
       const v = values[f.field_name];
       if (f.field_type === "boolean") return; // switch always has a value
       if (f.field_type === "number") {
@@ -259,7 +265,9 @@ export function ClockOutEODDialog({
               <div key={field.id} className="space-y-1.5">
                 <Label htmlFor={field.field_name} className="font-medium">
                   {field.field_label}
-                  {field.is_required && <span className="text-red-600 ml-1">*</span>}
+                  {(anyRequired ? field.is_required : field.field_type !== "boolean") && (
+                    <span className="text-red-600 ml-1">*</span>
+                  )}
                   {field.min_target !== null && (
                     <span className="text-muted-foreground ml-2 text-xs">
                       (Target: {field.min_target})
