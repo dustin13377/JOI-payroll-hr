@@ -113,6 +113,34 @@ export function useAddEmployeesBulk() {
   });
 }
 
+// Resend the "Welcome to JOI" invite email to one or more existing employees.
+// Internally handles stale auth users + user_profiles linkage so role guards work.
+//
+// Accepts an array of employee row UUIDs (employees.id, not employee_id text).
+// Returns per-employee status: sent | skipped | error.
+export function useResendInvite() {
+  return useMutation({
+    mutationFn: async (employeeIds: string[]) => {
+      if (!employeeIds.length) throw new Error("No employees selected");
+      const { data, error } = await supabase.functions.invoke("resend-invite", {
+        body: { employee_ids: employeeIds },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        results: Array<{
+          employee_id: string;
+          email: string | null;
+          full_name: string | null;
+          status: "sent" | "skipped" | "error";
+          message?: string;
+          auth_user_id?: string;
+        }>;
+      };
+    },
+  });
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({

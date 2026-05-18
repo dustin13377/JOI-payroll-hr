@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { useEmployees, useAddEmployee, useAddEmployeesBulk, useActivePeriod, usePayrollRecords, recordToConfig, useInactiveEmployees, useReactivateEmployee, useCheckRehire, type InactiveEmployeeRow } from "@/hooks/useSupabasePayroll";
+import { useEmployees, useAddEmployee, useAddEmployeesBulk, useActivePeriod, usePayrollRecords, recordToConfig, useInactiveEmployees, useReactivateEmployee, useCheckRehire, useResendInvite, type InactiveEmployeeRow } from "@/hooks/useSupabasePayroll";
 import { calcularNomina, type Employee, type EmpTitle } from "@/types/payroll";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Upload, Plus, UserX, Download, ArrowUpDown, ChevronLeft, ChevronRight, AlertTriangle, RotateCcw } from "lucide-react";
+import { Search, Upload, Plus, UserX, Download, ArrowUpDown, ChevronLeft, ChevronRight, AlertTriangle, RotateCcw, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
@@ -34,6 +34,7 @@ export default function Empleados() {
   const addEmployeesBulk = useAddEmployeesBulk();
   const reactivate = useReactivateEmployee();
   const checkRehire = useCheckRehire();
+  const resendInvite = useResendInvite();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState<View>("active");
@@ -632,17 +633,44 @@ export default function Empleados() {
                       <TableCell className="text-right">{fmt(emp.sueldoBase)}</TableCell>
                       <TableCell className="text-right font-semibold">{fmt(result.netoAPagar)}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Offboard employee"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTerminateTarget({ id: emp.id, nombre: emp.nombre });
-                          }}
-                        >
-                          <UserX className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Send welcome / invite email"
+                            disabled={resendInvite.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const uuid = (emp as any)._uuid as string | undefined;
+                              if (!uuid) {
+                                toast.error("Missing employee UUID");
+                                return;
+                              }
+                              resendInvite.mutate([uuid], {
+                                onSuccess: (data) => {
+                                  const r = data.results[0];
+                                  if (r.status === "sent") toast.success(`Invite sent to ${r.email}`);
+                                  else if (r.status === "skipped") toast.info(`Skipped: ${r.message}`);
+                                  else toast.error(`Failed: ${r.message}`);
+                                },
+                                onError: (err) => toast.error((err as Error).message),
+                              });
+                            }}
+                          >
+                            <Mail className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Offboard employee"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTerminateTarget({ id: emp.id, nombre: emp.nombre });
+                            }}
+                          >
+                            <UserX className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
