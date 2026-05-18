@@ -316,16 +316,20 @@ export default function Attendance() {
           <CardTitle>Live Attendance</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Campaign Filter Tabs */}
+          {/* Campaign Filter Tabs — scroll horizontally when there are more
+              campaigns than fit on screen. Without overflow-x-auto the
+              trailing tabs get clipped off the right edge. */}
           <Tabs value={selectedCampaign} onValueChange={setSelectedCampaign} className="mb-4">
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              {campaigns.map((campaign) => (
-                <TabsTrigger key={campaign.id} value={campaign.id}>
-                  {campaign.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="w-full overflow-x-auto pb-1">
+              <TabsList className="inline-flex w-max">
+                <TabsTrigger value="all">All</TabsTrigger>
+                {campaigns.map((campaign) => (
+                  <TabsTrigger key={campaign.id} value={campaign.id}>
+                    {campaign.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </Tabs>
 
           {/* Table */}
