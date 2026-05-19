@@ -1,47 +1,48 @@
 # Session Handoff
 
-**Saved:** 2026-05-18T17:40:00-06:00
-**Machine:** Diomedes's Mac mini (admin@Diomedess-Mac-mini)
+**Saved:** 2026-05-19T16:09:24+00:00
+**Machine:** claude (Mac mini desktop, via Cowork)
 **Branch:** main
-**Last commit:** 760355b feat(employees): work email optional at hire time, assign from profile later
+**Last commit:** f0cedd0 feat(hr): add sidebar badge for pending time-off requests
 
 ## What we were doing
 
-Built the full new-hire onboarding flow for agents who don't have a Supabase Auth account yet. Two halves shipped in three commits today: (1) TLs can submit EOD on behalf of no-login agents via a new edge function with audit trail; (2) the Add Employee form no longer requires a work email, and the work email can be assigned later from the Employee Profile. Together this lets you onboard a new hire on Day 1, have their TL cover punches + EOD during the 30-day probation, and only issue the work email + invite after the review passes.
+Closed out two leftover items from yesterday's security audit and got the 30-day review notification system live. Most of today's work was Supabase-side (secrets, DB migrations, edge function redeploys), not code-side — so the git diff is small but the runtime state is meaningfully different.
 
 ## Files in flight
 
-Nothing in flight from this session — everything was committed and pushed.
-
-Two reference-only files are sitting untracked at `docs/email-templates/`:
-- `supabase-invite-user.html` — pasted into Supabase Dashboard → Authentication → Email Templates → Invite User. Already done.
-- `supabase-reset-password.html` — pasted into Reset Password template. Already done.
-
-These are local docs. Commit them whenever you want a record in git; nothing else depends on them being tracked.
+- `docs/email-templates/supabase-invite-user.html` — being committed with this handoff
+- `docs/email-templates/supabase-reset-password.html` — being committed with this handoff
+- (CORS fix on 7 edge functions already shipped earlier today in commit `56f7a2b`)
 
 ## Decisions made this session
 
-- **EOD-on-behalf went the "edge function + audit" route, not RLS-only.** Mirrors the existing `edit-time-clock` pattern. Required `reason` field, full audit trail in `eod_logs_audit`. Reasoning: when payroll disputes happen, "TL filed this EOD on agent's behalf because X" needs to be defensible, not inferred.
-- **TLs can only submit-for agents who have NO login yet** (no row in `user_profiles`). Once an agent gets their work email and account, only they (or HR/manager+) can file their own EOD. Forces a clean handoff.
-- **No expiration logic.** Works for as long as the agent has no login — not capped at 7 or 30 days. Auth check is "TL on same campaign," nothing time-based.
-- **TL dashboard shows a "No login yet" amber badge** + "Submit EOD" button per no-login agent. Driven by a new SECURITY DEFINER RPC `employees_without_login(p_campaign_id)` because the existing `user_profiles` RLS hides other users' rows from TLs (only leadership/self can read profiles).
-- **Work email is optional at hire and read-only once set.** Once an agent has logged in with a work email, changing it requires syncing `auth.users.email`, which is non-trivial. So the field is editable only on initial assignment.
-- **`types.ts` regen wiped the file** because `npx supabase gen types ...` errored on missing access token after the shell redirection had already truncated the file. Restored via `git checkout` from prior commit. Going forward: run `npx supabase login` once, and consider piping regen through a temp file (`> types.tmp && mv types.tmp ...`) so a failed command can't destroy the original.
+- **CORS fallback hardening (7 edge functions)** — changed `?? "*"` to `?? "https://app.justoutsource.it"` so functions fail closed if the `ALLOWED_ORIGIN` secret is ever missing. Files: `submit-eod-for-agent`, `notify-hr-request-filed`, `get-hr-document-signed-url`, `provision-org`, `review-notifications`, `compliance-notifications`, `holiday-notifications`. Committed (`56f7a2b`) and redeployed via Supabase MCP. All 7 ACTIVE with `verify_jwt: true` preserved. Closes audit Finding #5.
+- **DRY_RUN_HOLIDAY flipped to `"false"`** — PTO/holiday notification emails now actually send instead of just logging. All 4 DRY_RUN flags (EOD, COMPLIANCE, HOLIDAY, REVIEW) are now off.
+- **30-Day Review System went LIVE** — `DRY_RUN_REVIEW` flipped to `"false"`. First real fire will be 2026-05-25 at 9 AM CDMX for Angeles Elisa Vázquez Ramírez (hired 2026-05-18, SLOC Weekday, week-1 review). A scheduled task is set for 9:30 AM that day to auto-verify the logs + dedupe table.
+- **Leadership emails set on `employees` table** — Diomedes Sandoval (owner, EMP JOI-001) → `diomedes@justoutsource.it`. Paty Rodriguez (admin, EMP-042) → `humanresources@justoutsource.it` (note plural "resources" — shared HR inbox). Both were NULL before. The escalation RPC requires `email IS NOT NULL`, so before today neither would have received escalations.
+- **TL review routing expanded** — migrated `find_pending_tl_review_emails` to UNION campaign primary `team_lead_id` + `team_lead_campaigns` join table, plus added `tl.employment_status = 'active'` filter to skip ex-TLs. Migration name: `expand_tl_review_routing_to_all_assigned_tls`. Result: all 3 Torro TLs (Adrian, Javier, Deysi) get the digest when SLOC Weekday agents are due, not just the primary TL.
+- **Paty's role confirmed as HR-equivalent** — `title = admin` already passes `is_leadership()`. No new "HR" tier needed. She is missing a login though (no `user_profiles` row, no `auth.users` row) — see open todos.
+- **Audit hygiene leftovers (3 Mediums + 2 Lows) deferred** — not active exploits, not worth blocking product work. See `SECURITY_AUDIT_2026-05-18.md`.
+- **Former Employees reconciliation deferred to manual** — D will scrub the active 58 list directly in the app rather than via SQL.
 
 ## Open todos
 
-- [ ] **Smoke test the new EOD flow in prod.** Log in as Adrian, Javier, or Deysi on SLOC Weekend → confirm the amber "No login yet" badge shows on the 8 no-profile agents → click Submit EOD → fill form → submit → verify `eod_logs_audit` got a row.
-- [ ] **Audit the 28 active employees in prod who have no user_profile.** Some are real new hires (the use case we just built for). Others may be stale data or real employees who got missed during onboarding. SLOC Weekend has the biggest concentration (8). The new badge will surface them per-campaign for visual triage.
-- [ ] **Back-fill the `time_clock_audit` migration.** Table exists in prod but has no migration in the repo — must've been created via the dashboard in an earlier session. If anyone ever rebuilds from scratch, audit silently breaks. Dump the current schema and commit it as a tracked migration.
-- [ ] **Regen `types.ts` properly** when you've got `npx supabase login` set up. Then drop the `(supabase.rpc as any)` workaround in `src/pages/TLDashboard.tsx`.
+- [ ] **Monitor first live 30-day review fire on 2026-05-25** — scheduled task at 9:30 AM CDMX will auto-check logs + dedupe table and report back. No manual action needed unless it reports a failure.
+- [ ] **Decide whether to invite Paty to log in.** She has admin role + email but no auth account. To invite, use the Add Employee flow's "resend invite" path or trigger `resend-invite` edge fn with her employee_id (`52822b91-b270-4793-9287-b7d41173d0e3`).
+- [ ] **Data quality: 13 employees have `hire_date = NULL`.** The 30-day review trigger relies on `hire_date` to seed review rows — if any of these are actual new hires, their reviews won't get seeded. Worth a cleanup pass.
+- [ ] **Data quality: 6 agents have `campaign_id = NULL`** — invisible to campaign-scoped views (EOD, payroll). EMP IDs: 104, 106, 108, 110, 052, 118. Names: Daniel Oswaldo Romero Perez, Federico Jasiel Salas Macias, Fernando Gutierrez Espinosa, José Andrés Hernández Arroyo, Oscar Andres Pedrazzini Herrera, Samantha Montero Gutierrez.
+- [ ] **Former Employees manual reconciliation** (D taking offline)
+- [ ] Eventually: audit Mediums #6 (provision-org rollback), #7 (policy_document_versions defense-in-depth), #8 (npm audit dev deps). Low priority.
 
 ## Next step when you come back
 
-Wait for Vercel to deploy `760355b`, then smoke-test the no-login flow: log in as a TL on SLOC Weekend, look for the amber "No login yet" badges, click Submit EOD on one of those agents, fill out the KPIs + reason, submit. Then verify in Supabase that `eod_logs_audit` has a fresh row with your `edited_by` and the reason you typed.
+Pick a fresh thread — Torro pilot readiness is the obvious next one. The scheduled task on 2026-05-25 handles review-system verification automatically; you don't need to remember it.
 
 ## Watch out for
 
-- **`(supabase.rpc as any)` cast** in `src/pages/TLDashboard.tsx` around the `employees_without_login` RPC call. Cosmetic — it's there because `types.ts` doesn't know about the new RPC yet. Fix is `npx supabase login && npx supabase gen types typescript --project-id jpaihltkrohdqkqlbqkf > src/integrations/supabase/types.ts`. **Never redirect to `types.ts` directly without `supabase login` first** — the shell creates the empty file before running the command, and a failed command leaves you with a 0-byte types.ts and a broken build (this happened today, took two commits to recover).
-- **Last commit's body has literal escape sequences** instead of em-dashes on GitHub. Cosmetic only. zsh doesn't expand `—` inside double-quoted strings. For future commit messages, type real em-dashes or use `--`.
-- **Edge function CORS** — `submit-eod-for-agent` reads `ALLOWED_ORIGIN` from env (defaults to `*`). The org-wide secret is already set to `app.justoutsource.it` so it inherits the locked origin. If you ever add a new domain, update the secret.
-- **The 8 SLOC Weekend no-login agents are real**, not test data — they'll show up the moment a TL on that campaign opens the dashboard.
+- **All 4 DRY_RUN flags are now `"false"`** — `DRY_RUN_EOD`, `DRY_RUN_COMPLIANCE`, `DRY_RUN_HOLIDAY`, `DRY_RUN_REVIEW`. Real emails fire from cron. To silence one, set it back to anything other than the literal string `"false"`.
+- **You'll receive 2 escalation emails per missed review** — once to `diomedes@justoutsource.it` (owner record) and once to `sandoval.028@gmail.com` (HR Test admin record). Acceptable for now; clean up later by stripping the email from the HR Test record if it gets noisy.
+- **Edge function CORS is strict now** — if you add a staging or preview domain that needs to hit edge functions from a browser, widen the `ALLOWED_ORIGIN` secret in Supabase. The code fallback only allows `https://app.justoutsource.it`.
+- **DB changes from this session are NOT in `supabase/migrations/`** — the email UPDATEs and the `expand_tl_review_routing_to_all_assigned_tls` RPC migration are live on Supabase but there's no migration file in the repo. If you ever replay migrations from a fresh DB you'll lose them. Worth dumping current schema and committing tracked migrations at some point.
+- **Edge function code in git matches what's deployed** — no drift between source and Supabase.
