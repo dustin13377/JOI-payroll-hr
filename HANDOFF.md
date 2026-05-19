@@ -1,6 +1,6 @@
 # JOI Payroll & HR App — Handoff
 
-Last updated: 2026-04-27 (DRY_RUN flipped — emails live)
+Last updated: 2026-05-19 (Payroll Phase 1 schema — migrations written, pending db push)
 
 Quick reference for picking the project back up on a new machine.
 
@@ -194,6 +194,14 @@ Run these in order via the Supabase SQL editor if setting up a fresh database. A
 
 62. `20260427700001_mt_phase3b_campaign_fk_and_org_roots.sql` — **Multi-tenancy Phase 3b** (PR #83, 2026-04-27). Two-part migration. Part 1 (RLS-only, 7 tables): `eod_digest_log`, `shift_settings`, `campaign_kpi_config`, `campaign_eod_recipients`, `campaign_eod_tl_notes`, `invoices`, `invoice_lines` — all scoped via `campaign_id IN (SELECT id FROM public.campaigns WHERE organization_id = public.my_org_id())`. Part 2 (schema + RLS, 4 tables): `payroll_periods`, `departments`, `policy_documents`, `company_holidays` — each gets `organization_id uuid NOT NULL REFERENCES organizations(id)`, backfilled to JOI, and two org-scoped RLS policies. `policy_documents` preserves the full complex multi-EXISTS USING clause. `company_holidays` preserves `auth.role() = 'authenticated'` check. Schema cache reloaded via NOTIFY pgrst.
 
+65. `20260519000001_payroll_phase1_employees.sql` — **Payroll Phase 1** (2026-05-19). Adds 5 payroll rate columns to `employees`: `weekly_base_salary`, `daily_salary`, `overtime_day_pay`, `sunday_bonus_amount`, `vacation_premium_pct` (with `CHECK >= 0.25` per LFT Art. 80). Backfills `weekly_base_salary = monthly / 4` and `daily_salary = daily_discount_rate` for all seeded employees. Adds index `(department_id, shift_type, campaign_id)` for Phase 4 bulk rate editor.
+
+66. `20260519000002_payroll_phase1_new_tables.sql` — **Payroll Phase 1** (2026-05-19). Three schema changes: (a) ALTERs existing `mexican_holidays` to add `name_es`, `name_en`, `type CHECK('LFT_OFICIAL','EMPRESA','OPCIONAL')`, `pays_premium boolean`; (b) creates `payroll_archive` (read-only import of Joe's historical Sheets data, leadership SELECT, no write policies, `CHECK(status='PAID')`); (c) creates `payroll_audit_log` (append-only, immutability trigger, org-scoped RLS). All three have RLS enabled.
+
+67. `20260519000003_payroll_phase1_rework.sql` — **Payroll Phase 1 — DESTRUCTIVE, D approved 2026-05-19.** DROPs old `payroll_records` (0 rows) and `payroll_periods` (3 scaffold rows) and recreates both with the bi-monthly PP1/PP2 format matching Joe's `payPeriodCode_()` output. Also creates `payroll_weeks` (FK → payroll_periods, bridge between periods and employee ledger rows). All three have RLS + org scope. Two triggers on `payroll_records`: updated_at auto-stamp and PAID-lock (blocks UPDATE on PAID rows).
+
+68. `20260519000004_payroll_phase1_seed_holidays.sql` — **Payroll Phase 1** (2026-05-19). Seeds (upserts) 7 LFT Art. 74 holidays for 2026 and 7 for 2027 into `mexican_holidays`. Moving-Monday dates computed per 2006 LFT reform. All `pays_premium = true`. Uses `ON CONFLICT (date) DO UPDATE` to fill new columns on existing 2026 rows.
+
 One-off fix files (run once, not migrations):
 - `supabase/fix_stale_timeclock_row.sql` — preview + delete stray same-minute clock-in/out rows caused by the pre-fix UTC date bug. Run when cleaning up before testing the timeclock on Apr 14, 2026.
 - `supabase/fix_owner_and_test_account.sql` — corrects D's test account back to agent and tags the real owner. Run this AFTER creating the diomedes.sandoval@justoutsource.it auth user.
@@ -241,6 +249,8 @@ Files in `supabase/dev-seed/` that contain D's real employee and salary data. Th
 - **Multi-tenancy Phases 1–5** — **COMPLETE** (PRs #80–#85, 2026-04-27). Full shared-DB org isolation. 8 tables carry `organization_id NOT NULL` directly; 22 leaf tables org-scoped via RLS subquery. All 6 SECURITY DEFINER helpers are org-aware. `provision-org` edge function + `/admin/provision-org` owner-only UI let you spin up a new customer org with a single form — creates the org, an employee record, and sends an Auth invite. Per-org employee ID prefix (`organizations.employee_id_prefix`) means each customer gets their own ID format (e.g. `ACME-0001`). An agent from Org A cannot read, write, or infer any data from Org B.
 - **CI workflow** — `.github/workflows/supabase-deploy.yml` auto-deploys edge functions on push to main. Migration auto-apply is intentionally skipped (blocked on migration history cleanup); migrations currently applied manually via MCP.
 - **Edge function config hardening** — **COMPLETE** (PR #79, 2026-04-27). Removed all hardcoded JOI-specific values from edge functions. `APP_DOMAIN`, `APP_URL`, and `REPLY_TO_EMAIL` are now read from project-level Supabase secrets. `APP_URL` throws on startup if unset (fail-loud). `.env.example` updated with all required vars. Secrets set in Supabase dashboard: `APP_DOMAIN=joi-payroll-hr.vercel.app`, `APP_URL=https://joi-payroll-hr.vercel.app`, `REPLY_TO_EMAIL=humanresources@justoutsource.it`.
+
+- **Payroll Phase 1 — schema + seed** — **COMPLETE** (2026-05-19, migrations 65–68). Per-employee rate columns on `employees` (weekly_base_salary, daily_salary, overtime_day_pay, sunday_bonus_amount, vacation_premium_pct). New tables: `payroll_periods` (bi-monthly PP1/PP2), `payroll_weeks`, `payroll_records` (per-employee per-week ledger with PAID-lock trigger), `payroll_archive` (historical Joe Sheets data), `payroll_audit_log` (append-only). Mexican holidays table extended + seeded for 2026 and 2027 (14 LFT Art. 74 rows). All tables RLS-enabled + org-scoped. See `PAYROLL_PHASE1_DECISIONS.md` for all decision context. Phase 2 is the calc engine port (`pay_calc_record` RPC). See `PAYROLL_PLAN.md`.
 
 ## What's left
 
