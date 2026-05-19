@@ -689,26 +689,38 @@ export default function Empleados() {
                   return (
                     <TableRow key={emp.id} className="cursor-pointer" onClick={() => navigate(`/empleados/${emp.id}`)}>
                       <TableCell className="font-medium">{emp.id}</TableCell>
-                      <TableCell>{emp.nombre}</TableCell>
-                      <TableCell className="text-muted-foreground">{(emp as any)._campaignName || "—"}</TableCell>
-                      {view === "new_hires" && (
-                        <TableCell>
-                          {days !== null ? (
+                      <TableCell>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{emp.nombre}</span>
+                          {/* Reminder: this employee has no hire_date set.
+                              Without it they can't appear in the New Hires tab. */}
+                          {view === "active" && !emp._hireDate && (
                             <Badge
                               variant="outline"
-                              className={
-                                days >= 25
-                                  ? "border-green-600 text-green-700"
-                                  : days >= 14
-                                    ? "border-amber-500 text-amber-700"
-                                    : ""
-                              }
+                              className="border-amber-500 text-amber-700 gap-1 text-xs font-normal"
+                              title="No hire date on file — add one from this employee's profile so they appear in New Hires during their first 30 days."
                             >
-                              Day {days + 1} / {NEW_HIRE_WINDOW_DAYS}
+                              <AlertTriangle className="h-3 w-3" />
+                              Set hire date
                             </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-xs italic">no hire date</span>
                           )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{(emp as any)._campaignName || "—"}</TableCell>
+                      {view === "new_hires" && days !== null && (
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              days >= 25
+                                ? "border-green-600 text-green-700"
+                                : days >= 14
+                                  ? "border-amber-500 text-amber-700"
+                                  : ""
+                            }
+                          >
+                            Day {days + 1} / {NEW_HIRE_WINDOW_DAYS}
+                          </Badge>
                         </TableCell>
                       )}
                       <TableCell className="text-right">{fmt(emp.sueldoBase)}</TableCell>
