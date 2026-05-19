@@ -123,6 +123,7 @@ export function useCreateHrDocumentRequest() {
         queryKey: [QUERY_KEY, "by_employee", vars.employeeId],
       });
       qc.invalidateQueries({ queryKey: [QUERY_KEY, "queue"] });
+      qc.invalidateQueries({ queryKey: [QUERY_KEY, "pending_count"] });
 
       // Fire-and-forget: notify leadership via email
       supabase.functions
@@ -249,11 +250,40 @@ export function useUpdateHrDocumentRequestStatus() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: [QUERY_KEY, "queue"] });
+      qc.invalidateQueries({ queryKey: [QUERY_KEY, "pending_count"] });
       qc.invalidateQueries({ queryKey: [QUERY_KEY, "detail", vars.id] });
       qc.invalidateQueries({
         queryKey: [QUERY_KEY, "by_employee", vars.employeeId],
       });
     },
+  });
+}
+
+/**
+ * Count of hr_document_requests with status='pending'.
+ *
+ * Used by the sidebar badge. RLS only grants SELECT to leadership + TL, so
+ * we gate the query at the hook level: agents never run it. (Earlier
+ * versions polled this for everyone and produced noisy console errors on
+ * agent sessions — see PR #53 / #60 in git history.)
+ *
+ * Polls every 30s for near-realtime freshness. Mutations on hr_document_requests
+ * invalidate this key so the badge updates immediately on user action.
+ */
+export function usePendingHrDocumentRequestsCount(enabled: boolean) {
+  return useQuery({
+    queryKey: [QUERY_KEY, "pending_count"],
+    queryFn: async (): Promise<number> => {
+      const { count, error } = await supabase
+        .from("hr_document_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    staleTime: 0,
   });
 }
 

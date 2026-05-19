@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
+import { usePendingHrDocumentRequestsCount } from "@/hooks/useHrDocumentRequests";
 import {
   Sidebar,
   SidebarContent,
@@ -89,6 +90,15 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const { signOut, user, isLeadership, isTeamLead, isAgent, isOwner } = useAuth();
   const collapsed = state === "collapsed";
+
+  // Sidebar badge counts — only fetched for leadership + TL (agents have no
+  // RLS access to hr_document_requests; querying them would just be noise).
+  const { data: pendingHrDocCount = 0 } = usePendingHrDocumentRequestsCount(
+    isLeadership || isTeamLead,
+  );
+  const badgeCounts: Record<string, number> = {
+    "/hr/document-queue": pendingHrDocCount,
+  };
 
   // Determine which items to show based on title
   let mainItems: { title: string; url: string; icon: typeof LayoutDashboard }[] = [];
@@ -157,21 +167,42 @@ export function AppSidebar() {
             <SidebarGroupLabel className="text-[11px] uppercase tracking-widest text-sidebar-foreground/30 font-medium">Human Resources</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {hrItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
-                        end={item.url === "/"}
-                        className="hover:bg-sidebar-accent"
-                        activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold"
-                      >
-                        <item.icon className="mr-2 h-4 w-4" />
-                        {!collapsed && <span>{item.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {hrItems.map((item) => {
+                  const badgeCount = badgeCounts[item.url] ?? 0;
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url}
+                          end={item.url === "/"}
+                          className="hover:bg-sidebar-accent relative"
+                          activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold"
+                        >
+                          <item.icon className="mr-2 h-4 w-4" />
+                          {!collapsed && (
+                            <span className="flex-1 flex items-center justify-between gap-2">
+                              <span>{item.title}</span>
+                              {badgeCount > 0 && (
+                                <span
+                                  className="inline-flex items-center justify-center rounded-full bg-destructive px-1.5 min-w-[18px] h-[18px] text-[10px] font-semibold leading-none text-destructive-foreground"
+                                  aria-label={`${badgeCount} pending`}
+                                >
+                                  {badgeCount > 99 ? "99+" : badgeCount}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {collapsed && badgeCount > 0 && (
+                            <span
+                              className="absolute top-0.5 right-0.5 inline-flex items-center justify-center rounded-full bg-destructive w-2 h-2"
+                              aria-label={`${badgeCount} pending`}
+                            />
+                          )}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
