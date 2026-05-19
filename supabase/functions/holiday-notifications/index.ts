@@ -50,7 +50,7 @@ const REPLY_TO_EMAIL = Deno.env.get("REPLY_TO_EMAIL") ?? (() => { throw new Erro
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers":
