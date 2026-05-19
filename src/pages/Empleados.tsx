@@ -22,7 +22,23 @@ const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", curren
 
 const PAGE_OPTIONS = [15, 30, 60, 100];
 
-type View = "active" | "inactive";
+// Anyone with a hire_date within this window is considered a "New Hire"
+// and shows up in the New Hires tab. After day 30 they auto-move to Active.
+const NEW_HIRE_WINDOW_DAYS = 30;
+
+// Days since hire (whole days, local time). Returns null if no hire date.
+function daysSinceHire(hireDate: string | null | undefined): number | null {
+  if (!hireDate) return null;
+  const start = new Date(hireDate);
+  if (isNaN(start.getTime())) return null;
+  const today = new Date();
+  // Normalize both to midnight so we count whole days.
+  const ms = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+    - Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  return Math.floor(ms / 86_400_000);
+}
+
+type View = "active" | "new_hires" | "inactive";
 
 export default function Empleados() {
   const { isLeadership } = useAuth();
@@ -68,21 +84,48 @@ export default function Empleados() {
     campaignId: null as string | null,
   });
 
-  // Active employees — filter, sort, and paginate
+  // Split active employees by tenure. _hireDate < 30 days → New Hires tab.
+  // Anyone with no hire_date stays in Active (probably an older record).
+  const { newHires, tenuredActive } = useMemo(() => {
+    const nh: typeof employees = [];
+    const ta: typeof employees = [];
+    for (const e of employees) {
+      const days = daysSinceHire(e._hireDate);
+      if (days !== null && days < NEW_HIRE_WINDOW_DAYS) {
+        nh.push(e);
+      } else {
+        ta.push(e);
+      }
+    }
+    return { newHires: nh, tenuredActive: ta };
+  }, [employees]);
+
+  // Source list for the current tab (active vs new hires both render the same table).
+  const sourceList = view === "new_hires" ? newHires : tenuredActive;
+
+  // Active / New Hires employees — filter, sort, and paginate
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    let list = employees.filter(
+    const list = sourceList.filter(
       (e) =>
         e.nombre.toLowerCase().includes(q) ||
         e.id.toLowerCase().includes(q) ||
-        ((e as any)._campaignName || "").toLowerCase().includes(q)
+        (e._campaignName || "").toLowerCase().includes(q)
     );
     list.sort((a, b) => {
+      // New Hires: sort by days-in ascending so the freshest hire is last
+      // (or descending — let's go ascending so day 1 is at the top: most urgent
+      // to acclimate). Falls back to name sort for ties / non-new-hire view.
+      if (view === "new_hires") {
+        const da = daysSinceHire(a._hireDate) ?? 999;
+        const db = daysSinceHire(b._hireDate) ?? 999;
+        if (da !== db) return sortAsc ? da - db : db - da;
+      }
       const cmp = a.nombre.localeCompare(b.nombre, "es");
       return sortAsc ? cmp : -cmp;
     });
     return list;
-  }, [employees, search, sortAsc]);
+  }, [sourceList, search, sortAsc, view]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -575,7 +618,10 @@ export default function Empleados() {
         <Tabs value={view} onValueChange={(v) => { setView(v as View); setCurrentPage(1); }}>
           <TabsList>
             <TabsTrigger value="active">
-              Active ({employees.length})
+              Active ({tenuredActive.length})
+            </TabsTrigger>
+            <TabsTrigger value="new_hires">
+              New Hires ({newHires.length})
             </TabsTrigger>
             <TabsTrigger value="inactive">
               Inactive ({inactive.length})
@@ -587,7 +633,13 @@ export default function Empleados() {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder={view === "active" ? "Search by name, ID, or campaign..." : "Search past employees..."}
+          placeholder={
+            view === "inactive"
+              ? "Search past employees..."
+              : view === "new_hires"
+                ? "Search new hires..."
+                : "Search by name, ID, or campaign..."
+          }
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-9"
@@ -596,7 +648,7 @@ export default function Empleados() {
         />
       </div>
 
-      {view === "active" && (
+      {(view === "active" || view === "new_hires") && (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -613,6 +665,7 @@ export default function Empleados() {
                   </button>
                 </TableHead>
                 <TableHead>Campaign</TableHead>
+                {view === "new_hires" && <TableHead>Day</TableHead>}
                 <TableHead className="text-right">Base Salary</TableHead>
                 <TableHead className="text-right">Biweekly Net</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
@@ -621,8 +674,10 @@ export default function Empleados() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No employees found
+                  <TableCell colSpan={view === "new_hires" ? 7 : 6} className="text-center text-muted-foreground py-8">
+                    {view === "new_hires"
+                      ? "No new hires in the last 30 days."
+                      : "No employees found"}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -630,11 +685,32 @@ export default function Empleados() {
                   const rec = records.find((r: any) => r.employee_id === emp._uuid);
                   const config = recordToConfig(rec, emp.id);
                   const result = calcularNomina(emp, config);
+                  const days = daysSinceHire(emp._hireDate);
                   return (
                     <TableRow key={emp.id} className="cursor-pointer" onClick={() => navigate(`/empleados/${emp.id}`)}>
                       <TableCell className="font-medium">{emp.id}</TableCell>
                       <TableCell>{emp.nombre}</TableCell>
                       <TableCell className="text-muted-foreground">{(emp as any)._campaignName || "—"}</TableCell>
+                      {view === "new_hires" && (
+                        <TableCell>
+                          {days !== null ? (
+                            <Badge
+                              variant="outline"
+                              className={
+                                days >= 25
+                                  ? "border-green-600 text-green-700"
+                                  : days >= 14
+                                    ? "border-amber-500 text-amber-700"
+                                    : ""
+                              }
+                            >
+                              Day {days + 1} / {NEW_HIRE_WINDOW_DAYS}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">no hire date</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right">{fmt(emp.sueldoBase)}</TableCell>
                       <TableCell className="text-right font-semibold">{fmt(result.netoAPagar)}</TableCell>
                       <TableCell>
@@ -759,8 +835,8 @@ export default function Empleados() {
         </Card>
       )}
 
-      {/* Pagination — only for active view; inactive list is short */}
-      {view === "active" && (
+      {/* Pagination — for active + new hires views; inactive list is short */}
+      {(view === "active" || view === "new_hires") && (
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Showing {filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length}</span>
