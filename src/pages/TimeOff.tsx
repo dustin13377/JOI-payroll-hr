@@ -162,6 +162,7 @@ export default function TimeOff() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["timeOffRequests", employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["time_off_requests", "pending_count"] });
       setFormData({ startDate: "", endDate: "", reason: "vacation", notes: "" });
       toast.success("Time off request submitted");
     },
