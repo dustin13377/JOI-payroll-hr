@@ -3,9 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Save } from "lucide-react";
+import { Eye, EyeOff, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useUpdateEmployeePersonalInfo } from "@/hooks/useSupabasePayroll";
+
+// Auto-hide sensitive fields after this much idle time once revealed.
+const AUTO_HIDE_MS = 30_000;
+const MASK = "••••••••••";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\d{10}$/;
@@ -48,6 +52,29 @@ export function PersonalInfoCard(props: {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Privacy mask: fields are hidden by default. Agent (or TL) clicks Show
+  // to reveal. Auto-hides again after AUTO_HIDE_MS of no field interaction
+  // so info doesn't sit on screen if they walk away.
+  const [showSensitive, setShowSensitive] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const armAutoHide = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setShowSensitive(false), AUTO_HIDE_MS);
+  };
+  const handleReveal = () => {
+    setShowSensitive(true);
+    armAutoHide();
+  };
+  const handleHide = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setShowSensitive(false);
+  };
+  // Clear timer on unmount.
+  useEffect(() => () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+  }, []);
+
   // Don't clobber in-flight edits when initial props change from a refetch.
   const dirty = useRef(false);
   useEffect(() => {
@@ -70,6 +97,8 @@ export function PersonalInfoCard(props: {
   const setField = (k: keyof typeof form, v: string) => {
     dirty.current = true;
     setForm((f) => ({ ...f, [k]: v }));
+    // Reset auto-hide whenever the user is actively typing.
+    if (showSensitive) armAutoHide();
   };
 
   const validate = () => {
@@ -109,66 +138,136 @@ export function PersonalInfoCard(props: {
     );
   };
 
+  // Static "masked" display for when info is hidden. Looks like an Input
+  // so the layout doesn't jump when you toggle.
+  const MaskedField = ({ hasValue }: { hasValue: boolean }) => (
+    <div
+      className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground select-none"
+      aria-label="Hidden — click Show to reveal"
+    >
+      {hasValue ? MASK : <span className="italic opacity-70">Not set</span>}
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Personal Info</CardTitle>
-        <CardDescription>
-          {props.description ??
-            "You can update contact info for agents on your team. Other fields (hire date, role, salary, ID/tax) are managed by HR."}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="text-lg">Personal Info</CardTitle>
+            <CardDescription>
+              {props.description ??
+                "You can update contact info for agents on your team. Other fields (hire date, role, salary, ID/tax) are managed by HR."}
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={showSensitive ? handleHide : handleReveal}
+            className="shrink-0"
+            aria-pressed={showSensitive}
+          >
+            {showSensitive ? (
+              <>
+                <EyeOff className="mr-2 h-4 w-4" />
+                Hide
+              </>
+            ) : (
+              <>
+                <Eye className="mr-2 h-4 w-4" />
+                Show
+              </>
+            )}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!showSensitive && (
+          <p className="text-xs text-muted-foreground">
+            Your contact info is hidden. Click <span className="font-medium">Show</span> to view or edit. Auto-hides
+            after 30 seconds of inactivity.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label>Work Name</Label>
-            <Input
-              value={form.work_name}
-              onChange={(e) => setField("work_name", e.target.value)}
-              placeholder="Preferred name"
-            />
+            {showSensitive ? (
+              <Input
+                value={form.work_name}
+                onChange={(e) => setField("work_name", e.target.value)}
+                placeholder="Preferred name"
+              />
+            ) : (
+              <MaskedField hasValue={!!form.work_name} />
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Personal Email</Label>
-            <Input
-              type="email"
-              value={form.personal_email}
-              onChange={(e) => setField("personal_email", e.target.value)}
-              placeholder="personal@example.com"
-            />
-            {errors.personal_email && (
-              <p className="text-xs text-destructive">{errors.personal_email}</p>
+            {showSensitive ? (
+              <>
+                <Input
+                  type="email"
+                  value={form.personal_email}
+                  onChange={(e) => setField("personal_email", e.target.value)}
+                  placeholder="personal@example.com"
+                />
+                {errors.personal_email && (
+                  <p className="text-xs text-destructive">{errors.personal_email}</p>
+                )}
+              </>
+            ) : (
+              <MaskedField hasValue={!!form.personal_email} />
             )}
           </div>
           <div className="grid gap-2">
             <Label>Phone</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => setField("phone", e.target.value)}
-              placeholder="33 1234 5678"
-              maxLength={15}
-            />
-            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+            {showSensitive ? (
+              <>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setField("phone", e.target.value)}
+                  placeholder="33 1234 5678"
+                  maxLength={15}
+                />
+                {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+              </>
+            ) : (
+              <MaskedField hasValue={!!form.phone} />
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Address</Label>
-            <Input
-              value={form.address}
-              onChange={(e) => setField("address", e.target.value)}
-              placeholder="Calle, Colonia, Ciudad, CP"
-            />
+            {showSensitive ? (
+              <Input
+                value={form.address}
+                onChange={(e) => setField("address", e.target.value)}
+                placeholder="Calle, Colonia, Ciudad, CP"
+              />
+            ) : (
+              <MaskedField hasValue={!!form.address} />
+            )}
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label>Emergency Contact</Label>
-            <Input
-              value={form.emergency_contact}
-              onChange={(e) => setField("emergency_contact", e.target.value)}
-              placeholder="Name — Relationship — Phone"
-            />
+            {showSensitive ? (
+              <Input
+                value={form.emergency_contact}
+                onChange={(e) => setField("emergency_contact", e.target.value)}
+                placeholder="Name — Relationship — Phone"
+              />
+            ) : (
+              <MaskedField hasValue={!!form.emergency_contact} />
+            )}
           </div>
         </div>
 
-        <Button onClick={onSave} disabled={update.isPending} className="w-full">
+        <Button
+          onClick={onSave}
+          disabled={update.isPending || !showSensitive}
+          className="w-full"
+          title={!showSensitive ? "Click Show to edit and save" : undefined}
+        >
           <Save className="mr-2 h-4 w-4" />
           {update.isPending ? "Saving..." : "Save Personal Info"}
         </Button>

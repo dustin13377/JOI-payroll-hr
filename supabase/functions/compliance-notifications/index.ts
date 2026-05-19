@@ -47,7 +47,7 @@ const APP_DOMAIN = Deno.env.get("APP_DOMAIN") ?? (() => { throw new Error("APP_D
 // Env-driven allowlist. Default "*" keeps dev unblocked; set ALLOWED_ORIGIN
 // in Supabase dashboard to lock down when going public
 // (e.g. "https://joi-payroll-hr.vercel.app").
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers":
