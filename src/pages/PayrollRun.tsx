@@ -9,7 +9,7 @@ import {
   recordToConfig,
 } from "@/hooks/useSupabasePayroll";
 import { usePayrollComputed, type ComputedPayroll } from "@/hooks/usePayrollComputed";
-import { calcularNomina } from "@/types/payroll";
+import { EMPTY_PAYROLL_RESULT } from "@/types/payroll";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,7 +169,9 @@ export default function PayrollRun() {
       diaFestivo: eff.holidayDays > 0,
       bonosAdicionales: eff.additionalBonuses,
     };
-    return calcularNomina(empObj, config);
+    // Phase 4b: calcularNomina() removed (throws). Placeholder zero-result.
+    // This page (legacy PayrollRun) is being replaced by /admin/payroll in Phase 4c.
+    return EMPTY_PAYROLL_RESULT;
   }
 
   function saveRow(emp: ComputedPayroll) {

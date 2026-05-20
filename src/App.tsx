@@ -45,6 +45,10 @@ import AgentReviews from "@/pages/AgentReviews";
 import SystemUsers from "@/pages/SystemUsers";
 import Payroll from "@/pages/admin/Payroll";
 import PayrollWeek from "@/pages/admin/PayrollWeek";
+import PayrollRates from "@/pages/admin/PayrollRates";
+import PayrollAgent from "@/pages/admin/PayrollAgent";
+import PayrollHolidays from "@/pages/admin/PayrollHolidays";
+import PayrollPeriods from "@/pages/admin/PayrollPeriods";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
@@ -164,6 +168,11 @@ const App = () => (
                     {/* Payroll Phase 4a — owner/admin/manager only */}
                     <Route path="/admin/payroll" element={<RequireLeadership><Payroll /></RequireLeadership>} />
                     <Route path="/admin/payroll/week/:weekId" element={<RequireLeadership><PayrollWeek /></RequireLeadership>} />
+                    {/* Payroll Phase 4b — supporting screens */}
+                    <Route path="/admin/payroll/rates" element={<RequireLeadership><PayrollRates /></RequireLeadership>} />
+                    <Route path="/admin/payroll/agent/:id" element={<RequireLeadership><PayrollAgent /></RequireLeadership>} />
+                    <Route path="/admin/payroll/holidays" element={<RequireLeadership><PayrollHolidays /></RequireLeadership>} />
+                    <Route path="/admin/payroll/periods" element={<RequireLeadership><PayrollPeriods /></RequireLeadership>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </AppLayout>

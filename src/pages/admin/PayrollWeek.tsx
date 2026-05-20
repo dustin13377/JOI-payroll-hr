@@ -183,6 +183,7 @@ function ExpandedRow({
     kpi_achieved: record.kpi_achieved,
     extra_bonus: record.extra_bonus,
     partial_week_days: record.partial_week_days,
+    custom_deduction: record.custom_deduction ?? 0,
   });
 
   const ad = record.auto_derived;
@@ -241,14 +242,10 @@ function ExpandedRow({
               disabled={inputsDisabled}
               onChange={(v) => update("missed_days", Math.round(v))}
             />
-            <FieldInput
-              label="Overtime days"
-              fieldName="overtime_days"
-              value={values.overtime_days}
-              autoderived={ad}
-              disabled={inputsDisabled}
-              onChange={(v) => update("overtime_days", Math.round(v))}
-            />
+            {/* Overtime days hidden per D 2026-05-20 — Phase 3 still auto-counts
+                long days (>9hr net) but Phase 2 calc doesn't pay them.
+                Use Extra Bonus to compensate for long days manually.
+                Field stays in payroll_records, just not surfaced in UI. */}
             <FieldInput
               label="Sundays worked"
               fieldName="sundays_worked"
@@ -311,7 +308,7 @@ function ExpandedRow({
             {/* Extra bonus — permission-gated */}
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-muted-foreground">
-                Extra bonus (spiffs){" "}
+                Extra bonus (spiffs / OT){" "}
                 {!canEditBonus && (
                   <span className="text-[10px] text-muted-foreground/60">
                     (locked)
@@ -328,6 +325,30 @@ function ExpandedRow({
                   update("extra_bonus", parseFloat(e.target.value) || 0)
                 }
                 className="h-8 w-28 text-sm"
+              />
+            </div>
+
+            {/* Custom deduction — permission-gated like extra_bonus */}
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs font-medium text-muted-foreground">
+                Custom deduction{" "}
+                {!canEditBonus && (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    (locked)
+                  </span>
+                )}
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={values.custom_deduction}
+                disabled={inputsDisabled || !canEditBonus}
+                onChange={(e) =>
+                  update("custom_deduction", parseFloat(e.target.value) || 0)
+                }
+                className="h-8 w-28 text-sm"
+                title="Manager-entered deduction (partial-day miss, advance repayment, fine, etc.). Subtracted from total pay."
               />
             </div>
           </div>
@@ -449,14 +470,7 @@ function AgentRow({
           )}
         </td>
 
-        {/* OT */}
-        <td className="px-3 py-3 text-sm text-center">
-          {record.overtime_days > 0 ? (
-            <span className="font-medium">{record.overtime_days}</span>
-          ) : (
-            <span className="text-muted-foreground">0</span>
-          )}
-        </td>
+        {/* OT column hidden per D 2026-05-20 — see expanded-row comment. */}
 
         {/* Sundays */}
         <td className="px-3 py-3 text-sm text-center">
@@ -764,9 +778,11 @@ export default function PayrollWeek() {
         </CardContent>
       </Card>
 
-      {/* Agent table */}
+      {/* Agent table — no overflow-x-auto here, would break sticky thead.
+          If horizontal scroll ever becomes needed, wrap in a separate container
+          that sticky's parent chain doesn't pass through. */}
       <Card>
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="p-0">
           {recordsLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -779,21 +795,21 @@ export default function PayrollWeek() {
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50 text-muted-foreground text-xs font-medium">
-                  <th className="px-3 py-2 w-8" />
-                  <th className="px-3 py-2 text-left">
+              <thead className="sticky top-0 z-10 bg-muted shadow-sm">
+                <tr className="border-b text-muted-foreground text-xs font-medium">
+                  <th className="px-3 py-2 w-8 bg-muted" />
+                  <th className="px-3 py-2 text-left bg-muted">
                     <SortHeader k="name" label="Agent" />
                   </th>
-                  <th className="px-3 py-2 text-left">
+                  <th className="px-3 py-2 text-left bg-muted">
                     <SortHeader k="campaign" label="Campaign" />
                   </th>
-                  <th className="px-3 py-2 text-center">Missed</th>
-                  <th className="px-3 py-2 text-center">OT</th>
-                  <th className="px-3 py-2 text-center">Sun</th>
-                  <th className="px-3 py-2 text-center">KPI</th>
-                  <th className="px-3 py-2 text-right">Bonus</th>
-                  <th className="px-3 py-2 text-right">
+                  <th className="px-3 py-2 text-center bg-muted">Missed</th>
+                  {/* OT column hidden — Phase 2 doesn't pay OT (use Extra Bonus instead) */}
+                  <th className="px-3 py-2 text-center bg-muted">Sun</th>
+                  <th className="px-3 py-2 text-center bg-muted">KPI</th>
+                  <th className="px-3 py-2 text-right bg-muted">Bonus</th>
+                  <th className="px-3 py-2 text-right bg-muted">
                     <SortHeader k="total" label="Total" />
                   </th>
                 </tr>

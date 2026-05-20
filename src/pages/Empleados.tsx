@@ -688,9 +688,9 @@ export default function Empleados() {
                 </TableRow>
               ) : (
                 paginated.map((emp) => {
-                  const rec = records.find((r: any) => r.employee_id === emp._uuid);
-                  const config = recordToConfig(rec, emp.id);
-                  const result = calcularNomina(emp, config);
+                  // Phase 4b: calcularNomina() was removed (throws now).
+                  // Per-employee net pay lives at /admin/payroll/agent/:id.
+                  // Show "—" until Phase 4c retires this column entirely.
                   const days = daysSinceHire(emp._hireDate);
                   return (
                     <TableRow key={emp.id} className="cursor-pointer" onClick={() => navigate(`/empleados/${emp.id}`)}>
@@ -730,7 +730,7 @@ export default function Empleados() {
                         </TableCell>
                       )}
                       <TableCell className="text-right">{fmt(emp.sueldoBase)}</TableCell>
-                      <TableCell className="text-right font-semibold">{fmt(result.netoAPagar)}</TableCell>
+                      <TableCell className="text-right font-semibold text-muted-foreground">—</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button
