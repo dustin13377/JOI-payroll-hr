@@ -1,5 +1,6 @@
 import { useEmployees, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates, formatPeriodLabel, recordToConfig, useUpsertPayrollRecord } from "@/hooks/useSupabasePayroll";
 import { calcularNomina } from "@/types/payroll";
+import { useCurrentPayPeriod, useCurrentPeriodTotal } from "@/hooks/usePayroll";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,7 +15,14 @@ import { parseTCW, type TCWResult } from "@/utils/tcwParser";
 
 export default function Dashboard() {
   const { data: employees = [], isLoading: loadingEmps } = useEmployees();
+  // OLD: useActivePeriod() — queries lowercase status="open"; broken after Phase 1
+  //      rename to status="OPEN". Kept for compat with legacy code paths below.
   const { data: activePeriod, isLoading: loadingPeriod } = useActivePeriod();
+  // NEW: useCurrentPayPeriod queries uppercase "OPEN" — the real source of truth.
+  // This is what the KPI cards and cutoff banner now read from.
+  const { data: currentPeriod } = useCurrentPayPeriod();
+  // NEW: sum of total_pay across every payroll_record in every week of the current period.
+  const { data: currentPeriodTotal } = useCurrentPeriodTotal();
   const createPeriod = useCreatePeriod();
   const { data: records = [] } = usePayrollRecords(activePeriod?.id);
   const upsertPayrollRecord = useUpsertPayrollRecord();
@@ -50,13 +58,14 @@ export default function Dashboard() {
     setCutoffInfo(getPayrollCutoffInfo());
   }, []);
 
-  const periodLabel = formatPeriodLabel(activePeriod);
+  // Use the new currentPeriod (uppercase OPEN) for the visible label.
+  // formatPeriodLabel works fine — currentPeriod has start_date + end_date.
+  const periodLabel = formatPeriodLabel(currentPeriod ?? activePeriod);
 
-  const totalNomina = employees.reduce((sum, emp) => {
-    const rec = records.find((r: any) => r.employee_id === emp._uuid);
-    const config = recordToConfig(rec, emp.id);
-    return sum + calcularNomina(emp, config).netoAPagar;
-  }, 0);
+  // Phase 4b: Biweekly Payroll = sum of payroll_records.total_pay across every
+  // week in the current open period. Returns 0 if no period or no records yet.
+  // Click into /admin/payroll/week/[id] for per-week breakdowns.
+  const totalNomina = currentPeriodTotal?.total ?? 0;
 
   const promedioSalarial = employees.length
     ? employees.reduce((s, e) => s + e.sueldoBase, 0) / employees.length
@@ -503,19 +512,17 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((emp) => {
-                    const rec = records.find((r: any) => r.employee_id === emp._uuid);
-                    const config = recordToConfig(rec, emp.id);
-                    const result = calcularNomina(emp, config);
-                    return (
-                      <tr key={emp.id} className="hover:bg-muted/50 transition-colors">
-                        <td className="p-3">{emp.id}</td>
-                        <td className="p-3">{emp.nombre}</td>
-                        <td className="p-3 text-right">{fmt(emp.sueldoBase)}</td>
-                        <td className="p-3 text-right font-semibold">{fmt(result.netoAPagar)}</td>
-                      </tr>
-                    );
-                  })}
+                  {/* Per-employee biweekly net was computed here via calcularNomina().
+                      That function was removed in Phase 2 — net pay now lives at /admin/payroll.
+                      Placeholder dashes until Phase 4c retires this table entirely. */}
+                  {employees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-muted/50 transition-colors">
+                      <td className="p-3">{emp.id}</td>
+                      <td className="p-3">{emp.nombre}</td>
+                      <td className="p-3 text-right">{fmt(emp.sueldoBase)}</td>
+                      <td className="p-3 text-right font-semibold text-muted-foreground">—</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

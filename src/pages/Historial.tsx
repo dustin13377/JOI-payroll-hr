@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useEmployees, useActivePeriod, useClosePeriod, useCreatePeriod, useHistoryRecords, getCurrentPeriodDates, formatPeriodLabel, recordToConfig } from "@/hooks/useSupabasePayroll";
-import { calcularNomina } from "@/types/payroll";
+import { EMPTY_PAYROLL_RESULT } from "@/types/payroll";
 import { formatDateMX } from "@/lib/localDate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -134,8 +134,9 @@ export default function Historial() {
       kpiMonto: Number(rec.employees.kpi_bonus_amount) || 0,
       turno: "Monday-Friday" as const,
     };
-    const config = recordToConfig(rec, emp.id);
-    const result = calcularNomina(emp, config);
+    // Phase 4b: calcularNomina() removed (throws). Placeholder net = 0.
+    // Real per-period history will be rebuilt in Phase 4c against new schema.
+    const result = EMPTY_PAYROLL_RESULT;
 
     return {
       id: rec.id,

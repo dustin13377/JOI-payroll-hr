@@ -19,16 +19,20 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type EmpTitle = 'owner' | 'admin' | 'manager' | 'team_lead' | 'agent';
 
-/** Minimal employee shape needed by the calc engine (mirrors employees table). */
+/** Minimal employee shape needed by the calc engine (mirrors employees table).
+ *  Phase 4b simplification: only monthly_base_salary + kpi_bonus_amount are
+ *  read by the calc. Daily = monthly / 30 (LFT convention), weekly = monthly / 4.
+ *  Legacy fields kept optional for compatibility; calc ignores them. */
 export interface PayEmployee {
   id: string;
-  weekly_base_salary:    number;   // rule.weeklyBase
-  daily_salary:          number;   // rule.dailySalary
-  kpi_bonus_amount:      number;   // rule.kpiBonus
-  daily_discount_rate:   number;   // rule.missedDed
-  overtime_day_pay:      number;   // rule.overtimePay
-  sunday_bonus_amount:   number;   // rule.sundayBonus
-  vacation_premium_pct:  number;   // rule.vacationPct (e.g. 0.25)
+  monthly_base_salary:   number;   // source of truth
+  kpi_bonus_amount:      number;
+  weekly_base_salary?:   number;   // legacy — no longer read by calc
+  daily_salary?:         number;   // legacy — no longer read by calc
+  daily_discount_rate?:  number;   // legacy — no longer read by calc
+  overtime_day_pay?:     number;   // legacy — no longer read by calc
+  sunday_bonus_amount?:  number;   // legacy — no longer read by calc
+  vacation_premium_pct?: number;   // legacy — no longer read by calc
 }
 
 /** Input fields — mirrors the payroll_records input columns. */
@@ -42,6 +46,7 @@ export interface PayInputs {
   kpi_achieved:        boolean;
   extra_bonus:         number;
   partial_week_days:   number | null;  // null = full week
+  custom_deduction:    number;          // manager-entered extra deduction
 }
 
 /** Calculated breakdown — mirrors the payroll_records calc columns. */
@@ -83,18 +88,25 @@ export function previewPay(inputs: PayInputs, emp: PayEmployee): PayComponents {
     };
   }
 
-  // Shared components
-  const kpi_bonus    = inputs.kpi_achieved ? emp.kpi_bonus_amount : 0;
-  const overtime_pay = r2(inputs.overtime_days  * emp.overtime_day_pay);
-  const sunday_pay   = r2(inputs.sundays_worked * emp.sunday_bonus_amount);
-  // LFT Art. 75: extra premium only (base day already in weekly_base)
-  const holiday_pay  = r2(inputs.holiday_days * emp.daily_salary * 2);
+  // Derive daily from monthly. Source of truth = employees.monthly_base_salary.
+  // (LFT convention: monthly / 30). If unset, calc yields zero.
+  const monthly = emp.monthly_base_salary ?? 0;
+  const daily   = monthly / 30;
 
-  // Branch C: partial week
+  // Components common to both partial-week and full-week branches
+  const kpi_bonus    = inputs.kpi_achieved ? (emp.kpi_bonus_amount ?? 0) : 0;
+  const overtime_pay = 0;                                              // Phase 4b: OT handled via extra_bonus
+  const sunday_pay   = r2(inputs.sundays_worked * daily * 0.25);       // LFT Art. 79
+  const holiday_pay  = r2(inputs.holiday_days   * daily * 2);          // LFT Art. 75
+  const vacation_pay = 0;                                              // Phase 4b: deferred to new-entity work
+  const custom_ded   = inputs.custom_deduction ?? 0;
+
+  // Branch C: partial week (mid-week hire)
   if (inputs.partial_week_days !== null && inputs.partial_week_days > 0) {
-    const weekly_base = r2(emp.daily_salary * inputs.partial_week_days);
+    const weekly_base = r2(daily * inputs.partial_week_days);
     const total_pay   = r2(weekly_base + kpi_bonus + overtime_pay
-                           + sunday_pay + holiday_pay + inputs.extra_bonus);
+                           + sunday_pay + holiday_pay
+                           + inputs.extra_bonus - custom_ded);
     return {
       weekly_base, kpi_bonus,
       missed_deduction: 0,
@@ -105,13 +117,12 @@ export function previewPay(inputs: PayInputs, emp: PayEmployee): PayComponents {
   }
 
   // Branch D: full week
-  const weekly_base      = emp.weekly_base_salary;  // already numeric(12,2) in DB
-  const missed_deduction = r2(inputs.missed_days    * emp.daily_discount_rate);
-  const vacation_pay     = r2(inputs.vacation_days  * emp.daily_salary
-                               * (1 + emp.vacation_premium_pct));
-  const total_pay        = r2(weekly_base - missed_deduction + kpi_bonus
-                               + overtime_pay + sunday_pay + vacation_pay
-                               + holiday_pay + inputs.extra_bonus);
+  const weekly_base      = r2(monthly / 4);
+  const missed_deduction = r2(inputs.missed_days * daily);
+  const total_pay        = r2(weekly_base - missed_deduction - custom_ded
+                               + kpi_bonus + overtime_pay + sunday_pay
+                               + vacation_pay + holiday_pay
+                               + inputs.extra_bonus);
   return {
     weekly_base, kpi_bonus, missed_deduction,
     overtime_pay, sunday_pay, vacation_pay, holiday_pay, total_pay,
@@ -224,3 +235,22 @@ export function calcularNomina(_emp: Employee, _config: PayrollConfig): PayrollR
     'See src/types/payroll.ts for the new API.'
   );
 }
+
+/**
+ * All-zeros PayrollResult — safe placeholder for legacy pages still expecting
+ * this shape. Real per-employee net pay lives at /admin/payroll/agent/:id now.
+ * To be removed in Phase 4c once the legacy callers are migrated.
+ */
+export const EMPTY_PAYROLL_RESULT: PayrollResult = {
+  sueldoQuincenal: 0,
+  sueldoDiario: 0,
+  descuentoFaltas: 0,
+  montoKpi: 0,
+  montoDiasExtra: 0,
+  montoPrimaDominical: 0,
+  montoDiaFestivo: 0,
+  bonosAdicionales: 0,
+  totalExtras: 0,
+  totalRetenciones: 0,
+  netoAPagar: 0,
+};

@@ -4,7 +4,7 @@ import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { calcularNomina } from "@/types/payroll";
+import { EMPTY_PAYROLL_RESULT } from "@/types/payroll";
 import type { EmployeeWithMeta } from "@/types/payroll";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -341,9 +341,19 @@ export default function EmpleadoPerfil() {
     );
   }
 
-  const currentRecord = records.find((r) => r.employee_id === emp._uuid);
-  const config = recordToConfig(currentRecord, emp.id);
-  const result = calcularNomina(emp, config);
+  // Phase 4b: calcularNomina() removed (throws). Use placeholder zero-result
+  // AND zero-config; real net pay lives at /admin/payroll/agent/:id.
+  // Phase 4c will retire this whole payroll-summary card.
+  const result = EMPTY_PAYROLL_RESULT;
+  const config = {
+    empleadoId: emp?.id ?? "",
+    diasFaltados: 0,
+    kpiAplicado: false,
+    diasExtra: 0,
+    primaDominical: false,
+    diaFestivo: false,
+    bonosAdicionales: 0,
+  };
 
   const saveField = (field: string, value: unknown) => {
     updateEmployee.mutate(

@@ -10,7 +10,16 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarDays, ChevronRight, PlusCircle, AlertCircle, Loader2 } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  PlusCircle,
+  AlertCircle,
+  Loader2,
+  DollarSign,
+  CalendarCheck,
+  CalendarRange,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,7 +263,7 @@ export default function Payroll() {
               <p className="text-muted-foreground text-sm">
                 No weeks yet.{" "}
                 {canCreateWeek
-                  ? "Click "Add Next Week" to create the first one."
+                  ? 'Click "Add Next Week" to create the first one.'
                   : "Ask the owner to create the first week."}
               </p>
             </CardContent>
@@ -296,12 +305,64 @@ export default function Payroll() {
         )}
       </div>
 
-      {/* Phase 4b placeholder */}
+      {/* Phase 4b — quick-link cards */}
       <div className="pt-4 border-t">
-        <p className="text-xs text-muted-foreground">
-          Past periods, period management, and rates editor are coming in Phase 4b.
-        </p>
+        <h2 className="text-base font-semibold mb-3">More</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link to="/admin/payroll/rates" className="block">
+            <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/40 h-full">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="shrink-0 w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                  <DollarSign className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Pay Rates</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Edit weekly base, KPI bonus, daily rates. Bulk-apply raises.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/admin/payroll/holidays" className="block">
+            <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/40 h-full">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="shrink-0 w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                  <CalendarCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Holidays</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    LFT Article 74 calendar. Drives holiday-pay auto-derive.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/admin/payroll/periods" className="block">
+            <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/40 h-full">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="shrink-0 w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                  <CalendarRange className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Periods</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Historical browser of open + locked pay periods.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
       </div>
+
+      <p className="text-xs text-muted-foreground pt-2">
+        Per-agent breakdown is reachable by clicking an employee name in any week view.
+        Re-derive diff dialog + CSV export are coming in Phase 4c.
+      </p>
     </div>
   );
 }

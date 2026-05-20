@@ -1,49 +1,71 @@
 # Session Handoff
 
-**Saved:** 2026-05-19T16:09:24+00:00
-**Machine:** claude (Mac mini desktop, via Cowork)
+**Saved:** 2026-05-20T16:49:32-06:00
+**Machine:** Cowork sandbox (claude)
 **Branch:** main
-**Last commit:** f0cedd0 feat(hr): add sidebar badge for pending time-off requests
+**Last commit:** b80d93a payroll: phase 4a — core week view + status workflow
 
 ## What we were doing
 
-Closed out two leftover items from yesterday's security audit and got the 30-day review notification system live. Most of today's work was Supabase-side (secrets, DB migrations, edge function redeploys), not code-side — so the git diff is small but the runtime state is meaningfully different.
+Built out Phase 4b (4 supporting payroll screens), then collapsed the 8-rate-field model down to D's mental model: `monthly_base_salary` is the source of truth, daily and weekly are derived (`monthly/30` and `monthly/4`). Backfilled May 11-17 from a TimeClock Wizard CSV, created a payroll_weeks row, and ran auto-derive — the week view now shows 55 real agent records totaling **$214,158.34 MXN**. Walked through the end-to-end flow with real data. Patched a series of cascading crashes from legacy `calcularNomina()` callers across 5 pages. Hidden the OT column per D's "no automatic OT — use extra_bonus" decision.
 
-## Files in flight
+## Files in flight (will be in this commit)
 
-- `docs/email-templates/supabase-invite-user.html` — being committed with this handoff
-- `docs/email-templates/supabase-reset-password.html` — being committed with this handoff
-- (CORS fix on 7 edge functions already shipped earlier today in commit `56f7a2b`)
+- `src/hooks/usePayroll.ts` — Added Phase 4b hooks (useRateRoster, useUpdateEmployeeRates, useBulkApplyRate, useAgentPayHistory, useEmployeeForPayroll, useMexicanHolidays, useAllPeriodsWithSummaries, useCurrentPeriodTotal, useEmployeeVacationBalance). Updated previewTotalPay to derive daily/weekly from monthly. Fixed useCreateNextWeek to compute next_week_start from latest_week_end + 1 day, and to set organization_id on INSERT.
+- `src/types/payroll.ts` — Added `EMPTY_PAYROLL_RESULT` zero-stub. Updated PayEmployee + PayInputs types (custom_deduction, monthly_base_salary). Rewrote previewPay to mirror simplified calc engine.
+- `src/App.tsx` — Added 4 new Payroll routes (rates, agent, holidays, periods), all under RequireLeadership.
+- `src/pages/admin/Payroll.tsx` — Added quick-link cards (Pay Rates, Holidays, Periods). Fixed nested-quote crash in empty-state ("No weeks yet" message).
+- `src/pages/admin/PayrollWeek.tsx` — Wired `custom_deduction` input next to `extra_bonus`. Hidden OT column + Overtime days input. Added sticky-thead so column headers stay visible. Removed `overflow-x-auto` on the Card (was blocking sticky).
+- `src/pages/admin/PayrollRates.tsx` — NEW. Bulk pay-rate editor. Simplified to Monthly (read-only) + KPI (editable) + Derived display (Wk/Day/Sun-per-day). Red "Missing rate" badge for monthly=0. Filter uses Client (not Campaign) per D's mental model.
+- `src/pages/admin/PayrollAgent.tsx` — NEW. Per-agent YTD breakdown + admin-only vacation balance card.
+- `src/pages/admin/PayrollHolidays.tsx` — NEW. Read-only LFT Article 74 calendar.
+- `src/pages/admin/PayrollPeriods.tsx` — NEW. Historical pay-period browser.
+- `src/pages/Dashboard.tsx` — Replaced broken `useActivePeriod` (lowercase `'open'`) with `useCurrentPayPeriod` (uppercase `'OPEN'`). Wired Biweekly Payroll to `useCurrentPeriodTotal`. Replaced calcularNomina table cells with `—` placeholder.
+- `src/pages/Empleados.tsx` — Replaced calcularNomina with `—` placeholder.
+- `src/pages/EmpleadoPerfil.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT + stub config.
+- `src/pages/Historial.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT.
+- `src/pages/PayrollRun.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT.
+- `HANDOFF.md` — Phase 4b + simplification entries appended.
+- `PAYROLL_PHASE4B_PROMPT.md` — NEW. The Sonnet prompt that built Phase 4b (already executed).
+
+## DB migrations applied this session (live in Supabase, NOT in this commit)
+
+- **`payroll_phase4b_simplify_calc`** — Rewrote `_calc_pay_components` to derive `daily = monthly/30`, `weekly = monthly/4`. Added `payroll_records.custom_deduction numeric(12,2)`. Sunday pay = `daily × 0.25` (LFT Art. 79). Overtime pay = `0` (handled via `extra_bonus`). Vacation pay = `0` (deferred to new entity). Trigger guard updated to watch `custom_deduction`.
+- **Vacation entitlement** — added `employees.vacation_days_entitled int DEFAULT 0`. Backfilled per LFT 2024 Art. 76: 12 active employees got days, 148 total entitled.
+- **May 11-17 TCW backfill** — inserted ~180 rows into `time_clock` from TimeClock Wizard CSV. Created `payroll_weeks` row for May 11-17 (id `cc6a801b-5381-4417-a376-bba59f6a86e4`), ran auto-derive — 55 `payroll_records` rows created, week total $214,158.34 MXN.
 
 ## Decisions made this session
 
-- **CORS fallback hardening (7 edge functions)** — changed `?? "*"` to `?? "https://app.justoutsource.it"` so functions fail closed if the `ALLOWED_ORIGIN` secret is ever missing. Files: `submit-eod-for-agent`, `notify-hr-request-filed`, `get-hr-document-signed-url`, `provision-org`, `review-notifications`, `compliance-notifications`, `holiday-notifications`. Committed (`56f7a2b`) and redeployed via Supabase MCP. All 7 ACTIVE with `verify_jwt: true` preserved. Closes audit Finding #5.
-- **DRY_RUN_HOLIDAY flipped to `"false"`** — PTO/holiday notification emails now actually send instead of just logging. All 4 DRY_RUN flags (EOD, COMPLIANCE, HOLIDAY, REVIEW) are now off.
-- **30-Day Review System went LIVE** — `DRY_RUN_REVIEW` flipped to `"false"`. First real fire will be 2026-05-25 at 9 AM CDMX for Angeles Elisa Vázquez Ramírez (hired 2026-05-18, SLOC Weekday, week-1 review). A scheduled task is set for 9:30 AM that day to auto-verify the logs + dedupe table.
-- **Leadership emails set on `employees` table** — Diomedes Sandoval (owner, EMP JOI-001) → `diomedes@justoutsource.it`. Paty Rodriguez (admin, EMP-042) → `humanresources@justoutsource.it` (note plural "resources" — shared HR inbox). Both were NULL before. The escalation RPC requires `email IS NOT NULL`, so before today neither would have received escalations.
-- **TL review routing expanded** — migrated `find_pending_tl_review_emails` to UNION campaign primary `team_lead_id` + `team_lead_campaigns` join table, plus added `tl.employment_status = 'active'` filter to skip ex-TLs. Migration name: `expand_tl_review_routing_to_all_assigned_tls`. Result: all 3 Torro TLs (Adrian, Javier, Deysi) get the digest when SLOC Weekday agents are due, not just the primary TL.
-- **Paty's role confirmed as HR-equivalent** — `title = admin` already passes `is_leadership()`. No new "HR" tier needed. She is missing a login though (no `user_profiles` row, no `auth.users` row) — see open todos.
-- **Audit hygiene leftovers (3 Mediums + 2 Lows) deferred** — not active exploits, not worth blocking product work. See `SECURITY_AUDIT_2026-05-18.md`.
-- **Former Employees reconciliation deferred to manual** — D will scrub the active 58 list directly in the app rather than via SQL.
+- **Per-employee rate model** (not rule-based). `monthly_base_salary` is source of truth; derive daily=monthly/30 and weekly=monthly/4.
+- **Sunday pay = daily × 0.25** (LFT Art. 79). **Holiday pay = daily × 2** (LFT Art. 75). **Vacation pay = 0** for now (deferred to new entity).
+- **No automatic OT pay.** Use `extra_bonus` to compensate. OT column + input hidden in UI; auto-derive still counts in background.
+- **Rates Editor filter:** Client / Department / Shift (not Campaign — that's implementation detail per D's mental model).
+- **Vacation entitlement is admin-only display** — never on agent screens until D explicitly OKs.
+- **`custom_deduction` field** for manager-entered subtractions (partial-day misses, advance repayments, fines).
+- **Phase 5 archive replay abandoned** — historical data has gaps + roster turnover makes replay unreliable. Engine validation will happen via parallel-run on next live pay period.
 
-## Open todos
+## Open todos (priority order)
 
-- [ ] **Monitor first live 30-day review fire on 2026-05-25** — scheduled task at 9:30 AM CDMX will auto-check logs + dedupe table and report back. No manual action needed unless it reports a failure.
-- [ ] **Invite Paty to log in.** D decided 2026-05-19: login email = `paty.rodriguez@justoutsource.it` (different from her notification inbox `humanresources@justoutsource.it`). Steps: (1) Supabase Dashboard → Authentication → Users → Invite user → `paty.rodriguez@justoutsource.it`. (2) After confirmation, run `INSERT INTO user_profiles (id, role, employee_id, organization_id) SELECT au.id, 'admin', '52822b91-b270-4793-9287-b7d41173d0e3', '1d15e900-ccc8-4616-ae0a-179fb27cbf27' FROM auth.users au WHERE au.email = 'paty.rodriguez@justoutsource.it';`. Don't use the `resend-invite` edge fn — it would invite `humanresources@` instead.
-- [ ] **Eventually add a separate `hr` role to the title enum, when restrictions are defined.** D wants HR ≠ admin long-term but doesn't have the restriction scope yet. Touching the enum without defined restrictions means touching every RLS policy + RequireRole guard twice. Defer until restrictions are scoped. For now Paty stays `title = admin`.
-- [ ] **Data quality: 13 employees have `hire_date = NULL`.** The 30-day review trigger relies on `hire_date` to seed review rows — if any of these are actual new hires, their reviews won't get seeded. Worth a cleanup pass.
-- [ ] **Data quality: 6 agents have `campaign_id = NULL`** — invisible to campaign-scoped views (EOD, payroll). EMP IDs: 104, 106, 108, 110, 052, 118. Names: Daniel Oswaldo Romero Perez, Federico Jasiel Salas Macias, Fernando Gutierrez Espinosa, José Andrés Hernández Arroyo, Oscar Andres Pedrazzini Herrera, Samantha Montero Gutierrez.
-- [ ] **Former Employees manual reconciliation** (D taking offline)
-- [ ] Eventually: audit Mediums #6 (provision-org rollback), #7 (policy_document_versions defense-in-depth), #8 (npm audit dev deps). Low priority.
+- [ ] Joe reviews the live week (`/admin/payroll/week/cc6a801b-5381-4417-a376-bba59f6a86e4`). Spot-check 3-5 agents' `total_pay` vs his Sheet. If they match to the cent, engine validated.
+- [ ] Set `monthly_base_salary` for 4 employees with $0: Diego Landeros, Alejandro Araujo, Ruben Curiel, Daniel Oswaldo Romero
+- [ ] Set `hire_date` for 7 employees missing it (Paty Rodriguez is the only real-employee one; rest are admin/test accounts)
+- [ ] Adrian Arechiga's hire_date in DB (2025-11-03) looks wrong — he was in Joe's January 2026 payroll
+- [ ] Decide what to do with Paty + Carlos Pedro (NO_DATA but got full base pay — different clock system, or actually missed?)
+- [ ] When Joe approves the math, run May PP2 in parallel with his Sheet for both weeks (May 11-17 + May 18-24)
+- [ ] Phase 4c (when ready): re-derive diff dialog, CSV export, retire `useSupabasePayroll.ts` (silences the `period_id=eq.X` 400 console error)
+- [ ] TL clock-in widget extraction (deferred — TLs can read timeclock status but no clock-in button on TeamLeadHome)
 
 ## Next step when you come back
 
-Pick a fresh thread — Torro pilot readiness is the obvious next one. The scheduled task on 2026-05-25 handles review-system verification automatically; you don't need to remember it.
+Send Joe the URL `http://localhost:8080/admin/payroll/week/cc6a801b-5381-4417-a376-bba59f6a86e4` and ask him to spot-check 3-5 agents' totals against what his Sheet would compute for the same week. Drop his feedback into the next session — bugs are fast fixes; convention questions ("Sunday should be 30% not 25%") are single-line changes in `_calc_pay_components`.
 
 ## Watch out for
 
-- **All 4 DRY_RUN flags are now `"false"`** — `DRY_RUN_EOD`, `DRY_RUN_COMPLIANCE`, `DRY_RUN_HOLIDAY`, `DRY_RUN_REVIEW`. Real emails fire from cron. To silence one, set it back to anything other than the literal string `"false"`.
-- **You'll receive 2 escalation emails per missed review** — once to `diomedes@justoutsource.it` (owner record) and once to `sandoval.028@gmail.com` (HR Test admin record). Acceptable for now; clean up later by stripping the email from the HR Test record if it gets noisy.
-- **Edge function CORS is strict now** — if you add a staging or preview domain that needs to hit edge functions from a browser, widen the `ALLOWED_ORIGIN` secret in Supabase. The code fallback only allows `https://app.justoutsource.it`.
-- **DB changes from this session are NOT in `supabase/migrations/`** — the email UPDATEs and the `expand_tl_review_routing_to_all_assigned_tls` RPC migration are live on Supabase but there's no migration file in the repo. If you ever replay migrations from a fresh DB you'll lose them. Worth dumping current schema and committing tracked migrations at some point.
-- **Edge function code in git matches what's deployed** — no drift between source and Supabase.
+- **The Dashboard has a 400 console error** from `usePayrollRecords?period_id=eq.X` — harmless legacy noise from useSupabasePayroll.ts, retires in Phase 4c.
+- **5 commits sit unpushed locally** (Phase 1, 2, 3, 4a, and this Phase 4b commit). When you `git push`, the live app gets all of it. Live currently uses the old `/payroll-run` page; pushing replaces that path.
+- **The TCW import inserted 182 rows into `time_clock` for May 11-17.** Real data, not test data. Don't delete.
+- **Vacation balance card only shows on `/admin/payroll/agent/:id`.** Never surface to agent UI until D's explicit go.
+- **`pay_derive_week` requires `is_leadership()`** — works fine when D is logged in via browser; failed in sandbox SQL because auth.uid() is null there.
+- **Use `EMPTY_PAYROLL_RESULT`** for any future legacy page that still calls `calcularNomina()` to avoid white screens. Phase 4c will retire all such callers.
+- **`npm run build` not run locally yet** — `tsc --noEmit` is clean. The Vite sandbox build failed due to a rollup arch mismatch (Linux ARM64 vs macOS binaries), but D's Mac will build fine.
+- **There may be a stale `.git/index.lock`** in the project — sandbox couldn't remove it. If `git add` complains, run `rm -f .git/index.lock` first.
