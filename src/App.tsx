@@ -43,6 +43,8 @@ import ClientCampaignDetail from "@/pages/ClientCampaignDetail";
 import ProvisionOrg from "@/pages/ProvisionOrg";
 import AgentReviews from "@/pages/AgentReviews";
 import SystemUsers from "@/pages/SystemUsers";
+import Payroll from "@/pages/admin/Payroll";
+import PayrollWeek from "@/pages/admin/PayrollWeek";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
@@ -159,6 +161,9 @@ const App = () => (
                     <Route path="/account" element={<Account />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
+                    {/* Payroll Phase 4a — owner/admin/manager only */}
+                    <Route path="/admin/payroll" element={<RequireLeadership><Payroll /></RequireLeadership>} />
+                    <Route path="/admin/payroll/week/:weekId" element={<RequireLeadership><PayrollWeek /></RequireLeadership>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </AppLayout>

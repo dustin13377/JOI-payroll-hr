@@ -100,8 +100,13 @@ export default function Empleados() {
     return { newHires: nh, tenuredActive: ta };
   }, [employees]);
 
-  // Source list for the current tab (active vs new hires both render the same table).
-  const sourceList = view === "new_hires" ? newHires : tenuredActive;
+  // When a search is active, combine all active employees so the search spans all tabs.
+  // When not searching, respect the current tab selection.
+  const isSearching = search.trim().length > 0;
+  const sourceList = useMemo(() => {
+    if (isSearching) return [...tenuredActive, ...newHires];
+    return view === "new_hires" ? newHires : tenuredActive;
+  }, [isSearching, view, tenuredActive, newHires]);
 
   // Active / New Hires employees — filter, sort, and paginate
   const filtered = useMemo(() => {
@@ -648,7 +653,7 @@ export default function Empleados() {
         />
       </div>
 
-      {(view === "active" || view === "new_hires") && (
+      {(view === "active" || view === "new_hires" || isSearching) && (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -665,7 +670,7 @@ export default function Empleados() {
                   </button>
                 </TableHead>
                 <TableHead>Campaign</TableHead>
-                {view === "new_hires" && <TableHead>Day</TableHead>}
+                {view === "new_hires" && !isSearching && <TableHead>Day</TableHead>}
                 <TableHead className="text-right">Base Salary</TableHead>
                 <TableHead className="text-right">Biweekly Net</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
@@ -674,9 +679,10 @@ export default function Empleados() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={view === "new_hires" ? 7 : 6} className="text-center text-muted-foreground py-8">
-                    {view === "new_hires"
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    {view === "new_hires" && !isSearching
                       ? "No new hires in the last 30 days."
+                      : isSearching ? "No employees matched your search."
                       : "No employees found"}
                   </TableCell>
                 </TableRow>
@@ -707,7 +713,7 @@ export default function Empleados() {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{(emp as any)._campaignName || "—"}</TableCell>
-                      {view === "new_hires" && days !== null && (
+                      {view === "new_hires" && !isSearching && days !== null && (
                         <TableCell>
                           <Badge
                             variant="outline"
@@ -775,7 +781,13 @@ export default function Empleados() {
       </Card>
       )}
 
-      {view === "inactive" && (
+      {(view === "inactive" || (isSearching && inactiveFiltered.length > 0)) && (
+        <>
+        {isSearching && view !== "inactive" && (
+          <p className="text-sm font-medium text-muted-foreground -mb-2 mt-2">
+            Also found in Inactive ({inactiveFiltered.length})
+          </p>
+        )}
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -845,10 +857,11 @@ export default function Empleados() {
             </Table>
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Pagination — for active + new hires views; inactive list is short */}
-      {(view === "active" || view === "new_hires") && (
+      {(view === "active" || view === "new_hires" || isSearching) && (
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Showing {filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length}</span>

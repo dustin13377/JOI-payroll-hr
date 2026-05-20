@@ -85,6 +85,15 @@ export default function EmpleadoPerfil() {
   const queryClient = useQueryClient();
   const { isLeadership, isTeamLead, employeeId: authEmployeeId } = useAuth();
 
+  // Highlight inputs with an amber border when empty — leadership only, so
+  // HR/admins can spot missing data at a glance. Skipped for fields where
+  // empty is the normal state (e.g. Last Worked Day for active employees).
+  const emptyHL = (value: unknown): string => {
+    if (!isLeadership) return "";
+    const empty = value === null || value === undefined || value === "";
+    return empty ? "border-2 border-amber-400 focus-visible:border-amber-400" : "";
+  };
+
   // A3a: compliance status for this employee (uses DB uuid)
   const empFromList = employees.find((e) => e.id === id);
 
@@ -423,6 +432,30 @@ export default function EmpleadoPerfil() {
                 <p className="text-sm">{empRecord?._campaignName || "—"}</p>
               </div>
             )}
+            {/* Role — TLs see read-only, leadership can change */}
+            <div className="grid gap-1.5">
+              <Label className={isLeadership ? "" : "text-muted-foreground text-xs"}>Role</Label>
+              <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                <span className="text-sm capitalize">
+                  {String(emp.title || "agent").replace("_", " ")}
+                </span>
+                {isLeadership && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChangeRoleOpen(true)}
+                  >
+                    Change role
+                  </Button>
+                )}
+              </div>
+              {isLeadership && (
+                <p className="text-xs text-muted-foreground">
+                  Promotes/demotes the employee. App access updates after their next sign-in.
+                </p>
+              )}
+            </div>
             {/* Shift (read-only from campaign settings) */}
             {campaignShifts.length > 0 && (
               <div className="grid gap-1.5">
@@ -466,6 +499,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Work Name</Label>
                 <Input
+                  className={emptyHL(taxForm.work_name)}
                   value={taxForm.work_name}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, work_name: e.target.value }))}
                   placeholder="Preferred name"
@@ -474,6 +508,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Personal Email</Label>
                 <Input
+                  className={emptyHL(taxForm.personal_email)}
                   type="email"
                   value={taxForm.personal_email}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, personal_email: e.target.value }))}
@@ -484,6 +519,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Date of Birth</Label>
                 <Input
+                  className={emptyHL(taxForm.date_of_birth)}
                   type="date"
                   value={taxForm.date_of_birth}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, date_of_birth: e.target.value }))}
@@ -492,6 +528,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Marital Status</Label>
                 <Input
+                  className={emptyHL(taxForm.marital_status)}
                   value={taxForm.marital_status}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, marital_status: e.target.value }))}
                   placeholder="e.g. Soltero, Casado"
@@ -500,6 +537,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2 sm:col-span-2">
                 <Label>Emergency Contact</Label>
                 <Input
+                  className={emptyHL(taxForm.emergency_contact)}
                   value={taxForm.emergency_contact}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, emergency_contact: e.target.value }))}
                   placeholder="Name — Relationship — Phone"
@@ -508,6 +546,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Phone</Label>
                 <Input
+                  className={emptyHL(taxForm.phone)}
                   value={taxForm.phone}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, phone: e.target.value }))}
                   placeholder="33 1234 5678"
@@ -518,6 +557,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Address</Label>
                 <Input
+                  className={emptyHL(taxForm.address)}
                   value={taxForm.address}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, address: e.target.value }))}
                   placeholder="Calle, Colonia, Ciudad, CP"
@@ -545,6 +585,7 @@ export default function EmpleadoPerfil() {
                 ) : (
                   <>
                     <Input
+                      className={emptyHL(taxForm.email)}
                       type="email"
                       value={taxForm.email}
                       onChange={(e) => setTaxFormDirty((f) => ({ ...f, email: e.target.value }))}
@@ -560,6 +601,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Hire Date</Label>
                 <Input
+                  className={emptyHL(taxForm.hire_date)}
                   type="date"
                   value={taxForm.hire_date}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, hire_date: e.target.value }))}
@@ -571,7 +613,7 @@ export default function EmpleadoPerfil() {
                   value={taxForm.department_id || "none"}
                   onValueChange={(v) => setTaxFormDirty((f) => ({ ...f, department_id: v === "none" ? "" : v }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={emptyHL(taxForm.department_id)}>
                     <SelectValue placeholder="Select department..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -590,25 +632,6 @@ export default function EmpleadoPerfil() {
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, last_worked_day: e.target.value }))}
                 />
               </div>
-              <div className="grid gap-2 sm:col-span-2">
-                <Label>Role</Label>
-                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-                  <span className="text-sm capitalize">
-                    {String(emp.title || "agent").replace("_", " ")}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setChangeRoleOpen(true)}
-                  >
-                    Change role
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Promotes/demotes the employee. App access updates after their next sign-in.
-                </p>
-              </div>
             </div>
 
             <Separator />
@@ -619,6 +642,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Bank Name</Label>
                 <Input
+                  className={emptyHL(taxForm.bank_name)}
                   value={taxForm.bank_name}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, bank_name: e.target.value }))}
                   placeholder="e.g. BBVA, Banorte"
@@ -627,6 +651,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>Bank CLABE</Label>
                 <Input
+                  className={emptyHL(taxForm.bank_clabe)}
                   value={taxForm.bank_clabe}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, bank_clabe: e.target.value.replace(/\D/g, "") }))}
                   placeholder="012345678901234567"
@@ -644,6 +669,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>CURP</Label>
                 <Input
+                  className={emptyHL(taxForm.curp)}
                   value={taxForm.curp}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, curp: e.target.value.toUpperCase() }))}
                   placeholder="GARC850101HDFRRL09"
@@ -654,6 +680,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>RFC</Label>
                 <Input
+                  className={emptyHL(taxForm.rfc)}
                   value={taxForm.rfc}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, rfc: e.target.value.toUpperCase() }))}
                   placeholder="GARC850101AB3"
@@ -664,6 +691,7 @@ export default function EmpleadoPerfil() {
               <div className="grid gap-2">
                 <Label>NSS (IMSS)</Label>
                 <Input
+                  className={emptyHL(taxForm.nss)}
                   value={taxForm.nss}
                   onChange={(e) => setTaxFormDirty((f) => ({ ...f, nss: e.target.value.replace(/\D/g, "") }))}
                   placeholder="12345678901"

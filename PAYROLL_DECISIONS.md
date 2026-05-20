@@ -66,6 +66,36 @@ The `mid_week_termination` note is added to `auto_derived.notes` for the Phase 4
 
 ---
 
+## Phase 4a — UI (2026-05-20)
+
+### UI-D1 — Sidebar placement
+"Payroll" nav entry replaces "Payroll Run" in the leadership main sidebar, positioned after "Employees." Points to `/admin/payroll`. Old `/payroll-run` route (Phase 0 page) still accessible by URL until Phase 4c cleanup.
+
+### UI-D2 — Manager campaign scope
+No `manager_campaigns` join table exists in the DB. Managers see all campaigns via RLS (server enforces per-employee_id). If per-manager campaign filtering is needed, create a `manager_campaigns` table matching the `team_lead_campaigns` shape and update `useWeekRecords`.
+
+### UI-D3 — KPI achieved UX
+Inline toggle (shadcn Switch) in the expanded row. Auto-derive populates it; manager/owner can flip it. Most-edited cell after extra_bonus.
+
+### UI-D4 — Add Next Week: owner only
+Creating a payroll week is a pay-cadence decision. Only owner can trigger "Add Next Week". Managers can view but not create weeks.
+
+### UI-D5 — extra_bonus permission matrix
+- PAID → nobody can edit
+- COMPLETE → owner only
+- UNPAID → owner + any manager (no per-campaign filter)
+
+### UI-D6 — PAID row behavior
+PAID rows: greyed background (`bg-muted/50`), lock icon instead of chevron, click handler is no-op, expanded row never renders. DB trigger blocks UPDATE on PAID rows as defense in depth.
+
+### UI-D7 — Re-derive button is a stub in 4a
+Button exists and opens a dialog explaining it's coming in Phase 4c. Backend RPC `pay_redrive_week` is live but the diff UX is Phase 4c.
+
+### UI-D8 — No new DB migrations in Phase 4a
+4a is UI-only. The only change to the table name convention: hooks use `payroll_periods` (correct) not `pay_periods` (the name used in the original prompt spec, which was wrong).
+
+---
+
 ## Phase 1 — Schema + Rates (2026-05-19)
 
 See `PAYROLL_PHASE1_DECISIONS.md` for the full set of Phase 1 decisions (column choices, archive design, bi-monthly period format, etc.).
