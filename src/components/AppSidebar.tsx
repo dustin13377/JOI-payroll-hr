@@ -13,6 +13,7 @@ import {
   Settings,
   Building2,
   Calculator,
+  DollarSign,
   UserCog,
   FileCheck,
   ScrollText,
@@ -43,7 +44,9 @@ import {
 const leadershipItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Employees", url: "/empleados", icon: Users },
-  { title: "Payroll Run", url: "/payroll-run", icon: Calculator },
+  // Phase 4a: new payroll UI at /admin/payroll replaces the old /payroll-run entry.
+  // The old PayrollRun page (/payroll-run) is still accessible by URL until Phase 4c cleanup.
+  { title: "Payroll", url: "/admin/payroll", icon: DollarSign },
   { title: "Payroll History", url: "/historial", icon: History },
   { title: "Invoices (USD)", url: "/facturas", icon: FileText },
   { title: "Campaigns", url: "/campaigns", icon: Building2 },
