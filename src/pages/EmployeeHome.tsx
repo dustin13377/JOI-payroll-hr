@@ -155,11 +155,11 @@ export default function EmployeeHome() {
       if (!employeeId) return null;
       const { data, error } = await supabase
         .from("employees")
-        .select("id, full_name, campaign_id, title, curp, rfc, address, phone, bank_clabe, work_name, personal_email, hire_date, emergency_contact, bank_name, date_of_birth, marital_status, nss, last_worked_day, department_id, departments(name)")
+        .select("id, full_name, campaign_id, title, work_name")
         .eq("id", employeeId)
         .single();
       if (error) throw error;
-      return data as { id: string; full_name: string; campaign_id: string; title: string; curp: string | null; rfc: string | null; address: string | null; phone: string | null; bank_clabe: string | null; work_name: string | null; personal_email: string | null; hire_date: string | null; emergency_contact: string | null; bank_name: string | null; date_of_birth: string | null; marital_status: string | null; nss: string | null; last_worked_day: string | null; department_id: string | null; departments: { name: string } | null };
+      return data as { id: string; full_name: string; campaign_id: string; title: string; work_name: string | null };
     },
     enabled: !!employeeId,
   });
@@ -766,109 +766,6 @@ export default function EmployeeHome() {
           accent={minutesLate > 0 ? "text-red-600" : undefined}
         />
       </div>
-
-      {/* A1 + A1b: My Info (read-only for agent) */}
-      {employee && (employee.curp || employee.rfc || employee.address || employee.phone || employee.bank_clabe || employee.work_name || employee.personal_email || employee.hire_date || employee.emergency_contact || employee.bank_name || employee.date_of_birth || employee.marital_status || employee.nss || employee.last_worked_day || employee.departments?.name) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">My Info</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {employee.work_name && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Work Name</span>
-                  <span className="text-sm font-medium">{employee.work_name}</span>
-                </div>
-              )}
-              {employee.personal_email && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Personal Email</span>
-                  <span className="text-sm font-medium">{employee.personal_email}</span>
-                </div>
-              )}
-              {employee.date_of_birth && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Date of Birth</span>
-                  <span className="text-sm font-medium">{formatDateMXLong(employee.date_of_birth)}</span>
-                </div>
-              )}
-              {employee.marital_status && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Marital Status</span>
-                  <span className="text-sm font-medium">{employee.marital_status}</span>
-                </div>
-              )}
-              {employee.emergency_contact && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Emergency Contact</span>
-                  <span className="text-sm font-medium">{employee.emergency_contact}</span>
-                </div>
-              )}
-              {employee.phone && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Phone</span>
-                  <span className="text-sm font-medium">{employee.phone}</span>
-                </div>
-              )}
-              {employee.address && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Address</span>
-                  <span className="text-sm font-medium">{employee.address}</span>
-                </div>
-              )}
-              {employee.hire_date && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Hire Date</span>
-                  <span className="text-sm font-medium">{formatDateMXLong(employee.hire_date)}</span>
-                </div>
-              )}
-              {employee.departments?.name && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Department</span>
-                  <span className="text-sm font-medium">{employee.departments.name}</span>
-                </div>
-              )}
-              {employee.last_worked_day && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Last Worked Day</span>
-                  <span className="text-sm font-medium">{formatDateMXLong(employee.last_worked_day)}</span>
-                </div>
-              )}
-              {employee.bank_name && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Bank Name</span>
-                  <span className="text-sm font-medium">{employee.bank_name}</span>
-                </div>
-              )}
-              {employee.bank_clabe && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">Bank CLABE</span>
-                  <span className="text-sm font-medium">{employee.bank_clabe}</span>
-                </div>
-              )}
-              {employee.curp && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">CURP</span>
-                  <span className="text-sm font-medium">{employee.curp}</span>
-                </div>
-              )}
-              {employee.rfc && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">RFC</span>
-                  <span className="text-sm font-medium">{employee.rfc}</span>
-                </div>
-              )}
-              {employee.nss && (
-                <div className="grid gap-1">
-                  <span className="text-xs text-muted-foreground">NSS (IMSS)</span>
-                  <span className="text-sm font-medium">{employee.nss}</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* A2b: My Documents — agent read-only */}
       <MyDocumentsCard employeeId={employeeId} />
