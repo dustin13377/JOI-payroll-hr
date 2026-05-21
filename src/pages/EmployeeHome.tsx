@@ -36,7 +36,9 @@ import {
   Timer,
   FileText,
   Upload,
+  Megaphone,
 } from "lucide-react";
+import { usePublishedPosts, useMyAcks } from "@/hooks/useBulletin";
 import { useEmployeeDocuments, useUploadDocument } from "@/hooks/useEmployeeDocuments";
 import { useMyGoal } from "@/hooks/useSupabasePayroll";
 import { GoalPromptDialog } from "@/components/GoalPromptDialog";
@@ -401,6 +403,16 @@ export default function EmployeeHome() {
 
   const compliance = useComplianceStatus(employeeId);
 
+  // Bulletin: unread announcements + unanswered surveys
+  const { data: publishedPosts = [] } = usePublishedPosts();
+  const { data: myAcks = new Set<string>() } = useMyAcks();
+  const unreadBulletinCount = publishedPosts.filter(
+    (p) =>
+      p.type !== "recognition" &&
+      ((p.type === "announcement" && p.requires_ack && !myAcks.has(p.id)) ||
+        p.type === "questionnaire")
+  ).length;
+
   // C2: Policies to review count
   const { data: myPolicies = [] } = useMyApplicablePolicies(
     employee?.campaign_id ?? null,
@@ -734,6 +746,29 @@ export default function EmployeeHome() {
             <Button asChild variant="outline" className="w-full justify-start h-11">
               <Link to="/solicitudes">
                 <CalendarDays className="mr-2 h-4 w-4" /> Request Time Off
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className={`w-full justify-start h-11 ${
+                unreadBulletinCount > 0
+                  ? "border-orange-300 bg-orange-50 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/30 dark:hover:bg-orange-950/50"
+                  : ""
+              }`}
+            >
+              <Link to="/comunicados">
+                <Megaphone
+                  className={`mr-2 h-4 w-4 ${
+                    unreadBulletinCount > 0 ? "text-orange-500" : ""
+                  }`}
+                />
+                Announcements
+                {unreadBulletinCount > 0 && (
+                  <Badge className="ml-auto h-5 min-w-5 rounded-full bg-orange-500 px-1.5 text-[11px] text-white">
+                    {unreadBulletinCount}
+                  </Badge>
+                )}
               </Link>
             </Button>
           </CardContent>
