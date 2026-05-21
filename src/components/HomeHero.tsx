@@ -183,9 +183,10 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
   });
 
   // ---------- Bulletin unread count (Announcements badge) ----------
+  // useMyAcks returns a Set<string> directly (not an array of rows), so no
+  // .map() — just use it as-is for O(1) `.has()` lookups.
   const { data: posts = [] } = usePublishedPosts();
-  const { data: acks = [] } = useMyAcks();
-  const myAcks = new Set(acks.map((a) => a.post_id));
+  const { data: myAcks = new Set<string>() } = useMyAcks();
   const unreadBulletinCount = posts.filter(
     (p) =>
       p.type !== "recognition" &&
