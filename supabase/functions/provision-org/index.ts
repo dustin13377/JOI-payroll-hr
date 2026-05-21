@@ -20,7 +20,7 @@
  *   ALLOWED_ORIGIN  — CORS origin allowlist (default "*")
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -200,7 +200,11 @@ Deno.serve(async (req) => {
 
     if (profileInsertErr) {
       console.error("user_profile insert error:", profileInsertErr);
-      // Don't roll back the invite (email may already be sent); log and return error
+      // Roll back: delete the auth user (which voids the invite token),
+      // then the employee row and org so the caller can retry cleanly.
+      await supabaseAdmin.auth.admin.deleteUser(invitedUserId);
+      await supabaseAdmin.from("employees").delete().eq("id", employeeId);
+      await supabaseAdmin.from("organizations").delete().eq("id", orgId);
       return json({ error: "Failed to create user profile" }, 500);
     }
 

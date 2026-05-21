@@ -2493,6 +2493,56 @@ export type Database = {
           },
         ]
       }
+      tl_nudges: {
+        Row: {
+          date: string
+          employee_id: string
+          nudged_at: string
+          nudged_by: string
+        }
+        Insert: {
+          date?: string
+          employee_id: string
+          nudged_at?: string
+          nudged_by: string
+        }
+        Update: {
+          date?: string
+          employee_id?: string
+          nudged_at?: string
+          nudged_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tl_nudges_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tl_nudges_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tl_nudges_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tl_nudges_nudged_by_fkey"
+            columns: ["nudged_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_profiles: {
         Row: {
           client_id: string | null

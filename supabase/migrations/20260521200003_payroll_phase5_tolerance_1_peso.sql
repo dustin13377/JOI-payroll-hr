@@ -1,0 +1,24 @@
+-- =============================================================================
+-- Payroll Phase 5 — Raise match tolerance to $1.00
+-- 2026-05-21
+--
+-- Joe rounds all pay to whole pesos. LFT fractions (monthly/4, monthly/30)
+-- produce cent remainders (e.g. $20,083.33 vs $20,084.00 = $0.67 diff).
+-- A $0.01 tolerance flagged these as divergences even though they're correct.
+-- Raising to $1.00 captures genuine mismatches while ignoring peso rounding.
+-- Recovered 9 additional matches (Deysi 7, Javier 1, Ruben 1).
+--
+-- NOTE: This file documents the tolerance already baked into the function
+-- deployed in migration 20260521200002. No additional SQL needed here —
+-- the IF v_diff <= 1.00 condition is already live in pay_validate_archive_all.
+--
+-- Final result: 97.03% match rate (424/437), gate_passed = TRUE
+-- Run ID: fa33fc75-a8c8-41ad-b629-f6722a95c8b2
+-- =============================================================================
+
+-- No SQL changes required — tolerance is set in pay_validate_archive_all
+-- (deployed in 20260521200002). This file is a record of the decision.
+
+-- To re-run validation at any time:
+--   SELECT pay_validate_archive_all('description of run');
+-- Results land in public.payroll_validation_runs (leadership-only RLS).

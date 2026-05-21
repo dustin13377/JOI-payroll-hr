@@ -1079,3 +1079,163 @@ export function useEODProgress(campaignId: string | null) {
     refetchOnWindowFocus: true,
   });
 }
+
+/* ================================================================== */
+/*  Hook – useMissingYesterdayEod                                      */
+/*  Agents who clocked in yesterday but didn't submit an EOD log.      */
+/*  Used by Today's Roster to surface a "Missing yesterday's EOD"      */
+/*  amber strip with a Submit-for-agent button per agent.              */
+/* ================================================================== */
+
+export interface MissingYesterdayAgent {
+  employeeId: string;
+  fullName: string;
+  workName: string | null;
+  campaignId: string | null;
+}
+
+export function useMissingYesterdayEod(tlEmployeeId: string | null) {
+  return useQuery({
+    queryKey: ["team-missing-yesterday-eod", tlEmployeeId],
+    queryFn: async (): Promise<MissingYesterdayAgent[]> => {
+      if (!tlEmployeeId) return [];
+
+      // Compute yesterday's local date
+      const yesterdayDt = new Date();
+      yesterdayDt.setDate(yesterdayDt.getDate() - 1);
+      const yesterday = todayLocal(yesterdayDt);
+
+      // 1. Team roster (active, reports to this TL)
+      const { data: roster, error: rosterErr } = await supabase
+        .from("employees_no_pay")
+        .select("id, full_name, work_name, campaign_id")
+        .eq("reports_to", tlEmployeeId)
+        .eq("is_active", true);
+      if (rosterErr) throw rosterErr;
+      const members = (roster || []) as {
+        id: string;
+        full_name: string;
+        work_name: string | null;
+        campaign_id: string | null;
+      }[];
+      if (members.length === 0) return [];
+      const memberIds = members.map((m) => m.id);
+
+      // 2. Yesterday's time_clock entries (clocked in)
+      const { data: tcRows, error: tcErr } = await supabase
+        .from("time_clock")
+        .select("employee_id")
+        .in("employee_id", memberIds)
+        .eq("date", yesterday);
+      if (tcErr) throw tcErr;
+      const clockedYesterday = new Set(
+        (tcRows || []).map((r) => r.employee_id as string)
+      );
+      if (clockedYesterday.size === 0) return [];
+
+      // 3. Yesterday's eod_logs entries (submitted EOD)
+      const { data: eodRows, error: eodErr } = await supabase
+        .from("eod_logs")
+        .select("employee_id")
+        .in("employee_id", [...clockedYesterday])
+        .eq("date", yesterday);
+      if (eodErr) throw eodErr;
+      const submittedYesterday = new Set(
+        (eodRows || []).map((r) => r.employee_id as string)
+      );
+
+      // 4. Diff — clocked in yesterday but no EOD
+      return members
+        .filter((m) => clockedYesterday.has(m.id) && !submittedYesterday.has(m.id))
+        .map((m) => ({
+          employeeId: m.id,
+          fullName: m.full_name,
+          workName: m.work_name,
+          campaignId: m.campaign_id,
+        }));
+    },
+    enabled: !!tlEmployeeId,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/* ================================================================== */
+/*  Hook – useTodayNudges + useCreateNudge                             */
+/*  Light audit log: which agents has the TL reached out to today?     */
+/*  No notification side-effect — just records that contact was made.  */
+/* ================================================================== */
+
+export interface NudgeRow {
+  employee_id: string;
+  nudged_at: string;
+  nudged_by: string;
+}
+
+export function useTodayNudges(tlEmployeeId: string | null) {
+  return useQuery({
+    queryKey: ["team-nudges-today", tlEmployeeId],
+    queryFn: async (): Promise<Map<string, NudgeRow>> => {
+      if (!tlEmployeeId) return new Map();
+      const today = todayLocal();
+
+      // 1. Team member IDs (so we only return nudges for THIS TL's team)
+      const { data: roster, error: rosterErr } = await supabase
+        .from("employees_no_pay")
+        .select("id")
+        .eq("reports_to", tlEmployeeId)
+        .eq("is_active", true);
+      if (rosterErr) throw rosterErr;
+      const memberIds = (roster || []).map((r) => r.id as string);
+      if (memberIds.length === 0) return new Map();
+
+      // 2. Today's nudges for those agents
+      const { data: rows, error } = await supabase
+        .from("tl_nudges")
+        .select("employee_id, nudged_at, nudged_by")
+        .in("employee_id", memberIds)
+        .eq("date", today);
+      if (error) throw error;
+
+      // Map by employee_id for O(1) lookup in the UI
+      const map = new Map<string, NudgeRow>();
+      for (const r of (rows || []) as NudgeRow[]) {
+        map.set(r.employee_id, r);
+      }
+      return map;
+    },
+    enabled: !!tlEmployeeId,
+  });
+}
+
+export function useCreateNudge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      employeeId,
+      tlEmployeeId,
+    }: {
+      employeeId: string;
+      tlEmployeeId: string;
+    }) => {
+      const today = todayLocal();
+      // Upsert so re-nudging the same agent same day updates timestamp,
+      // not errors on the PK.
+      const { error } = await supabase
+        .from("tl_nudges")
+        .upsert(
+          {
+            employee_id: employeeId,
+            date: today,
+            nudged_by: tlEmployeeId,
+            nudged_at: new Date().toISOString(),
+          },
+          { onConflict: "employee_id,date" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: (_data, { tlEmployeeId }) => {
+      queryClient.invalidateQueries({ queryKey: ["team-nudges-today", tlEmployeeId] });
+    },
+  });
+}

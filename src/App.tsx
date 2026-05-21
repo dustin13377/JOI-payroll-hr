@@ -27,7 +27,6 @@ import Campaigns from "@/pages/Campaigns";
 import CampaignDetail from "@/pages/CampaignDetail";
 import PayrollRun from "@/pages/PayrollRun";
 import TeamLeadHome from "@/pages/TeamLeadHome";
-import TLDashboard from "@/pages/TLDashboard";
 import Account from "@/pages/Account";
 import DocumentTypes from "@/pages/DocumentTypes";
 import Departments from "@/pages/Departments";
@@ -148,7 +147,9 @@ const App = () => (
                     <Route path="/vacation" element={<VacationRequests />} />
                     <Route path="/asistencia" element={<RequireTeamLeadOrAbove><Attendance /></RequireTeamLeadOrAbove>} />
                     <Route path="/desempeno" element={<RequireTeamLeadOrAbove><Performance /></RequireTeamLeadOrAbove>} />
-                    <Route path="/team-lead/dashboard" element={<RequireTeamLeadOrAbove><TLDashboard /></RequireTeamLeadOrAbove>} />
+                    {/* /team-lead/dashboard removed in PR 2 — its useful bits
+                        (Missing Yesterday, Submit-for-agent) moved into
+                        TodaysRosterCard on the TL home. */}
                     <Route path="/reviews" element={<RequireTeamLeadOrAbove><AgentReviews /></RequireTeamLeadOrAbove>} />
                     <Route path="/settings/shifts" element={<RequireTeamLeadOrAbove><ShiftSettings /></RequireTeamLeadOrAbove>} />
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />

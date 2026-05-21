@@ -1,10 +1,10 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEmployees, useUpdateEmployee, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates, recordToConfig } from "@/hooks/useSupabasePayroll";
+import { useEmployees, useUpdateEmployee, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates } from "@/hooks/useSupabasePayroll";
 import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { EMPTY_PAYROLL_RESULT } from "@/types/payroll";
+// EMPTY_PAYROLL_RESULT retired in Phase 4c — payroll card now reads from records directly
 import type { EmployeeWithMeta } from "@/types/payroll";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -314,6 +314,31 @@ export default function EmpleadoPerfil() {
   });
   const [taxErrors, setTaxErrors] = useState<Record<string, string>>({});
   const [changeRoleOpen, setChangeRoleOpen] = useState(false);
+  const [emailEditOpen, setEmailEditOpen] = useState(false);
+  const [emailEditDraft, setEmailEditDraft] = useState("");
+  const [emailEditError, setEmailEditError] = useState("");
+  const updateWorkEmailMutation = useMutation({
+    mutationFn: async ({ employeeId, newEmail }: { employeeId: string; newEmail: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+      const res = await supabase.functions.invoke("update-work-email", {
+        body: { employeeId, newEmail },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.error) throw new Error(res.error.message ?? "Unknown error");
+      const body = res.data as { ok?: boolean; error?: string };
+      if (body?.error) throw new Error(body.error);
+    },
+    onSuccess: () => {
+      toast.success("Work email updated — the employee will need to use the new address to log in.");
+      setEmailEditOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    },
+    onError: (err: Error) => {
+      setEmailEditError(err.message === "email_taken" ? "That email is already in use." : err.message);
+    },
+  });
   // B-02: dirty flag prevents TanStack refetches from clobbering in-flight edits
   const taxFormDirty = useRef(false);
   const setTaxFormDirty: typeof setTaxForm = (update) => {
@@ -404,19 +429,11 @@ export default function EmpleadoPerfil() {
     );
   }
 
-  // Phase 4b: calcularNomina() removed (throws). Use placeholder zero-result
-  // AND zero-config; real net pay lives at /admin/payroll/agent/:id.
-  // Phase 4c will retire this whole payroll-summary card.
-  const result = EMPTY_PAYROLL_RESULT;
-  const config = {
-    empleadoId: emp?.id ?? "",
-    diasFaltados: 0,
-    kpiAplicado: false,
-    diasExtra: 0,
-    primaDominical: false,
-    diaFestivo: false,
-    bonosAdicionales: 0,
-  };
+  // Phase 4c: payroll summary card now reads directly from payroll_records.
+  // calcularNomina() is retired — full breakdown lives at /admin/payroll/agent/:id.
+  const empPayrollRecord = records.find((r: { employee_id: string }) => r.employee_id === emp?._uuid);
+  const calculatedNetPay: number | null = empPayrollRecord?.calculated_net_pay ?? null;
+  const dailySalary = emp?.sueldoBase ? emp.sueldoBase / 30 : 0;
 
   const saveField = (field: string, value: unknown) => {
     updateEmployee.mutate(
@@ -679,10 +696,22 @@ export default function EmpleadoPerfil() {
                 <Label>Work Email <span className="text-muted-foreground font-normal">(login)</span></Label>
                 {emailIsLocked ? (
                   <>
-                    <div className="p-2.5 rounded-md border bg-muted/30 text-sm">{empEmail}</div>
-                    <p className="text-xs text-muted-foreground">
-                      Already set. Changing the login email after sign-in requires extra steps — ping dev to update it safely.
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 p-2.5 rounded-md border bg-muted/30 text-sm">{empEmail}</div>
+                      {isLeadership && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setEmailEditDraft(empEmail); setEmailEditError(""); setEmailEditOpen(true); }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                        </Button>
+                      )}
+                    </div>
+                    {!isLeadership && (
+                      <p className="text-xs text-muted-foreground">Login email — contact a manager to change it.</p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -844,8 +873,8 @@ export default function EmpleadoPerfil() {
             </div>
             <Separator />
             <div className="p-3 rounded-lg bg-muted">
-              <p className="text-sm text-muted-foreground">Daily Salary</p>
-              <p className="text-xl font-bold">{fmt(result.sueldoDiario)}</p>
+              <p className="text-sm text-muted-foreground">Daily Rate (Base ÷ 30)</p>
+              <p className="text-xl font-bold">{dailySalary > 0 ? fmt(dailySalary) : "—"}</p>
             </div>
           </CardContent>
         </Card>
@@ -895,29 +924,27 @@ export default function EmpleadoPerfil() {
       {/* I1: 30-Day Review — TL of own team + leadership */}
       {(isLeadership || isTeamLead) && emp._uuid && <ThirtyDayReviewCard employeeId={emp._uuid} />}
 
-      {/* Biweekly Breakdown — leadership only */}
+      {/* Current Period Pay — leadership only (Phase 4c: replaces the old EMPTY_PAYROLL_RESULT card) */}
       {isLeadership && (
       <Card>
-        <CardHeader><CardTitle className="text-lg">Biweekly Breakdown</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-lg">Current Period Pay</CardTitle>
+          <Button asChild variant="outline" size="sm">
+            <a href={`/admin/payroll/agent/${id}`}>Full Breakdown →</a>
+          </Button>
+        </CardHeader>
         <CardContent>
-          <div className="grid gap-3">
-            <Row label="Biweekly Salary (Base/2)" value={fmt(result.sueldoQuincenal)} />
-            <Separator />
-            <p className="text-sm font-semibold text-destructive">Deductions</p>
-            <Row label={`Absences (${config.diasFaltados} × ${fmt(emp.descuentoPorDia)})`} value={`-${fmt(result.descuentoFaltas)}`} negative />
-            <Separator />
-            <p className="text-sm font-semibold text-primary">Extras</p>
-            <Row label="KPI" value={`+${fmt(result.montoKpi)}`} />
-            <Row label={`Extra Days (${config.diasExtra} × $1,000)`} value={`+${fmt(result.montoDiasExtra)}`} />
-            <Row label="Sunday Premium" value={`+${fmt(result.montoPrimaDominical)}`} />
-            <Row label="Holiday" value={`+${fmt(result.montoDiaFestivo)}`} />
-            <Row label="Additional Bonuses" value={`+${fmt(result.bonosAdicionales)}`} />
-            <Separator />
+          {calculatedNetPay !== null ? (
             <div className="flex justify-between items-center p-3 rounded-lg bg-primary/10">
-              <span className="font-bold text-lg">Net Pay</span>
-              <span className="font-bold text-2xl text-primary">{fmt(result.netoAPagar)}</span>
+              <span className="font-semibold text-muted-foreground">Net Pay (last run)</span>
+              <span className="font-bold text-2xl text-primary">{fmt(calculatedNetPay)}</span>
             </div>
-          </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-2">
+              No payroll record for the current period yet.{" "}
+              <a href={`/admin/payroll/agent/${id}`} className="underline">Run payroll →</a>
+            </p>
+          )}
         </CardContent>
       </Card>
       )}
@@ -931,6 +958,43 @@ export default function EmpleadoPerfil() {
           currentTitle={(emp.title || "agent") as "agent" | "team_lead" | "manager" | "admin" | "owner"}
         />
       )}
+
+      {/* Work email edit dialog — manager/owner only */}
+      <Dialog open={emailEditOpen} onOpenChange={(o) => { if (!updateWorkEmailMutation.isPending) setEmailEditOpen(o); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Work Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              This updates both the employee record <strong>and</strong> their login address.
+              They'll need to use the new email the next time they sign in.
+            </p>
+            <Input
+              type="email"
+              value={emailEditDraft}
+              onChange={(e) => { setEmailEditDraft(e.target.value); setEmailEditError(""); }}
+              placeholder="new@yourdomain.com"
+              disabled={updateWorkEmailMutation.isPending}
+            />
+            {emailEditError && <p className="text-xs text-destructive">{emailEditError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailEditOpen(false)} disabled={updateWorkEmailMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={updateWorkEmailMutation.isPending || !emailEditDraft.trim()}
+              onClick={() => {
+                if (!emp.id) return;
+                updateWorkEmailMutation.mutate({ employeeId: emp.id, newEmail: emailEditDraft.trim() });
+              }}
+            >
+              {updateWorkEmailMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

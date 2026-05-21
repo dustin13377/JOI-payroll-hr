@@ -418,8 +418,8 @@ export default function EmployeeHome() {
     employee?.campaign_id ?? null,
     employee?.title
   );
-  const { data: myAcks = [] } = useMyPolicyAcks();
-  const ackedVersionIds = new Set(myAcks.map((a) => a.policy_document_version_id));
+  const { data: myPolicyAcks = [] } = useMyPolicyAcks();
+  const ackedVersionIds = new Set(myPolicyAcks.map((a) => a.policy_document_version_id));
   const unackedPolicyCount = myPolicies.filter(
     (p) => p.current_version && !ackedVersionIds.has(p.current_version.id)
   ).length;
