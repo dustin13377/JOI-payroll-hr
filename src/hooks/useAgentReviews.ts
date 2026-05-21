@@ -128,6 +128,54 @@ export function useEmployeeReviews(employeeId: string | undefined | null) {
 }
 
 /**
+ * Sidebar badge count for /reviews.
+ *
+ * Counts "stuff that needs attention" — runs as two parallel COUNTs and sums:
+ *   1. Actionable reviews — open (completed_at IS NULL) and the due date has
+ *      arrived (due_date <= today). Upcoming reviews are excluded because the
+ *      Submit Review button is disabled until the due date, so they aren't
+ *      actionable.
+ *   2. Pending termination confirmations — TL-filed let_go decisions still
+ *      waiting on HR to confirm or deny.
+ *
+ * RLS handles role scoping automatically:
+ *   - Leadership sees org-wide totals for both buckets.
+ *   - TLs see their team's actionable count + (rarely > 0) any let_go they
+ *     filed that's still pending HR review.
+ *   - Agents are gated at the hook level via the `enabled` flag — they can't
+ *     read other people's reviews and the badge would always be 0 anyway.
+ *
+ * Polls every 30s. Mutations on agent_reviews invalidate the broader
+ * `["agent-reviews"]` key, which transitively refreshes this count.
+ */
+export function usePendingAgentReviewsCount(enabled: boolean) {
+  return useQuery({
+    queryKey: ["agent-reviews", "pending_count"],
+    queryFn: async (): Promise<number> => {
+      const today = todayLocal();
+      const [actionable, pendingHr] = await Promise.all([
+        supabase
+          .from("agent_reviews")
+          .select("*", { count: "exact", head: true })
+          .is("completed_at", null)
+          .lte("due_date", today),
+        supabase
+          .from("agent_reviews")
+          .select("*", { count: "exact", head: true })
+          .eq("decision", "let_go")
+          .eq("termination_status", "pending"),
+      ]);
+      if (actionable.error) throw actionable.error;
+      if (pendingHr.error) throw pendingHr.error;
+      return (actionable.count ?? 0) + (pendingHr.count ?? 0);
+    },
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    staleTime: 0,
+  });
+}
+
+/**
  * Let-go decisions filed by TLs that are still waiting on HR confirmation.
  * Powers the HR queue. RLS will return [] for non-leadership users.
  */

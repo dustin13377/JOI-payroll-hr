@@ -21,11 +21,13 @@ import {
   PlusSquare,
   ClipboardEdit,
   ShieldCheck,
+  Megaphone,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { usePendingHrDocumentRequestsCount } from "@/hooks/useHrDocumentRequests";
 import { usePendingTimeOffCount } from "@/hooks/useTimeOffCount";
+import { usePendingAgentReviewsCount } from "@/hooks/useAgentReviews";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +53,7 @@ const leadershipItems = [
   { title: "Invoices (USD)", url: "/facturas", icon: FileText },
   { title: "Campaigns", url: "/campaigns", icon: Building2 },
   { title: "My Policies", url: "/policies", icon: ScrollText },
+  { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
 
 const hrItems = [
@@ -77,6 +80,7 @@ const teamLeadItems = [
   { title: "My Policies", url: "/policies", icon: ScrollText },
   { title: "My Timeclock", url: "/reloj", icon: Timer },
   { title: "My EOD History", url: "/eod", icon: ClipboardCheck },
+  { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
 
 // Agent — only their own stuff
@@ -88,6 +92,7 @@ const agentItems = [
   { title: "My Policies", url: "/policies", icon: ScrollText },
   { title: "Vacation", url: "/vacation", icon: CalendarDays },
   { title: "Holiday Requests", url: "/holidays", icon: CalendarCheck },
+  { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
 
 export function AppSidebar() {
@@ -101,9 +106,11 @@ export function AppSidebar() {
   const canApprove = isLeadership || isTeamLead;
   const { data: pendingHrDocCount = 0 } = usePendingHrDocumentRequestsCount(canApprove);
   const { data: pendingTimeOffCount = 0 } = usePendingTimeOffCount(canApprove);
+  const { data: pendingReviewsCount = 0 } = usePendingAgentReviewsCount(canApprove);
   const badgeCounts: Record<string, number> = {
     "/hr/document-queue": pendingHrDocCount,
     "/solicitudes": pendingTimeOffCount,
+    "/reviews": pendingReviewsCount,
   };
 
   // Determine which items to show based on title
