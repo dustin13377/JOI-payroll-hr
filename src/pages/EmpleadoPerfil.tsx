@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useEffect, useState, useRef } from "react";
 import { useComplianceStatus } from "@/hooks/useComplianceStatus";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useAgentLogEntries, useCreateAgentLogEntry, useToggleEntryVisibility, type AgentLogEntry } from "@/hooks/useAgentLog";
 import {
   useEmployeeDocuments,
@@ -189,7 +189,7 @@ export default function EmpleadoPerfil() {
   // Cascading Client → Campaign state
   const campaignId = empRecord?._campaignId ?? null;
 
-  // Supervisor (auto-derived from campaign TL)
+  // Supervisor (from employees.reports_to)
   const supervisorId = empRecord?.reportsTo ?? null;
   const { data: supervisor } = useQuery({
     queryKey: ['supervisor', supervisorId],
@@ -201,6 +201,53 @@ export default function EmpleadoPerfil() {
     enabled: !!supervisorId,
   });
   const supervisorName = supervisor?.full_name ?? null;
+
+  // Eligible supervisors for the dropdown: any active employee with a
+  // management title (manager / admin / owner). Used to assign reports_to.
+  // For TLs: pick a manager+. For agents: this list also works (their TL
+  // assignment is handled elsewhere via campaign).
+  const { data: eligibleSupervisors = [] } = useQuery({
+    queryKey: ['eligible-supervisors'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('id, full_name, work_name, title')
+        .in('title', ['manager', 'admin', 'owner'])
+        .eq('is_active', true)
+        .eq('is_system_user', false)
+        .order('full_name');
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        full_name: string;
+        work_name: string | null;
+        title: string;
+      }>;
+    },
+    enabled: isLeadership,
+  });
+
+  // Update reports_to for the currently-viewed employee.
+  // Uses supabase directly (not via the legacy useUpdateEmployee hook).
+  const updateReportsTo = useMutation({
+    mutationFn: async (newSupervisorId: string | null) => {
+      if (!emp?._uuid) throw new Error('Missing employee UUID');
+      const { error } = await supabase
+        .from('employees')
+        .update({ reports_to: newSupervisorId })
+        .eq('id', emp._uuid);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['supervisor'] });
+      queryClient.invalidateQueries({ queryKey: ['my-manager-info'] });
+      toast.success('Supervisor updated');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update supervisor');
+    },
+  });
   // Find which client this campaign belongs to
   const { data: currentCampaign } = useQuery({
     queryKey: ['emp-campaign', campaignId],
@@ -296,6 +343,22 @@ export default function EmpleadoPerfil() {
   const empDepartmentId = emp?._departmentId ?? "";
   const empEmail = emp?._email ?? "";
   const emailIsLocked = !!empEmail; // already set — UI shows read-only
+
+  // Local state for salary fields — only persisted on blur, not on every keystroke
+  const [salaryDraft, setSalaryDraft] = useState({
+    sueldoBase: "",
+    descuentoPorDia: "",
+    kpiMonto: "",
+  });
+
+  // Sync salary draft when emp data loads
+  useEffect(() => {
+    setSalaryDraft({
+      sueldoBase: emp?.sueldoBase != null ? String(emp.sueldoBase) : "",
+      descuentoPorDia: emp?.descuentoPorDia != null ? String(emp.descuentoPorDia) : "",
+      kpiMonto: emp?.kpiMonto != null ? String(emp.kpiMonto) : "",
+    });
+  }, [emp?.sueldoBase, emp?.descuentoPorDia, emp?.kpiMonto]);
 
   useEffect(() => {
     // B-02: skip sync when user has unsaved edits — prevents refetch clobber
@@ -478,10 +541,39 @@ export default function EmpleadoPerfil() {
                 </div>
               </div>
             )}
-            {/* Supervisor (auto-derived from campaign TL) */}
+            {/* Supervisor — leadership can change via dropdown; everyone else
+                sees read-only display. Phase 4b: D set all TLs to report to him;
+                this dropdown lets the assignment change (to Joe, etc.) later. */}
             <div className="grid gap-1.5">
-              <Label className="text-muted-foreground text-xs">Supervisor</Label>
-              <p className="text-sm">{supervisorName || "—"}</p>
+              <Label className="text-muted-foreground text-xs">Supervisor (reports to)</Label>
+              {isLeadership ? (
+                <Select
+                  value={supervisorId ?? "__none__"}
+                  onValueChange={(v) => {
+                    updateReportsTo.mutate(v === "__none__" ? null : v);
+                  }}
+                  disabled={updateReportsTo.isPending}
+                >
+                  <SelectTrigger className="h-9 max-w-sm">
+                    <SelectValue placeholder="Select a supervisor…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground italic">No supervisor</span>
+                    </SelectItem>
+                    {eligibleSupervisors.map((sup) => (
+                      <SelectItem key={sup.id} value={sup.id}>
+                        {sup.work_name || sup.full_name}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          · {sup.title}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm">{supervisorName || "—"}</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -725,15 +817,30 @@ export default function EmpleadoPerfil() {
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label>Monthly Base Salary</Label>
-              <Input type="number" value={emp.sueldoBase || ""} onChange={(e) => saveField("sueldoBase", parseFloat(e.target.value) || 0)} />
+              <Input
+                type="number"
+                value={salaryDraft.sueldoBase}
+                onChange={(e) => setSalaryDraft((d) => ({ ...d, sueldoBase: e.target.value }))}
+                onBlur={() => saveField("sueldoBase", parseFloat(salaryDraft.sueldoBase) || 0)}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Daily Absence Discount</Label>
-              <Input type="number" value={emp.descuentoPorDia || ""} onChange={(e) => saveField("descuentoPorDia", parseFloat(e.target.value) || 0)} />
+              <Input
+                type="number"
+                value={salaryDraft.descuentoPorDia}
+                onChange={(e) => setSalaryDraft((d) => ({ ...d, descuentoPorDia: e.target.value }))}
+                onBlur={() => saveField("descuentoPorDia", parseFloat(salaryDraft.descuentoPorDia) || 0)}
+              />
             </div>
             <div className="grid gap-2">
               <Label>KPI Bonus Amount</Label>
-              <Input type="number" value={emp.kpiMonto || ""} onChange={(e) => saveField("kpiMonto", parseFloat(e.target.value) || 0)} />
+              <Input
+                type="number"
+                value={salaryDraft.kpiMonto}
+                onChange={(e) => setSalaryDraft((d) => ({ ...d, kpiMonto: e.target.value }))}
+                onBlur={() => saveField("kpiMonto", parseFloat(salaryDraft.kpiMonto) || 0)}
+              />
             </div>
             <Separator />
             <div className="p-3 rounded-lg bg-muted">
