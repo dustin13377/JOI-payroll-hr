@@ -70,6 +70,10 @@ export default function Empleados() {
   // Matches found in the identity step — rendered inline, not as a separate modal.
   const [rehireMatches, setRehireMatches] = useState<any[] | null>(null);
 
+  // Active-employee duplicate matches found at form submission time.
+  // null = not checked yet / cleared. Array = warning shown, user must confirm.
+  const [duplicateWarning, setDuplicateWarning] = useState<any[] | null>(null);
+
   const [form, setForm] = useState({
     nombre: "",
     email: "",
@@ -174,6 +178,7 @@ export default function Empleados() {
     setAddStep("identity");
     setSkippedCheck(false);
     setRehireMatches(null);
+    setDuplicateWarning(null);
   };
 
   const doCreateEmployee = () => {
@@ -181,6 +186,31 @@ export default function Empleados() {
       toast.error("Name is required");
       return;
     }
+
+    // Duplicate check against active employees — runs on first attempt only.
+    // If duplicateWarning is already set the user already saw it and clicked again → proceed.
+    if (duplicateWarning === null) {
+      const nameNorm = form.nombre.trim().toLowerCase();
+      const emailNorm = form.email.trim().toLowerCase();
+
+      const dupes = employees.filter((e) => {
+        // Exact email match (case-insensitive)
+        if (emailNorm && (e._email || "").toLowerCase() === emailNorm) return true;
+        // Name similarity: 2+ meaningful words in common catches "Oscar Pedrazzini" vs
+        // "Oscar Andres Pedrazzini Herrera" while ignoring accidental single-word hits.
+        const aWords = nameNorm.split(/\s+/).filter((w) => w.length > 2);
+        const bWords = e.nombre.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+        const shared = aWords.filter((w) => bWords.includes(w));
+        return shared.length >= 2;
+      });
+
+      if (dupes.length > 0) {
+        setDuplicateWarning(dupes);
+        return; // stop here — let the user decide
+      }
+    }
+
+    setDuplicateWarning(null);
     // Work email is optional — common workflow is to create the profile first
     // and add the work email a week later once the hire is confirmed. The
     // useAddEmployee hook handles both paths (with-email = auth user + invite,
@@ -600,6 +630,32 @@ export default function Empleados() {
                     />
                   </div>
 
+                  {/* Duplicate warning — shown when active employees with similar name/email found */}
+                  {duplicateWarning && duplicateWarning.length > 0 && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-start gap-2 text-sm text-amber-700">
+                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <span className="font-medium">Possible duplicate — {duplicateWarning.length} active employee{duplicateWarning.length > 1 ? "s" : ""} already match this name or email:</span>
+                      </div>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {duplicateWarning.map((e) => (
+                          <div key={e.id} className="rounded border bg-background px-3 py-2 text-sm flex items-center justify-between gap-2">
+                            <div>
+                              <span className="font-medium">{e.nombre}</span>
+                              <span className="text-muted-foreground ml-2 text-xs">{e.id}</span>
+                              {e._campaignName && <span className="text-muted-foreground ml-2 text-xs">· {e._campaignName}</span>}
+                            </div>
+                            <Button variant="ghost" size="sm" className="text-xs h-7 px-2 shrink-0"
+                              onClick={() => { setAddOpen(false); resetForm(); navigate(`/empleados/${e.id}`); }}>
+                              View
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-amber-700">Is this a different person? Click <strong>Add anyway</strong> below to continue.</p>
+                    </div>
+                  )}
+
                   <DialogFooter>
                     <Button
                       variant="outline"
@@ -608,8 +664,12 @@ export default function Empleados() {
                     >
                       Back
                     </Button>
-                    <Button onClick={doCreateEmployee} disabled={addEmployee.isPending}>
-                      {addEmployee.isPending ? "Saving..." : "Add Employee"}
+                    <Button
+                      onClick={doCreateEmployee}
+                      disabled={addEmployee.isPending}
+                      variant={duplicateWarning ? "destructive" : "default"}
+                    >
+                      {addEmployee.isPending ? "Saving..." : duplicateWarning ? "Add anyway" : "Add Employee"}
                     </Button>
                   </DialogFooter>
                 </>
