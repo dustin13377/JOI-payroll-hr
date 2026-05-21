@@ -12,12 +12,32 @@ import { Eye, EyeOff } from "lucide-react";
 import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
 import { formatDateMXLong } from "@/lib/localDate";
 
+type ManagerInfo = {
+  name: string | null;
+  title: string | null;
+  role_label: string;
+  assigned: boolean;
+} | null;
+
 export default function Account() {
   const { user, title, employeeId, isClient } = useAuth();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+
+  // Who's my manager? Returns null for management roles (they don't need this
+  // field). For agents → their TL via reports_to. For TLs → their manager.
+  // Falls back to a generic role label if reports_to isn't assigned yet.
+  const { data: manager } = useQuery({
+    queryKey: ["my-manager-info", employeeId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("my_manager_info");
+      if (error) throw error;
+      return data as ManagerInfo;
+    },
+    enabled: !!employeeId && !isClient,
+  });
 
   // Load the agent's own 5 contact fields (RLS agents_select_own_employee allows it).
   // Clients (no employeeId) skip this entirely.
@@ -111,6 +131,25 @@ export default function Account() {
             <Label className="text-xs text-muted-foreground">Role</Label>
             <p className="text-sm font-medium">{title ? titleLabel(title) : "—"}</p>
           </div>
+          {manager && (
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Manager</Label>
+              <p className="text-sm font-medium">
+                {manager.assigned && manager.name ? (
+                  <>
+                    {manager.name}
+                    <span className="text-xs text-muted-foreground font-normal">
+                      {" "}— {manager.role_label}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    {manager.role_label} (not assigned yet — contact HR)
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
