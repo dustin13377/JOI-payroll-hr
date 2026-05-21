@@ -43,6 +43,7 @@ import ClientCampaignDetail from "@/pages/ClientCampaignDetail";
 import ProvisionOrg from "@/pages/ProvisionOrg";
 import AgentReviews from "@/pages/AgentReviews";
 import SystemUsers from "@/pages/SystemUsers";
+import Comunicados from "@/pages/Comunicados";
 import Payroll from "@/pages/admin/Payroll";
 import PayrollWeek from "@/pages/admin/PayrollWeek";
 import PayrollRates from "@/pages/admin/PayrollRates";
@@ -163,6 +164,7 @@ const App = () => (
                     <Route path="/holidays" element={<HolidayRequests />} />
                     <Route path="/policies" element={<MyPolicies />} />
                     <Route path="/account" element={<Account />} />
+                    <Route path="/comunicados" element={<Comunicados />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
                     {/* Payroll Phase 4a — owner/admin/manager only */}

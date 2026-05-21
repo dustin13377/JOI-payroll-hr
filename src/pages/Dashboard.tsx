@@ -12,8 +12,20 @@ import { Users, DollarSign, TrendingUp, Calculator, Upload, Pencil, ChevronDown,
 import { useEffect, useState, useRef } from "react";
 import { getPayrollCutoffInfo, formatDateES, type PayrollCutoffInfo } from "@/utils/payrollCutoff";
 import { parseTCW, type TCWResult } from "@/utils/tcwParser";
+import { usePublishedPosts, useMyAcks, useAcknowledgePost } from "@/hooks/useBulletin";
+import { useAuth } from "@/hooks/useAuth";
+import { Megaphone, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
+  const { employeeId } = useAuth();
+  const navigate = useNavigate();
+  const { data: publishedPosts = [] } = usePublishedPosts();
+  const { data: myAcks = new Set<string>() } = useMyAcks();
+  const acknowledge = useAcknowledgePost();
+  const unreadPosts = publishedPosts.filter((p) => p.requires_ack && !myAcks.has(p.id));
+
   const { data: employees = [], isLoading: loadingEmps } = useEmployees();
   // OLD: useActivePeriod() — queries lowercase status="open"; broken after Phase 1
   //      rename to status="OPEN". Kept for compat with legacy code paths below.
@@ -300,6 +312,56 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ========== ANNOUNCEMENTS WIDGET ========== */}
+      {unreadPosts.length > 0 && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Megaphone className="h-4 w-4 text-primary" />
+              {unreadPosts.length === 1
+                ? "1 unread announcement"
+                : `${unreadPosts.length} unread announcements`}
+            </CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => navigate("/comunicados")}>
+              View all
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            {unreadPosts.slice(0, 3).map((post) => (
+              <div key={post.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{post.title}</p>
+                  {post.body && (
+                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{post.body}</p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-7 gap-1 text-xs"
+                  disabled={acknowledge.isPending}
+                  onClick={() => {
+                    if (!employeeId) return;
+                    acknowledge.mutate(
+                      { postId: post.id, employeeId },
+                      { onSuccess: () => toast.success("Marked as read") }
+                    );
+                  }}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Read
+                </Button>
+              </div>
+            ))}
+            {unreadPosts.length > 3 && (
+              <p className="text-xs text-muted-foreground text-center pt-1">
+                +{unreadPosts.length - 3} more — <button className="underline" onClick={() => navigate("/comunicados")}>view all</button>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ========== SUMMARY CARDS ========== */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
