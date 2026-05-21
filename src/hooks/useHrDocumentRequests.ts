@@ -260,15 +260,24 @@ export function useUpdateHrDocumentRequestStatus() {
 }
 
 /**
- * Count of hr_document_requests with status='pending'.
+ * Count of hr_document_requests with unfinished work — status IN ('pending', 'in_progress').
  *
- * Used by the sidebar badge. RLS only grants SELECT to leadership + TL, so
- * we gate the query at the hook level: agents never run it. (Earlier
- * versions polled this for everyone and produced noisy console errors on
- * agent sessions — see PR #53 / #60 in git history.)
+ * Used by the sidebar badge. We deliberately include in_progress because that
+ * means HR opened a draft but hasn't uploaded the signed scan yet — still work
+ * waiting to be finished. Only counting 'pending' was the previous behavior and
+ * caused the badge to zero out the moment someone clicked "Start drafting",
+ * making it feel broken.
+ *
+ * Terminal states (fulfilled / canceled / downgraded) are excluded.
+ *
+ * RLS only grants SELECT to leadership + TL, so we gate the query at the hook
+ * level: agents never run it. (Earlier versions polled this for everyone and
+ * produced noisy console errors on agent sessions — see PR #53 / #60 in git
+ * history.)
  *
  * Polls every 30s for near-realtime freshness. Mutations on hr_document_requests
- * invalidate this key so the badge updates immediately on user action.
+ * (and on the finalization tables via useUploadSignedScan) invalidate this key
+ * so the badge updates immediately on user action.
  */
 export function usePendingHrDocumentRequestsCount(enabled: boolean) {
   return useQuery({
@@ -277,7 +286,7 @@ export function usePendingHrDocumentRequestsCount(enabled: boolean) {
       const { count, error } = await supabase
         .from("hr_document_requests")
         .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
+        .in("status", ["pending", "in_progress"]);
       if (error) throw error;
       return count ?? 0;
     },
@@ -677,6 +686,9 @@ export function useUploadSignedScan() {
       qc.invalidateQueries({
         queryKey: [QUERY_KEY, "by_employee", vars.employeeId],
       });
+      // Signed-scan upload transitions the parent request from in_progress
+      // → fulfilled, which drops it out of the sidebar badge count.
+      qc.invalidateQueries({ queryKey: [QUERY_KEY, "pending_count"] });
     },
   });
 }

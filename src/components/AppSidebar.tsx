@@ -27,6 +27,7 @@ import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { usePendingHrDocumentRequestsCount } from "@/hooks/useHrDocumentRequests";
 import { usePendingTimeOffCount } from "@/hooks/useTimeOffCount";
+import { usePendingAgentReviewsCount } from "@/hooks/useAgentReviews";
 import {
   Sidebar,
   SidebarContent,
@@ -105,9 +106,11 @@ export function AppSidebar() {
   const canApprove = isLeadership || isTeamLead;
   const { data: pendingHrDocCount = 0 } = usePendingHrDocumentRequestsCount(canApprove);
   const { data: pendingTimeOffCount = 0 } = usePendingTimeOffCount(canApprove);
+  const { data: pendingReviewsCount = 0 } = usePendingAgentReviewsCount(canApprove);
   const badgeCounts: Record<string, number> = {
     "/hr/document-queue": pendingHrDocCount,
     "/solicitudes": pendingTimeOffCount,
+    "/reviews": pendingReviewsCount,
   };
 
   // Determine which items to show based on title
