@@ -27,6 +27,11 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -432,11 +437,31 @@ function AgentRow({
         ].join(" ")}
         onClick={isPaid ? undefined : onToggle}
         aria-expanded={isExpanded}
+        title={
+          isPaid
+            ? "Locked — this record was marked PAID. Edits are disabled until an owner unlocks the period."
+            : undefined
+        }
       >
         {/* Expand chevron */}
         <td className="px-3 py-3 w-8">
           {isPaid ? (
-            <Lock className="h-3.5 w-3.5 text-muted-foreground/50" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex"
+                  aria-label="Record locked — period marked PAID"
+                >
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground/50" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p className="font-medium">Locked — record is PAID</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Edits are disabled until an owner unlocks the period.
+                </p>
+              </TooltipContent>
+            </Tooltip>
           ) : isExpanded ? (
             <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
