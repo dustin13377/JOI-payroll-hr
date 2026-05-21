@@ -1,71 +1,47 @@
 # Session Handoff
 
-**Saved:** 2026-05-20T16:49:32-06:00
-**Machine:** Cowork sandbox (claude)
+**Saved:** 2026-05-21T21:57:40+00:00
+**Machine:** Diomedess-Mac-mini
 **Branch:** main
-**Last commit:** b80d93a payroll: phase 4a — core week view + status workflow
+**Last commit:** `567df00` Bump vite ^5.4.19 -> ^7.0.0
 
 ## What we were doing
 
-Built out Phase 4b (4 supporting payroll screens), then collapsed the 8-rate-field model down to D's mental model: `monthly_base_salary` is the source of truth, daily and weekly are derived (`monthly/30` and `monthly/4`). Backfilled May 11-17 from a TimeClock Wizard CSV, created a payroll_weeks row, and ran auto-derive — the week view now shows 55 real agent records totaling **$214,158.34 MXN**. Walked through the end-to-end flow with real data. Patched a series of cascading crashes from legacy `calcularNomina()` callers across 5 pages. Hidden the OT column per D's "no automatic OT — use extra_bonus" decision.
+Refactored the Team Lead home page so it mirrors the agent home pattern on top (clock-in, quick actions, week stats) and stacks team-management modules below. TLs are working agents too — they take calls and credit pulls — so they need the same daily flow agents have. Also killed the orphaned `TLDashboard` page and absorbed its useful bits (Missing Yesterday EOD strip, Submit-EOD-for-agent dialog) into a new `TodaysRosterCard` on the TL home. Working Nudge button was added with a light audit-log table (`tl_nudges`), no notifications wired up.
 
-## Files in flight (will be in this commit)
+While at it, also committed several piles of pre-existing dirty work that were sitting uncommitted on this machine: edge function `esm.sh → jsr` migration, payroll Phase 5 fixes, policy versions RLS hardening, the work-email update feature, and the Vite 7 major bump.
 
-- `src/hooks/usePayroll.ts` — Added Phase 4b hooks (useRateRoster, useUpdateEmployeeRates, useBulkApplyRate, useAgentPayHistory, useEmployeeForPayroll, useMexicanHolidays, useAllPeriodsWithSummaries, useCurrentPeriodTotal, useEmployeeVacationBalance). Updated previewTotalPay to derive daily/weekly from monthly. Fixed useCreateNextWeek to compute next_week_start from latest_week_end + 1 day, and to set organization_id on INSERT.
-- `src/types/payroll.ts` — Added `EMPTY_PAYROLL_RESULT` zero-stub. Updated PayEmployee + PayInputs types (custom_deduction, monthly_base_salary). Rewrote previewPay to mirror simplified calc engine.
-- `src/App.tsx` — Added 4 new Payroll routes (rates, agent, holidays, periods), all under RequireLeadership.
-- `src/pages/admin/Payroll.tsx` — Added quick-link cards (Pay Rates, Holidays, Periods). Fixed nested-quote crash in empty-state ("No weeks yet" message).
-- `src/pages/admin/PayrollWeek.tsx` — Wired `custom_deduction` input next to `extra_bonus`. Hidden OT column + Overtime days input. Added sticky-thead so column headers stay visible. Removed `overflow-x-auto` on the Card (was blocking sticky).
-- `src/pages/admin/PayrollRates.tsx` — NEW. Bulk pay-rate editor. Simplified to Monthly (read-only) + KPI (editable) + Derived display (Wk/Day/Sun-per-day). Red "Missing rate" badge for monthly=0. Filter uses Client (not Campaign) per D's mental model.
-- `src/pages/admin/PayrollAgent.tsx` — NEW. Per-agent YTD breakdown + admin-only vacation balance card.
-- `src/pages/admin/PayrollHolidays.tsx` — NEW. Read-only LFT Article 74 calendar.
-- `src/pages/admin/PayrollPeriods.tsx` — NEW. Historical pay-period browser.
-- `src/pages/Dashboard.tsx` — Replaced broken `useActivePeriod` (lowercase `'open'`) with `useCurrentPayPeriod` (uppercase `'OPEN'`). Wired Biweekly Payroll to `useCurrentPeriodTotal`. Replaced calcularNomina table cells with `—` placeholder.
-- `src/pages/Empleados.tsx` — Replaced calcularNomina with `—` placeholder.
-- `src/pages/EmpleadoPerfil.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT + stub config.
-- `src/pages/Historial.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT.
-- `src/pages/PayrollRun.tsx` — Replaced calcularNomina with EMPTY_PAYROLL_RESULT.
-- `HANDOFF.md` — Phase 4b + simplification entries appended.
-- `PAYROLL_PHASE4B_PROMPT.md` — NEW. The Sonnet prompt that built Phase 4b (already executed).
+## Files in flight
 
-## DB migrations applied this session (live in Supabase, NOT in this commit)
-
-- **`payroll_phase4b_simplify_calc`** — Rewrote `_calc_pay_components` to derive `daily = monthly/30`, `weekly = monthly/4`. Added `payroll_records.custom_deduction numeric(12,2)`. Sunday pay = `daily × 0.25` (LFT Art. 79). Overtime pay = `0` (handled via `extra_bonus`). Vacation pay = `0` (deferred to new entity). Trigger guard updated to watch `custom_deduction`.
-- **Vacation entitlement** — added `employees.vacation_days_entitled int DEFAULT 0`. Backfilled per LFT 2024 Art. 76: 12 active employees got days, 148 total entitled.
-- **May 11-17 TCW backfill** — inserted ~180 rows into `time_clock` from TimeClock Wizard CSV. Created `payroll_weeks` row for May 11-17 (id `cc6a801b-5381-4417-a376-bba59f6a86e4`), ran auto-derive — 55 `payroll_records` rows created, week total $214,158.34 MXN.
+Tree is clean — nothing pending. Everything pushed in six commits on top of yesterday's ApprovalsCard merge.
 
 ## Decisions made this session
 
-- **Per-employee rate model** (not rule-based). `monthly_base_salary` is source of truth; derive daily=monthly/30 and weekly=monthly/4.
-- **Sunday pay = daily × 0.25** (LFT Art. 79). **Holiday pay = daily × 2** (LFT Art. 75). **Vacation pay = 0** for now (deferred to new entity).
-- **No automatic OT pay.** Use `extra_bonus` to compensate. OT column + input hidden in UI; auto-derive still counts in background.
-- **Rates Editor filter:** Client / Department / Shift (not Campaign — that's implementation detail per D's mental model).
-- **Vacation entitlement is admin-only display** — never on agent screens until D explicitly OKs.
-- **`custom_deduction` field** for manager-entered subtractions (partial-day misses, advance repayments, fines).
-- **Phase 5 archive replay abandoned** — historical data has gaps + roster turnover makes replay unreliable. Engine validation will happen via parallel-run on next live pay period.
+- **TL home = agent home + team modules.** Shared `HomeHero` component owns header + Today panel + Quick Actions + stat row. Used on `TeamLeadHome` now; `EmployeeHome` migrates to it in PR 3.
+- **One Approvals card replaces three card types.** `ApprovalsCard` (defined inside `TeamLeadHome.tsx`) holds `TimeOffSection` + per-campaign `HolidaySection` + per-campaign `VacationSection`. A TL leading 3 campaigns used to see up to 7 separate cards; now they see 1.
+- **Nudge button is an audit log, not a notifier.** Inserts a row into `tl_nudges (employee_id, date, nudged_by, nudged_at)` via upsert. Button switches to `"Nudged X min ago"` after tap so the TL doesn't double-press and the next shift can see contact was made. No email/SMS — TLs still call/WhatsApp out-of-band; this just records that they did.
+- **Coaching notes table stays.** I dropped `agent_coaching_notes` thinking it only backed TLDashboard's inline note dialog. It actually backs the broader Agent Log (notes + verbal warnings) used by `EmpleadoPerfil` and `EmployeeHome`. Restored via `restore_agent_coaching_notes` migration. Lost 2 test rows; no real data lost. New memory rule saved: `feedback_grep_before_destructive_db_ops.md`.
+- **TLDashboard dies for real.** Route gone, file deleted, "Open legacy dashboard →" link removed. Its rich analytics views (Daily Submissions chart, Weekly Leaderboard, 4-Week Trends, Monthly Heatmap) were not in regular use; whatever value they had moves to `/desempeno` (Performance) when we revisit.
+- **Group B dirty state was real shipped work.** Edge function jsr migration + Phase 5 payroll fixes + work-email feature + policy versions RLS + Vite 7 bump were all sitting uncommitted. Committed each as a separate logical commit.
 
-## Open todos (priority order)
+## Open todos
 
-- [ ] Joe reviews the live week (`/admin/payroll/week/cc6a801b-5381-4417-a376-bba59f6a86e4`). Spot-check 3-5 agents' `total_pay` vs his Sheet. If they match to the cent, engine validated.
-- [ ] Set `monthly_base_salary` for 4 employees with $0: Diego Landeros, Alejandro Araujo, Ruben Curiel, Daniel Oswaldo Romero
-- [ ] Set `hire_date` for 7 employees missing it (Paty Rodriguez is the only real-employee one; rest are admin/test accounts)
-- [ ] Adrian Arechiga's hire_date in DB (2025-11-03) looks wrong — he was in Joe's January 2026 payroll
-- [ ] Decide what to do with Paty + Carlos Pedro (NO_DATA but got full base pay — different clock system, or actually missed?)
-- [ ] When Joe approves the math, run May PP2 in parallel with his Sheet for both weeks (May 11-17 + May 18-24)
-- [ ] Phase 4c (when ready): re-derive diff dialog, CSV export, retire `useSupabasePayroll.ts` (silences the `period_id=eq.X` 400 console error)
-- [ ] TL clock-in widget extraction (deferred — TLs can read timeclock status but no clock-in button on TeamLeadHome)
+- [ ] **PR 3 — slim EmployeeHome.** Migrate the agent home to use `HomeHero` for the top, replace the long stack of cards below with three sections: "Needs your attention" (banners-when-needed), "At a glance" (latest announcement + Hours This Week chart), "More" (2x2 link tiles). Mockup approved; not started.
+- [ ] **Verify Vite 7 build on Vercel.** Just bumped `^5.4.19 -> ^7.0.0` in commit `567df00`. First Vercel build after the push is the test. If it breaks, easy revert.
+- [ ] **Delete `src/pages/EODFormBuilder.tsx`** — explicitly marked DEPRECATED 2026-04-14, safe to remove anytime.
+- [ ] **Consider deleting `src/pages/PayrollRun.tsx`** — legacy Payroll UI from before Phase 4a. Route still resolves but no nav entry. Probably ready to remove post-Phase 4c cleanup.
+- [ ] **Eyeball the new TL home with a real TL account** — Adrian / Javier / Deysi for Torro. Test data on `sandoval801@gmail.com` had Team-of-0 so only the empty states were exercised.
 
 ## Next step when you come back
 
-Send Joe the URL `http://localhost:8080/admin/payroll/week/cc6a801b-5381-4417-a376-bba59f6a86e4` and ask him to spot-check 3-5 agents' totals against what his Sheet would compute for the same week. Drop his feedback into the next session — bugs are fast fixes; convention questions ("Sunday should be 30% not 25%") are single-line changes in `_calc_pay_components`.
+Pull on the other machine, run `npm install` (Vite 7 will install new deps), then `npm run dev`. Log in as Adrian, Javier, or Deysi (real TL accounts on the Torro campaigns) and walk the new TL home: Clock In button works, Approvals card shows live time-off / holiday / vacation requests, TodaysRosterCard shows the roster with real status badges, Nudge buttons actually insert rows. Then start PR 3 (slim EmployeeHome — mockup is in `UI_LAYOUT.md` under "Proposed direction for PR 3").
 
 ## Watch out for
 
-- **The Dashboard has a 400 console error** from `usePayrollRecords?period_id=eq.X` — harmless legacy noise from useSupabasePayroll.ts, retires in Phase 4c.
-- **5 commits sit unpushed locally** (Phase 1, 2, 3, 4a, and this Phase 4b commit). When you `git push`, the live app gets all of it. Live currently uses the old `/payroll-run` page; pushing replaces that path.
-- **The TCW import inserted 182 rows into `time_clock` for May 11-17.** Real data, not test data. Don't delete.
-- **Vacation balance card only shows on `/admin/payroll/agent/:id`.** Never surface to agent UI until D's explicit go.
-- **`pay_derive_week` requires `is_leadership()`** — works fine when D is logged in via browser; failed in sandbox SQL because auth.uid() is null there.
-- **Use `EMPTY_PAYROLL_RESULT`** for any future legacy page that still calls `calcularNomina()` to avoid white screens. Phase 4c will retire all such callers.
-- **`npm run build` not run locally yet** — `tsc --noEmit` is clean. The Vite sandbox build failed due to a rollup arch mismatch (Linux ARM64 vs macOS binaries), but D's Mac will build fine.
-- **There may be a stale `.git/index.lock`** in the project — sandbox couldn't remove it. If `git add` complains, run `rm -f .git/index.lock` first.
+- **Vite 7 major bump is unverified.** The Vercel deploy after `567df00` is the smoke test. If the build fails, the revert is `git revert 567df00 && git push`.
+- **The TL home test account (`sandoval801`) has Team of 0.** Means most of the new UI was rendered in empty states only. Real verification needs a TL with actual reports — Adrian / Javier / Deysi.
+- **`agent_coaching_notes` test rows are gone.** The two seed rows from 2026-04-23 won't come back. The table itself is restored with identical shape + RLS, so the Agent Log on `/empleados/:id` and the AgentHRLogCard on EmployeeHome both still function — they'll just start empty until someone writes a note.
+- **`tl_nudges` RLS uses `my_team_member_ids()`** — same helper as `time_off_requests`. Cross-campaign TLs (Adrian / Javier / Deysi seeded across all 3 Torro campaigns via `team_lead_campaigns`) work correctly because the helper UNIONs both sources.
+- **No notifications fire on Nudge.** This is by design (light version). If you decide you want real nudges later, the audit table is already populated so the email/push layer can read from it.
+- **`update-work-email` edge function was deployed but UI flow wasn't end-to-end tested.** Walk through editing one employee's work email and confirm the auth.users row updates correctly.
+- **PR 3 mockup is in UI_LAYOUT.md.** "Proposed direction for PR 3" section near the bottom. Three thin sections replace the current long stack.
