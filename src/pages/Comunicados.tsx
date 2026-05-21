@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { QuestionnaireCreateDialog } from "@/components/bulletin/QuestionnaireCreateDialog";
+import { QuestionnaireCard } from "@/components/bulletin/QuestionnaireCard";
 import {
   useAllPosts,
   usePublishedPosts,
@@ -50,6 +52,7 @@ import {
   ChevronUp,
   Trophy,
   Star,
+  ClipboardList,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -510,6 +513,7 @@ export default function Comunicados() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [recognizeOpen, setRecognizeOpen] = useState(false);
+  const [surveyOpen, setSurveyOpen] = useState(false);
   const [mgmtView, setMgmtView] = useState<"all" | "published" | "drafts">("all");
 
   const filteredMgmt = allPosts.filter((p) => {
@@ -540,10 +544,14 @@ export default function Comunicados() {
           </p>
         </div>
         {isLeadership && (
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
             <Button variant="outline" onClick={() => setRecognizeOpen(true)} className="gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-500" />
               Recognize
+            </Button>
+            <Button variant="outline" onClick={() => setSurveyOpen(true)} className="gap-1.5">
+              <ClipboardList className="h-4 w-4 text-blue-500" />
+              Survey
             </Button>
             <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
               <Plus className="h-4 w-4" />
@@ -613,13 +621,22 @@ export default function Comunicados() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {publishedPosts.map((post) => (
-            <AnnouncementCard
-              key={post.id}
-              post={post}
-              acked={myAcks.has(post.id)}
-              employeeId={employeeId}
-            />
+          {publishedPosts.filter((p) => p.type !== "recognition").map((post) => (
+            post.type === "questionnaire" ? (
+              <QuestionnaireCard
+                key={post.id}
+                post={post}
+                employeeId={employeeId}
+                isLeadership={isLeadership}
+              />
+            ) : (
+              <AnnouncementCard
+                key={post.id}
+                post={post}
+                acked={myAcks.has(post.id)}
+                employeeId={employeeId}
+              />
+            )
           ))}
         </div>
       )}
@@ -651,6 +668,7 @@ export default function Comunicados() {
 
       <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
       <RecognizeDialog open={recognizeOpen} onOpenChange={setRecognizeOpen} />
+      <QuestionnaireCreateDialog open={surveyOpen} onOpenChange={setSurveyOpen} />
     </div>
   );
 }

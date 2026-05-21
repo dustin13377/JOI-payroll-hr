@@ -2,6 +2,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
+export type QuestionType = "multiple_choice" | "open_ended";
+
+export type BulletinQuestion = {
+  id: string;
+  post_id: string;
+  question_text: string;
+  type: QuestionType;
+  options: string[] | null;
+  sort_order: number;
+};
+
+export type BulletinResponse = {
+  id: string;
+  post_id: string;
+  question_id: string;
+  respondent_id: string;
+  answer_text: string | null;
+  answer_option: string | null;
+  created_at: string;
+};
+
 export type BulletinPost = {
   id: string;
   type: "announcement" | "questionnaire" | "recognition";
@@ -260,6 +281,141 @@ export function useAcknowledgePost() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bulletin_acks"] });
+    },
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// QUESTIONNAIRE HOOKS
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── Fetch: questions for a post ──────────────────────────────────────────────
+export function useQuestionsForPost(postId: string | null) {
+  return useQuery({
+    queryKey: ["bulletin_questions", postId],
+    enabled: !!postId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bulletin_questions")
+        .select("*")
+        .eq("post_id", postId!)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as BulletinQuestion[];
+    },
+  });
+}
+
+// ── Fetch: all responses for a post (managers — results view) ────────────────
+export function useResponsesForPost(postId: string | null) {
+  return useQuery({
+    queryKey: ["bulletin_responses", "post", postId],
+    enabled: !!postId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bulletin_responses")
+        .select("*, respondent:respondent_id(full_name)")
+        .eq("post_id", postId!);
+      if (error) throw error;
+      return (data ?? []) as (BulletinResponse & { respondent?: { full_name: string } })[];
+    },
+  });
+}
+
+// ── Fetch: current employee's responses for a post ───────────────────────────
+export function useMyResponsesForPost(postId: string | null) {
+  return useQuery({
+    queryKey: ["bulletin_responses", "mine", postId],
+    enabled: !!postId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bulletin_responses")
+        .select("question_id, answer_text, answer_option")
+        .eq("post_id", postId!);
+      if (error) throw error;
+      // Keyed by question_id for O(1) lookup
+      return Object.fromEntries(
+        (data ?? []).map((r: any) => [r.question_id, r])
+      ) as Record<string, { answer_text: string | null; answer_option: string | null }>;
+    },
+  });
+}
+
+// ── Mutation: create questionnaire post + questions in one shot ───────────────
+export function useCreateQuestionnaire() {
+  const qc = useQueryClient();
+  const { employeeId } = useAuth();
+  return useMutation({
+    mutationFn: async (payload: {
+      title: string;
+      body: string;
+      campaign_id?: string | null;
+      expires_at?: string | null;
+      publish: boolean;
+      questions: { question_text: string; type: QuestionType; options: string[] | null }[];
+    }) => {
+      // 1. Create the post
+      const { data: post, error: postErr } = await supabase
+        .from("bulletin_posts")
+        .insert({
+          type: "questionnaire",
+          title: payload.title,
+          body: payload.body,
+          author_id: employeeId ?? null,
+          campaign_id: payload.campaign_id ?? null,
+          expires_at: payload.expires_at ?? null,
+          requires_ack: false,
+          is_published: payload.publish,
+          published_at: payload.publish ? new Date().toISOString() : null,
+        })
+        .select()
+        .single();
+      if (postErr) throw postErr;
+
+      // 2. Insert all questions
+      if (payload.questions.length > 0) {
+        const rows = payload.questions.map((q, i) => ({
+          post_id: post.id,
+          question_text: q.question_text,
+          type: q.type,
+          options: q.type === "multiple_choice" ? q.options : null,
+          sort_order: i,
+        }));
+        const { error: qErr } = await supabase.from("bulletin_questions").insert(rows);
+        if (qErr) throw qErr;
+      }
+
+      return post;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bulletin_posts"] });
+      qc.invalidateQueries({ queryKey: ["bulletin_questions"] });
+    },
+  });
+}
+
+// ── Mutation: submit all responses for a questionnaire at once ───────────────
+export function useSubmitResponses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      postId: string;
+      respondentId: string;
+      answers: { questionId: string; answerText?: string; answerOption?: string }[];
+    }) => {
+      const rows = payload.answers.map((a) => ({
+        post_id: payload.postId,
+        question_id: a.questionId,
+        respondent_id: payload.respondentId,
+        answer_text: a.answerText ?? null,
+        answer_option: a.answerOption ?? null,
+      }));
+      const { error } = await supabase.from("bulletin_responses").insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["bulletin_responses", "mine", vars.postId] });
+      qc.invalidateQueries({ queryKey: ["bulletin_responses", "post", vars.postId] });
     },
   });
 }
