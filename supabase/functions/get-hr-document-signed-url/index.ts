@@ -8,7 +8,7 @@
 // POST body: { finalizationId: string, type: "carta" | "acta", fileType: "pdf" | "signed_scan" }
 // Returns:   { signedUrl: string }
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // Env-driven allowlist. Default "*" keeps dev unblocked; set ALLOWED_ORIGIN
 // in Supabase dashboard to lock down when going public
