@@ -646,6 +646,58 @@ export function useMarkPeriodPaid() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Unlock PAID period (Phase 4c)                                       */
+/* ------------------------------------------------------------------ */
+
+/** Return shape from pay_unlock_period RPC. */
+export interface UnlockPeriodResult {
+  period_id: string;
+  period_code: string | null;
+  weeks_unlocked: number;
+  records_unlocked: number;
+  reason: string;
+  actor: string;
+  at: string;
+}
+
+/**
+ * Owner-only: unlock a LOCKED pay period.
+ * Calls pay_unlock_period(periodId, reason). DB enforces owner check + that
+ * the period is currently LOCKED. On success, broadcasts payroll cache
+ * invalidations so all open payroll views refresh.
+ */
+export function useUnlockPeriod() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      periodId,
+      reason,
+    }: {
+      periodId: string;
+      reason: string;
+    }) => {
+      const { data, error } = await supabase.rpc("pay_unlock_period", {
+        p_period_id: periodId,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      return data as unknown as UnlockPeriodResult;
+    },
+    onSuccess: (_, { periodId }) => {
+      qc.invalidateQueries({ queryKey: payrollKeys.currentPeriod() });
+      qc.invalidateQueries({ queryKey: payrollKeys.weeksInPeriod(periodId) });
+      // Mirror useMarkPeriodPaid: broad invalidation so any open week/records
+      // view refreshes too (we don't know all week IDs in this period).
+      qc.invalidateQueries({ queryKey: ["payroll"] });
+      qc.invalidateQueries({ queryKey: ["payroll-weeks"] });
+      qc.invalidateQueries({ queryKey: ["payroll-week"] });
+      qc.invalidateQueries({ queryKey: ["payroll-records"] });
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Re-derive (Phase 4c)                                                */
 /* ------------------------------------------------------------------ */
 
@@ -770,6 +822,12 @@ export function useCanCreateWeek(): boolean {
 
 /** Only owner can lock a period to PAID. */
 export function useCanLockToPaid(): boolean {
+  const { isOwner } = useAuth();
+  return isOwner;
+}
+
+/** Only owner can unlock a PAID period. Mirrors the DB-side is_owner() guard. */
+export function useCanUnlockPaid(): boolean {
   const { isOwner } = useAuth();
   return isOwner;
 }
