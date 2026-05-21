@@ -1,44 +1,55 @@
 # Session Handoff
 
-**Saved:** 2026-05-21T16:19:26-06:00
+**Saved:** 2026-05-21T22:44:23+00:00
 **Machine:** Diomedess-Mac-mini
 **Branch:** main
-**Last commit:** 1113fca Add PAID lock tooltip to payroll week rows
+**Last commit:** 66e8270 Phase 4c: owner-initiated unlock for PAID periods (DB + UI)
 
 ## What we were doing
 
-Reviewed two new payroll math docs Joe sent (`JOI_Payroll_Run_Math_and_Rule_Key_Logic_For_Claude.md` + `JOI_Payroll_Run_Rule_Key_and_Per_Agent_Math_For_Claude.md`) against our current implementation. Confirmed the math is identical to what we already ported (validated 97.03% against Joe's archive). Joe's "Rule Key" system is a Google-Sheets workaround we don't need — our per-employee rates on the `employees` table replace it cleanly. Then audited the "Add Next Week" flow and the PAID lock UX, found one small gap, and shipped a fix.
+Worked through two of the three real Phase 4c payroll items: the re-derive diff dialog and owner-initiated unlock for PAID periods. Both shipped to main and applied to Supabase (`jpaihltkrohdqkqlbqkf`). Pause point chosen because of token budget, not because anything is broken.
 
 ## Files in flight
 
-- `src/pages/admin/PayrollWeek.tsx` — added a Radix tooltip on the 🔒 lock icon + a native `title` attribute on the row itself so users hovering a PAID row see a clear "locked, ask owner to unlock" message. **Committed and pushed.**
+Nothing in flight — all changes committed and pushed. For reference, this session created/modified:
+
+- `src/components/RedriveDiffDialog.tsx` — new. Diff preview UI for re-derive (changes / preserved overrides / PAID skipped / in-sync summary).
+- `src/hooks/usePayroll.ts` — added `useRedriveWeekPreview`, `useRedriveWeekApply`, `useUnlockPeriod`, `useCanUnlockPaid`, plus `RedriveResult` / `UnlockPeriodResult` types.
+- `src/pages/admin/PayrollWeek.tsx` — wired both flows in: Re-derive button now opens the diff dialog instead of a stub; new amber Unlock Period button (owner-only, shows only on PAID periods) with reason-required + type-"UNLOCK"-to-confirm dialog.
+- `supabase/migrations/20260521210000_payroll_phase4c_unlock_period.sql` — new. Adds `is_owner()` helper, updates `payroll_records_paid_lock` trigger to honor a transaction-local `jpayroll.unlocking='true'` flag, adds `pay_unlock_period(uuid, text)` RPC. Already applied to the live DB.
 
 ## Decisions made this session
 
-- **Do NOT port Joe's Rule Key system.** Math is identical, but the Rule Key plumbing (string normalization, dropdowns, audit-before-new-week) only exists to prevent Sheets typo bugs that can't happen in our FK-based model. Saved as memory.
-- **Phase 4c real scope = 3 must-haves + cleanup.** Order: (1) Re-derive diff dialog, (2) Owner-initiated unlock, (3) CSV export. Everything else is housekeeping that doesn't block payroll go-live. Saved as memory.
-- **"Add Next Week" works correctly today** — auto-derives from `time_clock`, blocks if the next week would span past period end, calls `pay_derive_week` which fires the recalc trigger. No changes needed.
-- **`pay_redrive_week` DB function already does the smart thing** (preserves manual edits, skips PAID, has preview mode). Only the UI dialog is missing — currently a stub at `PayrollWeek.tsx:766` and `:956`.
+- Re-derive flow uses the existing `pay_redrive_week(uuid, boolean)` DB function (preview when `false`, apply when `true`). Preview re-runs every time the dialog reopens — fresh data, no caching.
+- Unlock is **period-level only**, not week-level. Reverts everything in the period to UNPAID. Previous COMPLETE state on weeks is lost — accepted tradeoff per simpler model.
+- Unlock requires both a non-empty reason AND typing the literal word "UNLOCK". Stronger gating than Mark PAID because we're reversing a previously-confirmed irreversible action.
+- Used a transaction-local session variable (`jpayroll.unlocking`) to let the unlock RPC bypass the PAID-lock trigger. Cleaner than `ALTER TABLE DISABLE TRIGGER` (no privilege issue, scoped to one transaction). Backwards compatible — without the flag, lock behavior is identical to before.
+- New `is_owner()` helper added (matches `is_leadership()` shape, narrower to title='owner'). Reusable wherever owner-only DB gating is needed in the future.
+- Audit row is one **period-level** row per unlock (`record_id NULL`, action `UNLOCK_PAID`), not one row per record. Simpler to query.
 
-## Open todos
+## Open todos (Phase 4c)
 
-- [ ] **Wire the re-derive diff dialog.** ~2-3 hours. Backend already exists. This is the "refresh a week" button D identified in the screenshot.
-- [ ] **Build owner-initiated unlock for PAID periods.** ~½ day. High-stakes — today an accidental PAID-lock is unfixable through UI (only SQL).
-- [ ] **Build CSV export.** ~2-4 hours. Needed for parallel run with Joe's sheet.
-- [ ] _(cleanup, not blocking)_ Delete `src/pages/PayrollRun.tsx`, `src/hooks/useSupabasePayroll.ts`; clean up placeholder cells in `Dashboard.tsx`, `Empleados.tsx`, `Historial.tsx`.
+- [ ] **CSV export** — biggest remaining 4c piece; needed for the Joe parallel-run handoff. Not started.
+- [ ] **Real historical drill-down on Periods page / `Historial.tsx`** — currently a stub; clicking past periods routes back to landing.
+- [ ] **Dead code cleanup**:
+  - Delete `src/pages/PayrollRun.tsx` (old payroll page, route still resolves but no nav entry)
+  - Delete `src/hooks/useSupabasePayroll.ts` (Phase-0 hook, replaced by `usePayroll.ts`)
+  - Retire placeholder cells in `Dashboard.tsx` and `Empleados.tsx`
 
 ## Next step when you come back
 
-Start with the re-derive diff dialog. Open `src/pages/admin/PayrollWeek.tsx` around line 766 (the stub button) and line 956 (the stub dialog). Replace with a real dialog that:
-1. Calls `supabase.rpc('pay_redrive_week', { p_week_id, p_confirm: false })` to get the diff preview
-2. Renders the per-record diff (changes + preserved manual overrides) in a table
-3. On confirm, calls the RPC again with `p_confirm: true` and shows a result toast
+Test what we shipped today on the live app before building more:
 
-The function signature and return shape are in `supabase/migrations/20260520000001_payroll_phase3_auto_derive.sql` starting at line 409.
+1. Open a non-PAID week with at least one manually-edited record → click **Re-derive** → confirm the manual edit appears under "Manual override — kept" with the fresh-would-be value shown in muted text.
+2. If you have a PAID period (or want to create + lock a throwaway one): sign in as owner → confirm the amber **Unlock Period** button appears on the week page → try empty reason / lowercase "unlock" → confirm button stays disabled → enter real reason + "UNLOCK" → confirm → check `payroll_audit_log WHERE action='UNLOCK_PAID'` for the new row.
+3. Sign in as non-owner (Adrian TL or any agent) on the same PAID period → confirm the Unlock button is **not** visible, just the lock notice with the "ask an owner" copy.
+
+After that's clean, pick up CSV export — that's the next-priority item from the Phase 4c list.
 
 ## Watch out for
 
-- **No git push from this sandbox.** Claude can't push from Cowork — all commits/pushes happen on D's terminal. Standard rule.
-- **PAID lock tooltip is live but I didn't include the locked-on date** in the message. Doing that cleanly means querying the period's `locked_at` and threading it down. Easy follow-up if D wants it, but not blocking.
-- **The legacy `/payroll-run` route still resolves by URL** even though there's no nav entry pointing at it. Slated for cleanup in 4c.
-- **Joe's 13 documented divergences (97.03% validation)** are still parked — Aldo/Albert Sunday premium, Jorge flat $400/day deduction, Glenn/Cesar ad-hoc payments. Not blocking, but D may want to clarify with Joe before parallel run starts.
+- **Nothing tested in prod yet.** Both flows were typechecked + manually code-reviewed, but neither has been clicked through against real data. Vercel rebuild should be complete by the time you return.
+- **TS errors on RPC names are expected and pre-existing**: `supabase/types.ts` codegen is stale and doesn't include the payroll RPCs (`pay_derive_week`, `pay_redrive_week`, `pay_unlock_period`). Build still ships because these are advisory. If you want them cleaned up, regenerate the types via the Supabase MCP `generate_typescript_types` tool — that's the proper fix.
+- **Re-derive dialog re-fetches the preview every time it's opened** (intentional — data may have changed). If a user opens the dialog, walks away for 20 min, then clicks Apply, they'll apply the diff they saw earlier, not the current state. Acceptable for v1 — DB trigger recomputes totals on UPDATE anyway. Flag this only if it becomes a real-world issue.
+- **Unlock loses previous COMPLETE status on weeks.** When you unlock, weeks revert to UNPAID even if they were COMPLETE before being locked. User needs to re-mark complete if they want that state back. Mentioned in the dialog copy.
+- **Migration file `20260521210000_payroll_phase4c_unlock_period.sql` is already applied to the live DB** via `apply_migration` MCP call. Don't re-run it manually; `CREATE OR REPLACE` makes that safe, but it's noise.

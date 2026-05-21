@@ -18,12 +18,14 @@ import {
   RefreshCw,
   CheckCircle2,
   Lock,
+  Unlock,
   ArrowUpDown,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,12 +49,18 @@ import {
   useUpdatePayrollRecord,
   useMarkWeekComplete,
   useMarkPeriodPaid,
+  useRedriveWeekPreview,
+  useRedriveWeekApply,
+  useUnlockPeriod,
   useCanEditExtraBonus,
   useCanLockToPaid,
+  useCanUnlockPaid,
   previewTotalPay,
   type PayrollRecord,
   type PayrollRecordInputs,
+  type RedriveResult,
 } from "@/hooks/usePayroll";
+import { RedriveDiffDialog } from "@/components/RedriveDiffDialog";
 import { formatMXN } from "@/lib/formatCurrency";
 import { getDisplayName } from "@/lib/displayName";
 
@@ -557,6 +565,10 @@ export default function PayrollWeek() {
   const updateRecord = useUpdatePayrollRecord();
   const markWeekComplete = useMarkWeekComplete();
   const markPeriodPaid = useMarkPeriodPaid();
+  const redrivePreview = useRedriveWeekPreview();
+  const redriveApply = useRedriveWeekApply();
+  const unlockPeriod = useUnlockPeriod();
+  const canUnlock = useCanUnlockPaid();
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
@@ -567,6 +579,9 @@ export default function PayrollWeek() {
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showPaidDialog, setShowPaidDialog] = useState(false);
   const [showRederiveDialog, setShowRederiveDialog] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockReason, setUnlockReason] = useState("");
+  const [unlockConfirmText, setUnlockConfirmText] = useState("");
   const [actionPending, setActionPending] = useState(false);
 
   /* -- sorting -- */
@@ -647,6 +662,87 @@ export default function PayrollWeek() {
     } catch (err: unknown) {
       toast({
         title: "Failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  /* -- open re-derive dialog (also kicks off the preview) -- */
+  function handleOpenRederive() {
+    if (!week) return;
+    setShowRederiveDialog(true);
+    redrivePreview.reset();
+    redrivePreview.mutate({ weekId: week.id });
+  }
+
+  /* -- close re-derive dialog (with cleanup) -- */
+  function handleCloseRederive(open: boolean) {
+    setShowRederiveDialog(open);
+    if (!open) {
+      // Clear stale preview data so reopening triggers a fresh fetch
+      redrivePreview.reset();
+    }
+  }
+
+  /* -- apply re-derive -- */
+  async function handleConfirmRederive() {
+    if (!week) return;
+    try {
+      const result = (await redriveApply.mutateAsync({
+        weekId: week.id,
+      })) as RedriveResult;
+      const updated = result?.updated ?? 0;
+      const preserved = result?.preserved_overrides ?? 0;
+      toast({
+        title: "Re-derive applied",
+        description: `Updated ${updated} record${updated === 1 ? "" : "s"}` +
+          (preserved > 0
+            ? ` · preserved ${preserved} manual override${preserved === 1 ? "" : "s"}`
+            : ""),
+      });
+      setShowRederiveDialog(false);
+      redrivePreview.reset();
+    } catch (err: unknown) {
+      toast({
+        title: "Re-derive failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }
+
+  /* -- unlock period (owner only) -- */
+  function handleOpenUnlock() {
+    setUnlockReason("");
+    setUnlockConfirmText("");
+    setShowUnlockDialog(true);
+  }
+
+  async function handleConfirmUnlock() {
+    if (!week) return;
+    setActionPending(true);
+    try {
+      const result = await unlockPeriod.mutateAsync({
+        periodId: week.period_id,
+        reason: unlockReason.trim(),
+      });
+      toast({
+        title: "Pay period unlocked",
+        description: `${result.records_unlocked} record${
+          result.records_unlocked === 1 ? "" : "s"
+        } and ${result.weeks_unlocked} week${
+          result.weeks_unlocked === 1 ? "" : "s"
+        } returned to UNPAID. The audit log captured your reason.`,
+      });
+      setShowUnlockDialog(false);
+      setUnlockReason("");
+      setUnlockConfirmText("");
+    } catch (err: unknown) {
+      toast({
+        title: "Unlock failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "destructive",
       });
@@ -763,12 +859,12 @@ export default function PayrollWeek() {
         {/* Action buttons */}
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            {/* Re-derive — stub for Phase 4c */}
+            {/* Re-derive — Phase 4c diff dialog */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowRederiveDialog(true)}
-              disabled={isPeriodPaid}
+              onClick={handleOpenRederive}
+              disabled={isPeriodPaid || redriveApply.isPending}
             >
               <RefreshCw className="h-4 w-4 mr-1.5" />
               Re-derive
@@ -797,6 +893,20 @@ export default function PayrollWeek() {
               >
                 <Lock className="h-4 w-4 mr-1.5" />
                 Mark Period PAID
+              </Button>
+            )}
+
+            {/* Unlock Period — owner only, only on PAID periods */}
+            {canUnlock && isPeriodPaid && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenUnlock}
+                disabled={actionPending}
+                className="border-amber-500 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+              >
+                <Unlock className="h-4 w-4 mr-1.5" />
+                Unlock Period
               </Button>
             )}
           </div>
@@ -869,7 +979,10 @@ export default function PayrollWeek() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded p-3 bg-muted/30">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            This pay period is <strong>PAID and locked</strong>. All records are immutable. Only an owner-initiated unlock (coming in Phase 4c) can reopen them.
+            This pay period is <strong>PAID and locked</strong>. All records are immutable.{" "}
+            {canUnlock
+              ? "Use the Unlock Period button above to reopen — every unlock is recorded in the audit log."
+              : "Ask an owner to unlock the period if a correction is needed."}
           </span>
         </div>
       )}
@@ -953,22 +1066,112 @@ export default function PayrollWeek() {
         </DialogContent>
       </Dialog>
 
-      {/* Re-derive stub — Phase 4c */}
-      <Dialog open={showRederiveDialog} onOpenChange={setShowRederiveDialog}>
+      {/* Unlock Period — owner only. Stronger gating than Mark PAID:
+          reason is required AND user must type "UNLOCK" to confirm. */}
+      <Dialog open={showUnlockDialog} onOpenChange={(open) => {
+        if (!open && !actionPending) {
+          setUnlockReason("");
+          setUnlockConfirmText("");
+        }
+        setShowUnlockDialog(open);
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Re-derive from time_clock</DialogTitle>
-            <DialogDescription>
-              The re-derive diff dialog is coming in Phase 4c. It will show you exactly what
-              changed between the current values and fresh auto-derived values, and let you
-              choose which fields to accept before committing.
+            <DialogTitle className="text-amber-700 flex items-center gap-2">
+              <Unlock className="h-5 w-5" />
+              Unlock pay period?
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Reopens this pay period so records can be corrected.
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>The period returns to <strong>OPEN</strong></li>
+                  <li>All weeks in the period return to <strong>UNPAID</strong></li>
+                  <li>All <strong>{records.length} agent record{records.length === 1 ? "" : "s"}</strong> in this week (and other weeks) return to UNPAID and become editable</li>
+                  <li>Any prior COMPLETE status on weeks is <strong>lost</strong> — you'll need to re-mark them complete after fixing</li>
+                  <li>This action is recorded in the payroll audit log with your name and reason</li>
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  After fixing whatever's wrong, mark the period PAID again to re-lock.
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="unlock-reason" className="text-xs font-medium">
+                Reason <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="unlock-reason"
+                value={unlockReason}
+                onChange={(e) => setUnlockReason(e.target.value)}
+                placeholder="e.g. Wrong rate for Javier — needs correction before bank transfer"
+                disabled={actionPending}
+                rows={2}
+                maxLength={500}
+                className="text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Recorded in the audit log. Required.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="unlock-confirm" className="text-xs font-medium">
+                Type <code className="bg-muted px-1 py-0.5 rounded text-xs">UNLOCK</code> to confirm
+              </Label>
+              <Input
+                id="unlock-confirm"
+                value={unlockConfirmText}
+                onChange={(e) => setUnlockConfirmText(e.target.value)}
+                placeholder="UNLOCK"
+                disabled={actionPending}
+                autoComplete="off"
+                className="text-sm font-mono"
+              />
+            </div>
+          </div>
+
           <DialogFooter>
-            <Button onClick={() => setShowRederiveDialog(false)}>Got it</Button>
+            <Button
+              variant="ghost"
+              onClick={() => setShowUnlockDialog(false)}
+              disabled={actionPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleConfirmUnlock}
+              disabled={
+                actionPending ||
+                unlockReason.trim().length === 0 ||
+                unlockConfirmText !== "UNLOCK"
+              }
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {actionPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Unlock pay period
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Re-derive diff dialog — Phase 4c */}
+      <RedriveDiffDialog
+        open={showRederiveDialog}
+        onOpenChange={handleCloseRederive}
+        records={records}
+        previewLoading={redrivePreview.isPending}
+        previewError={redrivePreview.error as Error | null}
+        preview={redrivePreview.data ?? null}
+        applying={redriveApply.isPending}
+        onConfirm={handleConfirmRederive}
+      />
     </div>
   );
 }

@@ -646,6 +646,154 @@ export function useMarkPeriodPaid() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Unlock PAID period (Phase 4c)                                       */
+/* ------------------------------------------------------------------ */
+
+/** Return shape from pay_unlock_period RPC. */
+export interface UnlockPeriodResult {
+  period_id: string;
+  period_code: string | null;
+  weeks_unlocked: number;
+  records_unlocked: number;
+  reason: string;
+  actor: string;
+  at: string;
+}
+
+/**
+ * Owner-only: unlock a LOCKED pay period.
+ * Calls pay_unlock_period(periodId, reason). DB enforces owner check + that
+ * the period is currently LOCKED. On success, broadcasts payroll cache
+ * invalidations so all open payroll views refresh.
+ */
+export function useUnlockPeriod() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      periodId,
+      reason,
+    }: {
+      periodId: string;
+      reason: string;
+    }) => {
+      const { data, error } = await supabase.rpc("pay_unlock_period", {
+        p_period_id: periodId,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      return data as unknown as UnlockPeriodResult;
+    },
+    onSuccess: (_, { periodId }) => {
+      qc.invalidateQueries({ queryKey: payrollKeys.currentPeriod() });
+      qc.invalidateQueries({ queryKey: payrollKeys.weeksInPeriod(periodId) });
+      // Mirror useMarkPeriodPaid: broad invalidation so any open week/records
+      // view refreshes too (we don't know all week IDs in this period).
+      qc.invalidateQueries({ queryKey: ["payroll"] });
+      qc.invalidateQueries({ queryKey: ["payroll-weeks"] });
+      qc.invalidateQueries({ queryKey: ["payroll-week"] });
+      qc.invalidateQueries({ queryKey: ["payroll-records"] });
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Re-derive (Phase 4c)                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Per-field "will be applied" entry inside a redrive diff row.
+ * Values may be null for nullable columns (partial_week_days).
+ */
+export interface RedriveChange {
+  from: number | null;
+  to: number | null;
+}
+
+/**
+ * Per-field "was manually changed — will be preserved" entry.
+ */
+export interface RedrivePreserved {
+  manual: number | null;
+  snapshot_was: number | null;
+  fresh_would_be: number | null;
+}
+
+/** Fields the redrive function inspects. */
+export type RedriveField =
+  | "missed_days"
+  | "overtime_days"
+  | "sundays_worked"
+  | "holiday_days"
+  | "partial_week_days";
+
+/** One row in the diff array — one per non-PAID payroll_record in the week. */
+export interface RedriveDiffRow {
+  employee_id: string;
+  record_id: string;
+  derive_status: string | null;  // 'OK' | 'NO_DATA' | 'NO_SHIFT_TYPE' | etc.
+  changes: Partial<Record<RedriveField, RedriveChange>>;
+  preserved: Partial<Record<RedriveField, RedrivePreserved>>;
+}
+
+/** Full pay_redrive_week response. */
+export interface RedriveResult {
+  confirmed: boolean;
+  updated: number;
+  would_update: number | null;
+  skipped_paid: number;
+  preserved_overrides: number;
+  diff: RedriveDiffRow[];
+}
+
+/**
+ * Preview the diff for re-deriving a week from time_clock.
+ * Calls pay_redrive_week(week_id, false) — DOES NOT WRITE.
+ *
+ * The DB function preserves manual overrides (column != snapshot) and skips
+ * PAID rows. The returned `diff` array includes every non-PAID record in the
+ * week, including ones where `changes` and `preserved` are both empty objects
+ * (i.e. nothing would change). The UI is responsible for filtering those out
+ * for display.
+ */
+export function useRedriveWeekPreview() {
+  return useMutation({
+    mutationFn: async ({ weekId }: { weekId: string }) => {
+      const { data, error } = await supabase.rpc("pay_redrive_week", {
+        p_week_id: weekId,
+        p_confirm: false,
+      });
+      if (error) throw error;
+      return data as unknown as RedriveResult;
+    },
+  });
+}
+
+/**
+ * Apply the redrive — calls pay_redrive_week(week_id, true).
+ * Updates records in place; the BEFORE UPDATE trigger on payroll_records
+ * recomputes total_pay etc. Invalidates the week + records caches.
+ */
+export function useRedriveWeekApply() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ weekId }: { weekId: string }) => {
+      const { data, error } = await supabase.rpc("pay_redrive_week", {
+        p_week_id: weekId,
+        p_confirm: true,
+      });
+      if (error) throw error;
+      return data as unknown as RedriveResult;
+    },
+    onSuccess: (_, { weekId }) => {
+      qc.invalidateQueries({ queryKey: payrollKeys.weekRecords(weekId) });
+      qc.invalidateQueries({ queryKey: payrollKeys.week(weekId) });
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Permission helpers                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -674,6 +822,12 @@ export function useCanCreateWeek(): boolean {
 
 /** Only owner can lock a period to PAID. */
 export function useCanLockToPaid(): boolean {
+  const { isOwner } = useAuth();
+  return isOwner;
+}
+
+/** Only owner can unlock a PAID period. Mirrors the DB-side is_owner() guard. */
+export function useCanUnlockPaid(): boolean {
   const { isOwner } = useAuth();
   return isOwner;
 }
