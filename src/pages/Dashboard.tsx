@@ -12,9 +12,9 @@ import { Users, DollarSign, TrendingUp, Calculator, Upload, Pencil, ChevronDown,
 import { useEffect, useState, useRef } from "react";
 import { getPayrollCutoffInfo, formatDateES, type PayrollCutoffInfo } from "@/utils/payrollCutoff";
 import { parseTCW, type TCWResult } from "@/utils/tcwParser";
-import { usePublishedPosts, useMyAcks, useAcknowledgePost } from "@/hooks/useBulletin";
+import { usePublishedPosts, useMyAcks, useAcknowledgePost, useCurrentRecognition } from "@/hooks/useBulletin";
 import { useAuth } from "@/hooks/useAuth";
-import { Megaphone, CheckCircle2 } from "lucide-react";
+import { Megaphone, CheckCircle2, Trophy, Star } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const { data: publishedPosts = [] } = usePublishedPosts();
   const { data: myAcks = new Set<string>() } = useMyAcks();
   const acknowledge = useAcknowledgePost();
+  const { data: currentRecognition } = useCurrentRecognition();
   const unreadPosts = publishedPosts.filter((p) => p.requires_ack && !myAcks.has(p.id));
 
   const { data: employees = [], isLoading: loadingEmps } = useEmployees();
@@ -359,6 +360,31 @@ export default function Dashboard() {
                 +{unreadPosts.length - 3} more — <button className="underline" onClick={() => navigate("/comunicados")}>view all</button>
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========== EMPLOYEE OF THE MONTH ========== */}
+      {currentRecognition && (
+        <Card className="bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300 dark:from-yellow-950/30 dark:to-amber-950/30 dark:border-yellow-700">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-yellow-100 dark:bg-yellow-900/50 p-3 shrink-0">
+                <Trophy className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="space-y-0.5 flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">
+                  {currentRecognition.title}
+                </p>
+                <p className="text-xl font-bold">
+                  {currentRecognition.recognized_employee_name ?? "—"}
+                </p>
+                {currentRecognition.body && (
+                  <p className="text-sm text-muted-foreground">{currentRecognition.body}</p>
+                )}
+              </div>
+              <Star className="h-5 w-5 text-yellow-400 fill-yellow-400 shrink-0 mt-0.5" />
+            </div>
           </CardContent>
         </Card>
       )}

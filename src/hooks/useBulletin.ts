@@ -9,6 +9,7 @@ export type BulletinPost = {
   body: string;
   author_id: string | null;
   campaign_id: string | null;
+  recognized_employee_id: string | null;
   requires_ack: boolean;
   is_published: boolean;
   published_at: string | null;
@@ -17,6 +18,7 @@ export type BulletinPost = {
   updated_at: string;
   // joined
   author_name?: string | null;
+  recognized_employee_name?: string | null;
 };
 
 export type BulletinAck = {
@@ -26,6 +28,16 @@ export type BulletinAck = {
   acked_at: string;
 };
 
+const POST_SELECT = "*, author:author_id(full_name), recognized:recognized_employee_id(full_name)";
+
+function mapPost(p: any): BulletinPost {
+  return {
+    ...p,
+    author_name: p.author?.full_name ?? null,
+    recognized_employee_name: p.recognized?.full_name ?? null,
+  };
+}
+
 // ── Fetch: published posts for the current user (employee feed) ──────────────
 export function usePublishedPosts() {
   return useQuery({
@@ -33,14 +45,11 @@ export function usePublishedPosts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bulletin_posts")
-        .select("*, author:author_id(full_name)")
+        .select(POST_SELECT)
         .eq("is_published", true)
         .order("published_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((p: any) => ({
-        ...p,
-        author_name: p.author?.full_name ?? null,
-      })) as BulletinPost[];
+      return (data ?? []).map(mapPost) as BulletinPost[];
     },
   });
 }
@@ -52,13 +61,80 @@ export function useAllPosts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bulletin_posts")
-        .select("*, author:author_id(full_name)")
+        .select(POST_SELECT)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((p: any) => ({
-        ...p,
-        author_name: p.author?.full_name ?? null,
-      })) as BulletinPost[];
+      return (data ?? []).map(mapPost) as BulletinPost[];
+    },
+  });
+}
+
+// ── Fetch: most recent published recognition (Employee of the Month) ──────────
+export function useCurrentRecognition() {
+  return useQuery({
+    queryKey: ["bulletin_posts", "recognition", "current"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bulletin_posts")
+        .select(POST_SELECT)
+        .eq("type", "recognition")
+        .eq("is_published", true)
+        .order("published_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapPost(data) : null;
+    },
+  });
+}
+
+// ── Fetch: all published recognitions (history list) ─────────────────────────
+export function useRecognitionHistory() {
+  return useQuery({
+    queryKey: ["bulletin_posts", "recognition", "history"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bulletin_posts")
+        .select(POST_SELECT)
+        .eq("type", "recognition")
+        .eq("is_published", true)
+        .order("published_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map(mapPost) as BulletinPost[];
+    },
+  });
+}
+
+// ── Mutation: create + immediately publish an Employee of the Month post ──────
+export function useCreateRecognition() {
+  const qc = useQueryClient();
+  const { employeeId } = useAuth();
+  return useMutation({
+    mutationFn: async (payload: {
+      recognizedEmployeeId: string;
+      recognizedName: string;
+      reason: string;
+      monthLabel: string; // e.g. "May 2026"
+    }) => {
+      const { data, error } = await supabase
+        .from("bulletin_posts")
+        .insert({
+          type: "recognition",
+          title: `Employee of the Month — ${payload.monthLabel}`,
+          body: payload.reason,
+          recognized_employee_id: payload.recognizedEmployeeId,
+          author_id: employeeId ?? null,
+          requires_ack: false,
+          is_published: true,
+          published_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bulletin_posts"] });
     },
   });
 }

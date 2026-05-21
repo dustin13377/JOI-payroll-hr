@@ -9,8 +9,19 @@ import {
   usePublishPost,
   useDeletePost,
   useAcknowledgePost,
+  useCurrentRecognition,
+  useRecognitionHistory,
+  useCreateRecognition,
   BulletinPost,
 } from "@/hooks/useBulletin";
+import { useEmployees } from "@/hooks/useSupabasePayroll";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +48,8 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
+  Trophy,
+  Star,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -367,6 +380,123 @@ function CreatePostDialog({
   );
 }
 
+// ── Employee of the Month dialog ─────────────────────────────────────────────
+function RecognizeDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { data: employees = [] } = useEmployees();
+  const createRecognition = useCreateRecognition();
+  const [selectedId, setSelectedId] = useState("");
+  const [reason, setReason] = useState("");
+
+  const monthLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+
+  const activeAgents = employees.filter((e) => e.title === "agent" || e.title === "team_lead");
+
+  const reset = () => { setSelectedId(""); setReason(""); };
+
+  const handleSubmit = async () => {
+    if (!selectedId) { toast.error("Select an employee"); return; }
+    const emp = employees.find((e) => e.id === selectedId);
+    try {
+      await createRecognition.mutateAsync({
+        recognizedEmployeeId: selectedId,
+        recognizedName: emp?.nombre ?? "",
+        reason: reason.trim(),
+        monthLabel,
+      });
+      toast.success(`${emp?.nombre} recognized as Employee of the Month!`);
+      reset();
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!createRecognition.isPending) { reset(); onOpenChange(v); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-yellow-500" />
+            Employee of the Month — {monthLabel}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="grid gap-2">
+            <Label>Employee</Label>
+            <Select value={selectedId} onValueChange={setSelectedId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select an employee…" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeAgents.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e._workName || e.nombre}
+                    <span className="text-xs text-muted-foreground ml-2">· {e.id}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label>Reason <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why are they being recognized this month?"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createRecognition.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={createRecognition.isPending || !selectedId}>
+            <Trophy className="h-4 w-4 mr-1.5" />
+            {createRecognition.isPending ? "Saving…" : "Publish recognition"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── EotM highlight card (employee view) ──────────────────────────────────────
+function RecognitionCard({ post }: { post: BulletinPost }) {
+  return (
+    <Card className="bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300 dark:from-yellow-950/30 dark:to-amber-950/30 dark:border-yellow-700">
+      <CardContent className="pt-4">
+        <div className="flex items-start gap-4">
+          <div className="rounded-full bg-yellow-100 dark:bg-yellow-900/50 p-3 shrink-0">
+            <Trophy className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-400">
+              {post.title}
+            </p>
+            <p className="text-xl font-bold">
+              {post.recognized_employee_name ?? "—"}
+            </p>
+            {post.body && (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{post.body}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Recognized by {post.author_name ?? "management"} · {timeAgo(post.published_at)}
+            </p>
+          </div>
+          <Star className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5 fill-yellow-400" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Comunicados() {
   const { isManager, isAdmin, isOwner, employeeId } = useAuth();
@@ -375,8 +505,11 @@ export default function Comunicados() {
   const { data: allPosts = [], isLoading: loadingAll } = useAllPosts();
   const { data: publishedPosts = [], isLoading: loadingPublished } = usePublishedPosts();
   const { data: myAcks = new Set<string>() } = useMyAcks();
+  const { data: currentRecognition } = useCurrentRecognition();
+  const { data: recognitionHistory = [] } = useRecognitionHistory();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [recognizeOpen, setRecognizeOpen] = useState(false);
   const [mgmtView, setMgmtView] = useState<"all" | "published" | "drafts">("all");
 
   const filteredMgmt = allPosts.filter((p) => {
@@ -407,12 +540,21 @@ export default function Comunicados() {
           </p>
         </div>
         {isLeadership && (
-          <Button onClick={() => setCreateOpen(true)} className="gap-1.5 shrink-0">
-            <Plus className="h-4 w-4" />
-            New
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setRecognizeOpen(true)} className="gap-1.5">
+              <Trophy className="h-4 w-4 text-yellow-500" />
+              Recognize
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              New
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* ── Employee of the Month ── */}
+      {currentRecognition && <RecognitionCard post={currentRecognition} />}
 
       {/* ── Leadership view ── */}
       {isLeadership && (
@@ -482,7 +624,33 @@ export default function Comunicados() {
         </div>
       )}
 
+      {/* ── Recognition history (leadership only) ── */}
+      {isLeadership && recognitionHistory.length > 1 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Past Recognitions
+          </p>
+          <div className="space-y-2">
+            {recognitionHistory.slice(1).map((post) => (
+              <div key={post.id} className="flex items-center gap-3 rounded-lg border px-4 py-3">
+                <Trophy className="h-4 w-4 text-yellow-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{post.recognized_employee_name ?? "—"}</span>
+                  <span className="text-xs text-muted-foreground ml-2">{post.title.replace("Employee of the Month — ", "")}</span>
+                </div>
+                {post.body && (
+                  <p className="text-xs text-muted-foreground hidden sm:block truncate max-w-xs">
+                    {post.body}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <CreatePostDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <RecognizeDialog open={recognizeOpen} onOpenChange={setRecognizeOpen} />
     </div>
   );
 }
