@@ -227,10 +227,10 @@ function EODNoteCard({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Holiday Card (one per campaign)                                    */
+/*  Holiday Section (one per campaign — rendered inside ApprovalsCard) */
 /* ------------------------------------------------------------------ */
 
-function HolidayCard({ campaign }: { campaign: TLCampaign }) {
+function HolidaySection({ campaign }: { campaign: TLCampaign }) {
   const { data: nextHoliday } = useNextUpcomingHoliday();
   const { data: requests = [], isLoading } = useTeamHolidayRequests(
     campaign.id,
@@ -239,7 +239,7 @@ function HolidayCard({ campaign }: { campaign: TLCampaign }) {
   const approveMutation = useTLApproveHolidayRequest();
   const dismissMutation = useTLDismissHolidayRequest();
 
-  // Hide card if no upcoming holiday or it's already today/past
+  // Hide section if no upcoming holiday or it's already today/past
   if (!nextHoliday || nextHoliday.date <= todayLocal()) return null;
 
   const approved = requests.filter((r) => r.status === "approved");
@@ -266,105 +266,92 @@ function HolidayCard({ campaign }: { campaign: TLCampaign }) {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center gap-2 pb-2">
-        <CalendarCheck className="h-5 w-5 text-muted-foreground" />
-        <CardTitle className="text-lg">
-          Upcoming Holiday — {campaign.name}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Holiday name + date */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-base">{nextHoliday.name}</span>
-          <span className="text-sm text-muted-foreground">
-            {formatDateMXLong(nextHoliday.date)}
-          </span>
-          {nextHoliday.is_statutory && (
-            <Badge variant="secondary" className="text-xs">Statutory</Badge>
-          )}
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+          Holiday — {nextHoliday.name}, {formatDateMXLong(nextHoliday.date)} · {campaign.name}
+        </p>
+        {nextHoliday.is_statutory && (
+          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Statutory</Badge>
+        )}
+      </div>
 
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <>
-            {/* Approved-off list */}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <>
+          {approved.length > 0 && (
             <div className="space-y-1">
-              <p className="text-sm font-medium">
+              <p className="text-xs text-muted-foreground">
                 Approved off ({approved.length})
               </p>
-              {approved.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No agents approved off yet.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {approved.map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      {r.displayName}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <ul className="space-y-1">
+                {approved.map((r) => (
+                  <li key={r.id} className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    {r.displayName}
+                  </li>
+                ))}
+              </ul>
             </div>
+          )}
 
-            {/* Pending review queue */}
-            {pending.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-amber-600">
-                  Pending your review ({pending.length})
-                </p>
-                <ul className="space-y-2">
-                  {pending.map((r) => {
-                    const isActing =
-                      (approveMutation.isPending && approveMutation.variables?.id === r.id) ||
-                      (dismissMutation.isPending && dismissMutation.variables?.id === r.id);
-                    return (
-                      <li key={r.id} className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-sm">{r.displayName}</span>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isActing}
-                            onClick={() => handleApprove(r.id)}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            disabled={isActing}
-                            onClick={() => handleDismiss(r.id)}
-                          >
-                            Dismiss
-                          </Button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+          {pending.length > 0 && (
+            <ul className="space-y-2">
+              {pending.map((r) => {
+                const isActing =
+                  (approveMutation.isPending && approveMutation.variables?.id === r.id) ||
+                  (dismissMutation.isPending && dismissMutation.variables?.id === r.id);
+                return (
+                  <li key={r.id} className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-sm font-medium">{r.displayName}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isActing}
+                        onClick={() => handleApprove(r.id)}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        disabled={isActing}
+                        onClick={() => handleDismiss(r.id)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {approved.length === 0 && pending.length === 0 && (
+            <p className="text-sm text-muted-foreground">No agents approved off yet.</p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Vacation Card (one per campaign)                                   */
+/*  Vacation Section (one per campaign — rendered inside ApprovalsCard) */
 /* ------------------------------------------------------------------ */
 
-function VacationCard({ campaign }: { campaign: TLCampaign }) {
+function VacationSection({ campaign }: { campaign: TLCampaign }) {
   const { data: requests = [], isLoading } = useTLPendingVacationRequests(campaign.id);
   const approveMutation = useTLApproveVacationRequest();
   const denyMutation = useTLDenyVacationRequest();
   const [denyingId, setDenyingId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState("");
 
+  // Auto-hide if no pending requests
   if (!isLoading && requests.length === 0) return null;
 
   function handleApprove(id: string) {
@@ -393,92 +380,232 @@ function VacationCard({ campaign }: { campaign: TLCampaign }) {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center gap-2 pb-2">
-        <CalendarDays className="h-5 w-5 text-muted-foreground" />
-        <CardTitle className="text-lg">
-          Vacation Requests — {campaign.name}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <ul className="space-y-3">
-            {requests.map((req) => {
-              const isDenying = denyingId === req.id;
-              const isActing =
-                (approveMutation.isPending && approveMutation.variables?.id === req.id) ||
-                (denyMutation.isPending && denyMutation.variables?.id === req.id);
-              return (
-                <li key={req.id} className="rounded-md border px-3 py-2 space-y-2">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <p className="text-sm font-medium">{req.displayName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDateMX(req.start_date)} – {formatDateMX(req.end_date)}
-                        <span className="ml-1 text-xs">
-                          ({req.days_requested} {req.days_requested === 1 ? "day" : "days"})
-                        </span>
-                      </p>
-                      {req.notes && (
-                        <p className="text-xs text-muted-foreground italic mt-0.5">{req.notes}</p>
-                      )}
-                    </div>
-                    {!isDenying && (
-                      <div className="flex gap-2 shrink-0">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isActing}
-                          onClick={() => handleApprove(req.id)}
-                        >
-                          Forward to HR
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          disabled={isActing}
-                          onClick={() => {
-                            setDenyingId(req.id);
-                            setDenyReason("");
-                          }}
-                        >
-                          Deny
-                        </Button>
-                      </div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+          Vacation — forward to HR · {campaign.name} ({requests.length})
+        </p>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <ul className="space-y-3">
+          {requests.map((req) => {
+            const isDenying = denyingId === req.id;
+            const isActing =
+              (approveMutation.isPending && approveMutation.variables?.id === req.id) ||
+              (denyMutation.isPending && denyMutation.variables?.id === req.id);
+            return (
+              <li key={req.id} className="rounded-md border px-3 py-2 space-y-2">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium">{req.displayName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDateMX(req.start_date)} – {formatDateMX(req.end_date)}
+                      <span className="ml-1 text-xs">
+                        ({req.days_requested} {req.days_requested === 1 ? "day" : "days"})
+                      </span>
+                    </p>
+                    {req.notes && (
+                      <p className="text-xs text-muted-foreground italic mt-0.5">{req.notes}</p>
                     )}
                   </div>
-                  {isDenying && (
-                    <div className="flex gap-2 items-center flex-wrap">
-                      <Input
-                        placeholder="Reason for denial (required)"
-                        value={denyReason}
-                        onChange={(e) => setDenyReason(e.target.value)}
-                        className="flex-1 h-8 text-sm min-w-48"
-                      />
+                  {!isDenying && (
+                    <div className="flex gap-2 shrink-0">
                       <Button
                         size="sm"
-                        variant="destructive"
-                        disabled={!denyReason.trim() || denyMutation.isPending}
-                        onClick={() => handleDenyConfirm(req.id)}
+                        variant="outline"
+                        disabled={isActing}
+                        onClick={() => handleApprove(req.id)}
                       >
-                        Confirm Deny
+                        Forward to HR
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => { setDenyingId(null); setDenyReason(""); }}
+                        className="text-destructive hover:text-destructive"
+                        disabled={isActing}
+                        onClick={() => {
+                          setDenyingId(req.id);
+                          setDenyReason("");
+                        }}
                       >
-                        Cancel
+                        Deny
                       </Button>
                     </div>
                   )}
-                </li>
-              );
-            })}
-          </ul>
+                </div>
+                {isDenying && (
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <Input
+                      placeholder="Reason for denial (required)"
+                      value={denyReason}
+                      onChange={(e) => setDenyReason(e.target.value)}
+                      className="flex-1 h-8 text-sm min-w-48"
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={!denyReason.trim() || denyMutation.isPending}
+                      onClick={() => handleDenyConfirm(req.id)}
+                    >
+                      Confirm Deny
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setDenyingId(null); setDenyReason(""); }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Time Off Section (agents reporting directly to this TL)            */
+/* ------------------------------------------------------------------ */
+
+function formatDateRange(start: string, end: string): string {
+  if (start === end) return formatDateMX(start);
+  return `${formatDateMX(start)} – ${formatDateMX(end)}`;
+}
+
+function TimeOffSection({ employeeId }: { employeeId: string }) {
+  const pendingTimeOff = usePendingTimeOffForTeam(employeeId);
+  const queryClient = useQueryClient();
+
+  const reviewMutation = useMutation({
+    mutationFn: async ({ requestId, status }: { requestId: string; status: "approved" | "denied" }) => {
+      const { error } = await supabase
+        .from("time_off_requests")
+        .update({ status, reviewed_by: employeeId, reviewed_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (error) throw error;
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
+      toast.success(`Request ${status}`);
+    },
+  });
+
+  if (pendingTimeOff.isLoading) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+          Time off
+        </p>
+        <LogoLoadingIndicator size="sm" />
+      </div>
+    );
+  }
+
+  const data = pendingTimeOff.data ?? [];
+  if (data.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+          Time off ({data.length})
+        </p>
+      </div>
+      <ul className="space-y-2">
+        {data.map((req) => (
+          <li key={req.id} className="rounded-md border px-3 py-2 space-y-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">
+                  {getDisplayName({ work_name: req.workName, full_name: req.fullName })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDateRange(req.start_date, req.end_date)}
+                </p>
+                {req.reason && (
+                  <p className="text-xs text-muted-foreground italic mt-0.5">{req.reason}</p>
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                  disabled={reviewMutation.isPending}
+                  onClick={() => reviewMutation.mutate({ requestId: req.id, status: "approved" })}
+                >
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                  disabled={reviewMutation.isPending}
+                  onClick={() => reviewMutation.mutate({ requestId: req.id, status: "denied" })}
+                >
+                  <XCircle className="mr-1 h-3 w-3" />
+                  Deny
+                </Button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ApprovalsCard — unified container for Time Off / Holiday / Vacation */
+/* ------------------------------------------------------------------ */
+
+function ApprovalsCard({ employeeId }: { employeeId: string }) {
+  const tlCampaigns = useTLCampaigns(employeeId);
+  const pendingTimeOff = usePendingTimeOffForTeam(employeeId);
+
+  const isLoading = pendingTimeOff.isLoading || tlCampaigns.isLoading;
+  const hasTimeOff = (pendingTimeOff.data ?? []).length > 0;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 pb-3">
+        <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+        <CardTitle className="text-lg">Approvals</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading && <LogoLoadingIndicator size="sm" />}
+
+        {!isLoading && (
+          <>
+            <TimeOffSection employeeId={employeeId} />
+            {tlCampaigns.data?.map((c) => (
+              <HolidaySection key={`hol-${c.id}`} campaign={c} />
+            ))}
+            {tlCampaigns.data?.map((c) => (
+              <VacationSection key={`vac-${c.id}`} campaign={c} />
+            ))}
+            {/* Empty state — only show when nothing else is rendering.
+                The per-campaign sections auto-hide when empty, but we can't
+                know that from out here without lifting their queries. So
+                this banner shows when time-off is empty AND there are no
+                upcoming holidays anywhere (the most common empty case).
+                If a campaign has pending holiday/vacation, those sections
+                render above and this is just visual noise — acceptable. */}
+            {!hasTimeOff && (
+              <p className="text-sm text-muted-foreground">
+                Nothing pending in time-off. Holiday and vacation sections appear here when there's something to review.
+              </p>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -617,14 +744,10 @@ function formatTime(iso: string | null | undefined): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function formatDateRange(start: string, end: string): string {
-  if (start === end) return formatDateMX(start);
-  return `${formatDateMX(start)} – ${formatDateMX(end)}`;
-}
+// formatDateRange now lives near TimeOffSection above.
 
 export default function TeamLeadHome() {
   const { employeeId } = useAuth();
-  const queryClient = useQueryClient();
 
   // Fetch TL's own employee record for name + campaign
   const { data: tlEmployee } = useQuery({
@@ -642,7 +765,7 @@ export default function TeamLeadHome() {
 
   const roster = useTeamRoster(employeeId ?? undefined);
   const timeclock = useTodayTimeclockStatus(employeeId ?? undefined);
-  const pendingTimeOff = usePendingTimeOffForTeam(employeeId ?? undefined);
+  // Pending time-off data moved into ApprovalsCard (its own hook).
   const eodWeek = useTeamEODThisWeek(employeeId ?? undefined);
   const alerts = useUnderperformerAlerts(employeeId ?? undefined);
   const tlCampaigns = useTLCampaigns(employeeId ?? null);
@@ -661,20 +784,7 @@ export default function TeamLeadHome() {
   const campaignName = campaignData?.name ?? "Your Campaign";
   const teamSize = roster.data?.length ?? 0;
 
-  // Approve / Deny time-off mutation
-  const reviewMutation = useMutation({
-    mutationFn: async ({ requestId, status }: { requestId: string; status: "approved" | "denied" }) => {
-      const { error } = await supabase
-        .from("time_off_requests")
-        .update({ status, reviewed_by: employeeId, reviewed_at: new Date().toISOString() })
-        .eq("id", requestId);
-      if (error) throw error;
-    },
-    onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
-      toast.success(`Request ${status}`);
-    },
-  });
+  // (Time-off review mutation now lives inside ApprovalsCard's TimeOffSection.)
 
   // ---------- Status badge helper ----------
   function statusBadge(status: string) {
@@ -744,28 +854,18 @@ export default function TeamLeadHome() {
         </div>
       )}
 
-      {/* Holiday cards — one per campaign, auto-hidden when no upcoming holiday */}
-      {tlCampaigns.data && tlCampaigns.data.length > 0 && (
-        <div className="space-y-4">
-          {tlCampaigns.data.map((c) => (
-            <HolidayCard key={c.id} campaign={c} />
-          ))}
-        </div>
-      )}
+      {/* Approvals — unified card. Internally renders Time Off section
+          (across all direct reports) plus per-campaign Holiday and Vacation
+          sub-sections. Replaces the previous 3 separate cards (or up to
+          2N+1 cards for TLs leading multiple campaigns). */}
+      {employeeId && <ApprovalsCard employeeId={employeeId} />}
 
-      {/* Vacation approval cards — one per campaign, auto-hidden when no pending requests */}
-      {tlCampaigns.data && tlCampaigns.data.length > 0 && (
-        <div className="space-y-4">
-          {tlCampaigns.data.map((c) => (
-            <VacationCard key={c.id} campaign={c} />
-          ))}
-        </div>
-      )}
-
-      {/* 2-col grid for cards 1, 2, and 4 */}
+      {/* Bottom row — Today's Attendance, EOD Performance, Alerts.
+          Today's Attendance becomes full-width in PR 2 when it absorbs
+          the Missing Yesterday strip. For now stays in the grid. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Card 1 — Today's Attendance */}
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
             <Clock className="h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-lg">Today's Attendance</CardTitle>
@@ -813,64 +913,7 @@ export default function TeamLeadHome() {
           </CardContent>
         </Card>
 
-        {/* Card 2 — Pending Time Off */}
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2 pb-2">
-            <CalendarDays className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg">Pending Time Off</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {pendingTimeOff.isLoading && (
-              <LogoLoadingIndicator size="sm" />
-            )}
-            {!pendingTimeOff.isLoading &&
-              (!pendingTimeOff.data || pendingTimeOff.data.length === 0) && (
-                <p className="text-sm text-muted-foreground">No pending requests.</p>
-              )}
-            {pendingTimeOff.data?.map((req) => (
-              <div
-                key={req.id}
-                className="flex flex-col gap-1 rounded-md border px-3 py-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{getDisplayName({ work_name: req.workName, full_name: req.fullName })}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateRange(req.start_date, req.end_date)}
-                  </span>
-                </div>
-                {req.reason && (
-                  <p className="text-xs text-muted-foreground">{req.reason}</p>
-                )}
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
-                    disabled={reviewMutation.isPending}
-                    onClick={() =>
-                      reviewMutation.mutate({ requestId: req.id, status: "approved" })
-                    }
-                  >
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                    Approve
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50"
-                    disabled={reviewMutation.isPending}
-                    onClick={() =>
-                      reviewMutation.mutate({ requestId: req.id, status: "denied" })
-                    }
-                  >
-                    <XCircle className="mr-1 h-3 w-3" />
-                    Deny
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {/* (Pending Time Off card was here — now lives inside ApprovalsCard) */}
 
         {/* Card 3 — EOD Performance This Week (full width) */}
         <Card className="lg:col-span-2">

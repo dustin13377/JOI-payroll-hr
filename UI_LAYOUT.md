@@ -154,8 +154,8 @@ File: `src/pages/Dashboard.tsx` — not yet audited in this doc. TODO.
 | PR  | What                                                       | Status         |
 |-----|------------------------------------------------------------|----------------|
 | 1a  | Create `HomeHero` + use it at top of `TeamLeadHome`        | Done 2026-05-21 |
-| 1b  | TL Home bottom: merge approvals card, new Today's Roster  | Pending        |
-| 2   | Kill TLDashboard, absorb Missing Yesterday + Submit-for-agent + coaching notes | Pending |
+| 1b  | Merge Holiday + Vacation + Time Off → one `ApprovalsCard`  | Done 2026-05-21 |
+| 2   | Kill TLDashboard + new Today's Roster with Missing Yesterday + Submit-for-agent | Pending |
 | 3   | Slim EmployeeHome to use HomeHero + new bottom structure   | Pending        |
 
 ### Shared HomeHero (PR 1a)
@@ -165,6 +165,17 @@ File: `src/pages/Dashboard.tsx` — not yet audited in this doc. TODO.
 Props: `employeeId`, `firstName`, `subtitle`, `campaignId`.
 
 `TeamLeadHome` now uses it; the old inline header + `ClockInWidget` usage is gone. `ClockInWidget.tsx` still exists but is no longer imported anywhere — safe to delete after a stability window.
+
+### ApprovalsCard (PR 1b)
+
+Inside `TeamLeadHome.tsx`. One `<ApprovalsCard employeeId={…} />` replaces what used to be up to **2N + 1 separate cards** for a TL leading N campaigns (Holiday card per campaign, Vacation card per campaign, plus Pending Time Off).
+
+Internal sub-components:
+- `TimeOffSection` — pending time-off across all the TL's direct reports. Owns its own `useMutation` for approve/deny.
+- `HolidaySection` — per campaign, auto-hides if no upcoming holiday.
+- `VacationSection` — per campaign, auto-hides if no pending vacation requests.
+
+Empty state: if nothing's pending in time-off, the card shows a friendly "Nothing pending in time-off…" line so the section never disappears entirely (TLs know where to look). Per-campaign holiday/vacation sub-sections auto-hide individually.
 
 ---
 
