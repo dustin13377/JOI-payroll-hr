@@ -47,12 +47,16 @@ import {
   useUpdatePayrollRecord,
   useMarkWeekComplete,
   useMarkPeriodPaid,
+  useRedriveWeekPreview,
+  useRedriveWeekApply,
   useCanEditExtraBonus,
   useCanLockToPaid,
   previewTotalPay,
   type PayrollRecord,
   type PayrollRecordInputs,
+  type RedriveResult,
 } from "@/hooks/usePayroll";
+import { RedriveDiffDialog } from "@/components/RedriveDiffDialog";
 import { formatMXN } from "@/lib/formatCurrency";
 import { getDisplayName } from "@/lib/displayName";
 
@@ -557,6 +561,8 @@ export default function PayrollWeek() {
   const updateRecord = useUpdatePayrollRecord();
   const markWeekComplete = useMarkWeekComplete();
   const markPeriodPaid = useMarkPeriodPaid();
+  const redrivePreview = useRedriveWeekPreview();
+  const redriveApply = useRedriveWeekApply();
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
@@ -652,6 +658,50 @@ export default function PayrollWeek() {
       });
     } finally {
       setActionPending(false);
+    }
+  }
+
+  /* -- open re-derive dialog (also kicks off the preview) -- */
+  function handleOpenRederive() {
+    if (!week) return;
+    setShowRederiveDialog(true);
+    redrivePreview.reset();
+    redrivePreview.mutate({ weekId: week.id });
+  }
+
+  /* -- close re-derive dialog (with cleanup) -- */
+  function handleCloseRederive(open: boolean) {
+    setShowRederiveDialog(open);
+    if (!open) {
+      // Clear stale preview data so reopening triggers a fresh fetch
+      redrivePreview.reset();
+    }
+  }
+
+  /* -- apply re-derive -- */
+  async function handleConfirmRederive() {
+    if (!week) return;
+    try {
+      const result = (await redriveApply.mutateAsync({
+        weekId: week.id,
+      })) as RedriveResult;
+      const updated = result?.updated ?? 0;
+      const preserved = result?.preserved_overrides ?? 0;
+      toast({
+        title: "Re-derive applied",
+        description: `Updated ${updated} record${updated === 1 ? "" : "s"}` +
+          (preserved > 0
+            ? ` · preserved ${preserved} manual override${preserved === 1 ? "" : "s"}`
+            : ""),
+      });
+      setShowRederiveDialog(false);
+      redrivePreview.reset();
+    } catch (err: unknown) {
+      toast({
+        title: "Re-derive failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     }
   }
 
@@ -763,12 +813,12 @@ export default function PayrollWeek() {
         {/* Action buttons */}
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            {/* Re-derive — stub for Phase 4c */}
+            {/* Re-derive — Phase 4c diff dialog */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowRederiveDialog(true)}
-              disabled={isPeriodPaid}
+              onClick={handleOpenRederive}
+              disabled={isPeriodPaid || redriveApply.isPending}
             >
               <RefreshCw className="h-4 w-4 mr-1.5" />
               Re-derive
@@ -953,22 +1003,17 @@ export default function PayrollWeek() {
         </DialogContent>
       </Dialog>
 
-      {/* Re-derive stub — Phase 4c */}
-      <Dialog open={showRederiveDialog} onOpenChange={setShowRederiveDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Re-derive from time_clock</DialogTitle>
-            <DialogDescription>
-              The re-derive diff dialog is coming in Phase 4c. It will show you exactly what
-              changed between the current values and fresh auto-derived values, and let you
-              choose which fields to accept before committing.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowRederiveDialog(false)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Re-derive diff dialog — Phase 4c */}
+      <RedriveDiffDialog
+        open={showRederiveDialog}
+        onOpenChange={handleCloseRederive}
+        records={records}
+        previewLoading={redrivePreview.isPending}
+        previewError={redrivePreview.error as Error | null}
+        preview={redrivePreview.data ?? null}
+        applying={redriveApply.isPending}
+        onConfirm={handleConfirmRederive}
+      />
     </div>
   );
 }
