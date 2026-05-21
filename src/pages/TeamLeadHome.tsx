@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { todayLocal, formatDateMX, formatDateMXLong } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
+import { HomeHero } from "@/components/HomeHero";
 
 const TZ_LABELS: Record<string, string> = {
   "America/Denver": "Mountain",
@@ -699,19 +700,39 @@ export default function TeamLeadHome() {
   const eodData = eodWeek.data?.summaries ?? [];
   const kpiFields = eodWeek.data?.kpiFields ?? [];
 
+  // Subtitle for the hero — context line under the greeting.
+  const teamSizeLabel = teamSize === 1 ? "Team of 1" : `Team of ${teamSize}`;
+  const heroSubtitle = `${campaignName} · ${teamSizeLabel}`;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Hi, {firstName}</h2>
-          <p className="text-sm text-muted-foreground">
-            {campaignName} &middot; Team of {teamSize}
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link to="/team-lead/dashboard">Open Dashboard</Link>
-        </Button>
+      {/* MY DAY — shared hero used by both EmployeeHome and TeamLeadHome.
+          TLs are working agents too (calls / packages / credit pulls), so
+          they get the same daily flow: clock-in, quick actions, stats. */}
+      {employeeId && (
+        <HomeHero
+          employeeId={employeeId}
+          firstName={firstName}
+          subtitle={heroSubtitle}
+          campaignId={(tlEmployee as { campaign_id?: string | null } | null)?.campaign_id ?? null}
+        />
+      )}
+
+      {/* MY TEAM divider */}
+      <div className="flex items-center gap-3 pt-2">
+        <span className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-medium">
+          My team
+        </span>
+        <span className="flex-1 h-px bg-border" />
+        {/* Temporary link to legacy dashboard — removed in PR 2 once its
+            useful bits (Missing Yesterday, Submit-for-agent, coaching notes,
+            trends) are absorbed elsewhere. */}
+        <Link
+          to="/team-lead/dashboard"
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Open legacy dashboard →
+        </Link>
       </div>
 
       {/* Today's EOD Note cards — one per campaign the TL leads */}
