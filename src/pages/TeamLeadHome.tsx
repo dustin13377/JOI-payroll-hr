@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useTeamRoster,
-  useTodayTimeclockStatus,
   usePendingTimeOffForTeam,
   useTeamEODThisWeek,
   useUnderperformerAlerts,
@@ -41,6 +40,7 @@ import { todayLocal, formatDateMX, formatDateMXLong } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { HomeHero } from "@/components/HomeHero";
+import { TodaysRosterCard } from "@/components/TodaysRosterCard";
 
 const TZ_LABELS: Record<string, string> = {
   "America/Denver": "Mountain",
@@ -738,13 +738,8 @@ function AgentBreakdownRow({
   );
 }
 
-function formatTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-// formatDateRange now lives near TimeOffSection above.
+// formatTime + formatDateRange + statusBadge all moved into the components
+// that own their respective cards (TodaysRosterCard / TimeOffSection).
 
 export default function TeamLeadHome() {
   const { employeeId } = useAuth();
@@ -764,7 +759,7 @@ export default function TeamLeadHome() {
   });
 
   const roster = useTeamRoster(employeeId ?? undefined);
-  const timeclock = useTodayTimeclockStatus(employeeId ?? undefined);
+  // Today's attendance + Missing-yesterday data now lives inside TodaysRosterCard.
   // Pending time-off data moved into ApprovalsCard (its own hook).
   const eodWeek = useTeamEODThisWeek(employeeId ?? undefined);
   const alerts = useUnderperformerAlerts(employeeId ?? undefined);
@@ -785,26 +780,7 @@ export default function TeamLeadHome() {
   const teamSize = roster.data?.length ?? 0;
 
   // (Time-off review mutation now lives inside ApprovalsCard's TimeOffSection.)
-
-  // ---------- Status badge helper ----------
-  function statusBadge(status: string) {
-    switch (status) {
-      case "present":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">On Time</Badge>;
-      case "late":
-        return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Late</Badge>;
-      case "absent":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Absent</Badge>;
-      case "completed":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Done</Badge>;
-      case "day_off":
-        return <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Day Off</Badge>;
-      case "expected":
-        return <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Expected</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  }
+  // (statusBadge helper moved into TodaysRosterCard.)
 
   // ---------- EOD metric columns ----------
   const eodData = eodWeek.data?.summaries ?? [];
@@ -834,15 +810,6 @@ export default function TeamLeadHome() {
           My team
         </span>
         <span className="flex-1 h-px bg-border" />
-        {/* Temporary link to legacy dashboard — removed in PR 2 once its
-            useful bits (Missing Yesterday, Submit-for-agent, coaching notes,
-            trends) are absorbed elsewhere. */}
-        <Link
-          to="/team-lead/dashboard"
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          Open legacy dashboard →
-        </Link>
       </div>
 
       {/* Today's EOD Note cards — one per campaign the TL leads */}
@@ -860,61 +827,13 @@ export default function TeamLeadHome() {
           2N+1 cards for TLs leading multiple campaigns). */}
       {employeeId && <ApprovalsCard employeeId={employeeId} />}
 
-      {/* Bottom row — Today's Attendance, EOD Performance, Alerts.
-          Today's Attendance becomes full-width in PR 2 when it absorbs
-          the Missing Yesterday strip. For now stays in the grid. */}
+      {/* Today's Roster — replaces the old Today's Attendance card.
+          Adds the "Missing yesterday's EOD" amber strip (folded in from
+          TLDashboard) with a Submit-for-agent button per row, plus working
+          Nudge buttons backed by the tl_nudges audit table. */}
+      {employeeId && <TodaysRosterCard tlEmployeeId={employeeId} />}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Card 1 — Today's Attendance */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center gap-2 pb-2">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg">Today's Attendance</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {timeclock.isLoading && (
-              <LogoLoadingIndicator size="sm" />
-            )}
-            {!timeclock.isLoading && (!timeclock.data || timeclock.data.length === 0) && (
-              <p className="text-sm text-muted-foreground">No attendance data for today.</p>
-            )}
-            {timeclock.data?.map((entry) => (
-              <div
-                key={entry.employeeId}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">{getDisplayName({ work_name: entry.workName, full_name: entry.fullName })}</span>
-                  {statusBadge(entry.status)}
-                </div>
-                <div className="flex items-center gap-2">
-                  {(entry.status === "present" || entry.status === "completed") && (
-                    <span className="text-xs text-muted-foreground">
-                      In: {formatTime(entry.clockInTime)}
-                    </span>
-                  )}
-                  {entry.status === "late" && (
-                    <span className="text-xs text-muted-foreground">
-                      {entry.clockInTime ? `In: ${formatTime(entry.clockInTime)}` : "Not in yet"}
-                    </span>
-                  )}
-                  {(entry.status === "late" || entry.status === "absent") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => console.log("TODO: nudge", entry.employeeId)}
-                    >
-                      Nudge
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* (Pending Time Off card was here — now lives inside ApprovalsCard) */}
-
         {/* Card 3 — EOD Performance This Week (full width) */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
