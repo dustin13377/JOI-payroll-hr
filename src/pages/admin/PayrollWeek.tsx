@@ -4,7 +4,13 @@
  * Shows all agents for this week with auto-derived inputs,
  * inline row editing, live total preview, and status workflow.
  *
- * Phase 4c: Re-derive diff dialog (button is a stub here).
+ * Phase 4c (2026-05-22):
+ *   - "Re-derive" renamed to "Refresh". One-click, calls pay_redrive_week
+ *     directly and shows a toast. Manual-override preservation still
+ *     happens inside the RPC.
+ *   - Unlock Period UI is hidden via SHOW_UNLOCK_BUTTON below. PAID
+ *     periods stay locked; break-glass corrections go through SQL only.
+ *     See memory: paid-periods-stay-locked.
  */
 
 import { useState, useMemo } from "react";
@@ -49,7 +55,6 @@ import {
   useUpdatePayrollRecord,
   useMarkWeekComplete,
   useMarkPeriodPaid,
-  useRedriveWeekPreview,
   useRedriveWeekApply,
   useUnlockPeriod,
   useCanEditExtraBonus,
@@ -60,9 +65,16 @@ import {
   type PayrollRecordInputs,
   type RedriveResult,
 } from "@/hooks/usePayroll";
-import { RedriveDiffDialog } from "@/components/RedriveDiffDialog";
+// RedriveDiffDialog import removed 2026-05-22 — Refresh is now one-click,
+// the diff preview is gone. Component file kept for now (dead code, may be
+// deleted in the next cleanup pass).
 import { formatMXN } from "@/lib/formatCurrency";
 import { getDisplayName } from "@/lib/displayName";
+
+// Feature flag: PAID periods stay locked. Unlock is break-glass only via SQL.
+// Flip back to true if/when a UI unlock is actually needed. The RPC,
+// audit-log mechanics, and dialog code all still work.
+const SHOW_UNLOCK_BUTTON = false;
 
 /* ------------------------------------------------------------------ */
 /*  Status badge                                                        */
@@ -565,7 +577,6 @@ export default function PayrollWeek() {
   const updateRecord = useUpdatePayrollRecord();
   const markWeekComplete = useMarkWeekComplete();
   const markPeriodPaid = useMarkPeriodPaid();
-  const redrivePreview = useRedriveWeekPreview();
   const redriveApply = useRedriveWeekApply();
   const unlockPeriod = useUnlockPeriod();
   const canUnlock = useCanUnlockPaid();
@@ -578,7 +589,6 @@ export default function PayrollWeek() {
   // Confirm dialogs
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showPaidDialog, setShowPaidDialog] = useState(false);
-  const [showRederiveDialog, setShowRederiveDialog] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const [unlockConfirmText, setUnlockConfirmText] = useState("");
@@ -670,25 +680,11 @@ export default function PayrollWeek() {
     }
   }
 
-  /* -- open re-derive dialog (also kicks off the preview) -- */
-  function handleOpenRederive() {
-    if (!week) return;
-    setShowRederiveDialog(true);
-    redrivePreview.reset();
-    redrivePreview.mutate({ weekId: week.id });
-  }
-
-  /* -- close re-derive dialog (with cleanup) -- */
-  function handleCloseRederive(open: boolean) {
-    setShowRederiveDialog(open);
-    if (!open) {
-      // Clear stale preview data so reopening triggers a fresh fetch
-      redrivePreview.reset();
-    }
-  }
-
-  /* -- apply re-derive -- */
-  async function handleConfirmRederive() {
+  /* -- refresh from time_clock --
+   * One-click. Calls pay_redrive_week directly — manual overrides are
+   * preserved inside the RPC, not in the UI. Toast shows what changed.
+   * Replaces the old diff-dialog flow (2026-05-22). */
+  async function handleRefresh() {
     if (!week) return;
     try {
       const result = (await redriveApply.mutateAsync({
@@ -696,18 +692,21 @@ export default function PayrollWeek() {
       })) as RedriveResult;
       const updated = result?.updated ?? 0;
       const preserved = result?.preserved_overrides ?? 0;
+      const skippedPaid = result?.skipped_paid ?? 0;
+
+      // Short, actionable summary in the toast body.
+      const parts: string[] = [];
+      if (updated > 0) parts.push(`Updated ${updated} record${updated === 1 ? "" : "s"}`);
+      if (preserved > 0) parts.push(`kept ${preserved} manual edit${preserved === 1 ? "" : "s"}`);
+      if (skippedPaid > 0) parts.push(`${skippedPaid} PAID skipped`);
+
       toast({
-        title: "Re-derive applied",
-        description: `Updated ${updated} record${updated === 1 ? "" : "s"}` +
-          (preserved > 0
-            ? ` · preserved ${preserved} manual override${preserved === 1 ? "" : "s"}`
-            : ""),
+        title: "Refreshed from time clock",
+        description: parts.length > 0 ? parts.join(" · ") : "Already up to date — nothing changed.",
       });
-      setShowRederiveDialog(false);
-      redrivePreview.reset();
     } catch (err: unknown) {
       toast({
-        title: "Re-derive failed",
+        title: "Refresh failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "destructive",
       });
@@ -859,15 +858,16 @@ export default function PayrollWeek() {
         {/* Action buttons */}
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-2">
-            {/* Re-derive — Phase 4c diff dialog */}
+            {/* Refresh from time clock. One-click — manual overrides
+                are preserved inside the RPC. Disabled on PAID periods. */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleOpenRederive}
+              onClick={handleRefresh}
               disabled={isPeriodPaid || redriveApply.isPending}
             >
-              <RefreshCw className="h-4 w-4 mr-1.5" />
-              Re-derive
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${redriveApply.isPending ? "animate-spin" : ""}`} />
+              {redriveApply.isPending ? "Refreshing…" : "Refresh"}
             </Button>
 
             {/* Mark Week Complete */}
@@ -896,8 +896,10 @@ export default function PayrollWeek() {
               </Button>
             )}
 
-            {/* Unlock Period — owner only, only on PAID periods */}
-            {canUnlock && isPeriodPaid && (
+            {/* Unlock Period — owner only, only on PAID periods.
+                Hidden by SHOW_UNLOCK_BUTTON flag (2026-05-22). PAID periods
+                stay locked by design; break-glass via SQL `pay_unlock_period`. */}
+            {SHOW_UNLOCK_BUTTON && canUnlock && isPeriodPaid && (
               <Button
                 variant="outline"
                 size="sm"
@@ -925,7 +927,7 @@ export default function PayrollWeek() {
           ) : records.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-muted-foreground">
-                No records in this week. Run "Re-derive" or click "Add Next Week" from the Payroll landing page.
+                No records in this week. Click "Refresh" to pull from the time clock, or "Add Next Week" from the Payroll landing page.
               </p>
             </div>
           ) : (
@@ -980,9 +982,9 @@ export default function PayrollWeek() {
           <Lock className="h-4 w-4 shrink-0" />
           <span>
             This pay period is <strong>PAID and locked</strong>. All records are immutable.{" "}
-            {canUnlock
+            {SHOW_UNLOCK_BUTTON && canUnlock
               ? "Use the Unlock Period button above to reopen — every unlock is recorded in the audit log."
-              : "Ask an owner to unlock the period if a correction is needed."}
+              : "PAID periods stay locked. If a correction is genuinely needed, ask Diomedes — it's a manual DB operation with an audit row."}
           </span>
         </div>
       )}
@@ -1161,17 +1163,9 @@ export default function PayrollWeek() {
         </DialogContent>
       </Dialog>
 
-      {/* Re-derive diff dialog — Phase 4c */}
-      <RedriveDiffDialog
-        open={showRederiveDialog}
-        onOpenChange={handleCloseRederive}
-        records={records}
-        previewLoading={redrivePreview.isPending}
-        previewError={redrivePreview.error as Error | null}
-        preview={redrivePreview.data ?? null}
-        applying={redriveApply.isPending}
-        onConfirm={handleConfirmRederive}
-      />
+      {/* Re-derive diff dialog removed 2026-05-22. Refresh is now one-click;
+          the toast shows what changed. RedriveDiffDialog file kept for now
+          (dead code, candidate for the next cleanup pass). */}
     </div>
   );
 }

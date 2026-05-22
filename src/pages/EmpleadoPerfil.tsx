@@ -326,7 +326,23 @@ export default function EmpleadoPerfil() {
         body: { employeeId, newEmail },
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.error) throw new Error(res.error.message ?? "Unknown error");
+      if (res.error) {
+        // supabase-js wraps non-2xx responses in res.error and leaves res.data null.
+        // The function's real error message lives in res.error.context (the Response).
+        // Try to read it so the dialog shows what actually broke instead of the
+        // generic "Edge Function returned a non-2xx status code".
+        let realMsg = res.error.message ?? "Unknown error";
+        try {
+          const ctx = (res.error as { context?: Response }).context;
+          if (ctx && typeof ctx.json === "function") {
+            const errBody = await ctx.clone().json();
+            if (errBody?.error) realMsg = String(errBody.error);
+          }
+        } catch {
+          // fall back to the generic message
+        }
+        throw new Error(realMsg);
+      }
       const body = res.data as { ok?: boolean; error?: string };
       if (body?.error) throw new Error(body.error);
     },
@@ -986,8 +1002,10 @@ export default function EmpleadoPerfil() {
             <Button
               disabled={updateWorkEmailMutation.isPending || !emailEditDraft.trim()}
               onClick={() => {
-                if (!emp.id) return;
-                updateWorkEmailMutation.mutate({ employeeId: emp.id, newEmail: emailEditDraft.trim() });
+                // emp.id is the human-readable code (e.g. "EMP-035").
+                // The edge function expects the UUID PK, which lives at empUuid.
+                if (!empUuid) return;
+                updateWorkEmailMutation.mutate({ employeeId: empUuid, newEmail: emailEditDraft.trim() });
               }}
             >
               {updateWorkEmailMutation.isPending ? "Saving…" : "Save"}
