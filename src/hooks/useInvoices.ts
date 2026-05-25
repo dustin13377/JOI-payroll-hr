@@ -120,6 +120,135 @@ export function useAgentsByClient(clientId: string | undefined) {
   });
 }
 
+/**
+ * Historical version of useAgentsByClient — picks agents whose assignment to
+ * ANY campaign under this client overlapped with [weekStart, weekEnd].
+ *
+ * Returns each agent with:
+ *   - days_worked: count of distinct time_clock dates (clock_in NOT NULL)
+ *     during their assignment window for this specific client. Holidays
+ *     and absences naturally fall out because they have no clock-in.
+ *   - joined_mid_week_on: date if assignment started AFTER weekStart, else null
+ *   - left_mid_week_on:   date if assignment ended BEFORE weekEnd, else null
+ *
+ * Use this instead of useAgentsByClient for new invoices so people who
+ * moved campaigns mid-period appear on the correct client's invoice for
+ * the days they were actually there.
+ */
+export type AgentForClientPeriod = {
+  id: string;
+  full_name: string;
+  employee_id: string;
+  days_worked: number;
+  joined_mid_week_on: string | null;
+  left_mid_week_on: string | null;
+};
+
+export function useAgentsForClientPeriod(
+  clientId: string | undefined,
+  weekStart: string | undefined,
+  weekEnd: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["agentsForClientPeriod", clientId, weekStart, weekEnd],
+    enabled: !!clientId && !!weekStart && !!weekEnd,
+    queryFn: async (): Promise<AgentForClientPeriod[]> => {
+      // 1. Campaigns under this client
+      const { data: campaigns } = await supabase
+        .from("campaigns")
+        .select("id")
+        .eq("client_id", clientId!);
+      const campaignIds = (campaigns || []).map((c) => c.id);
+      if (campaignIds.length === 0) return [];
+
+      // 2. Assignment rows under those campaigns that overlap the period.
+      //    Overlap: start_date <= weekEnd AND (end_date IS NULL OR end_date >= weekStart)
+      const { data: assignments, error: aErr } = await supabase
+        .from("employee_campaign_assignments")
+        .select("employee_id, campaign_id, start_date, end_date, employee:employees(id, full_name, employee_id)")
+        .in("campaign_id", campaignIds)
+        .lte("start_date", weekEnd!)
+        .or(`end_date.is.null,end_date.gte.${weekStart!}`);
+      if (aErr) throw aErr;
+
+      // 3. Bucket by employee. A single employee may have multiple overlap
+      //    windows (e.g. moved from campaign A to campaign B within the same
+      //    client during the week — rare but possible).
+      type Window = { start: string; end: string };
+      const byEmployee = new Map<string, {
+        id: string;
+        full_name: string;
+        employee_id: string;
+        windows: Window[];
+      }>();
+      for (const a of (assignments || []) as unknown as Array<{
+        employee_id: string;
+        start_date: string;
+        end_date: string | null;
+        employee: { id: string; full_name: string; employee_id: string } | null;
+      }>) {
+        if (!a.employee) continue;
+        const effStart = a.start_date > weekStart! ? a.start_date : weekStart!;
+        const effEnd   = (a.end_date === null || a.end_date > weekEnd!) ? weekEnd! : a.end_date;
+        const cur = byEmployee.get(a.employee.id);
+        if (cur) {
+          cur.windows.push({ start: effStart, end: effEnd });
+        } else {
+          byEmployee.set(a.employee.id, {
+            id: a.employee.id,
+            full_name: a.employee.full_name,
+            employee_id: a.employee.employee_id,
+            windows: [{ start: effStart, end: effEnd }],
+          });
+        }
+      }
+
+      const employeeIds = Array.from(byEmployee.keys());
+      if (!employeeIds.length) return [];
+
+      // 4. Pull punches for all relevant employees within the week.
+      const { data: punches } = await supabase
+        .from("time_clock")
+        .select("employee_id, date")
+        .in("employee_id", employeeIds)
+        .gte("date", weekStart!)
+        .lte("date", weekEnd!)
+        .not("clock_in", "is", null);
+
+      // 5. Count unique dates per employee that fall inside one of their
+      //    windows for this client. Outside-window punches don't count
+      //    (they're billable on a different client's invoice).
+      const daysByEmp = new Map<string, Set<string>>();
+      for (const p of (punches || []) as Array<{ employee_id: string; date: string }>) {
+        const emp = byEmployee.get(p.employee_id);
+        if (!emp) continue;
+        const inWindow = emp.windows.some((w) => p.date >= w.start && p.date <= w.end);
+        if (!inWindow) continue;
+        if (!daysByEmp.has(p.employee_id)) daysByEmp.set(p.employee_id, new Set());
+        daysByEmp.get(p.employee_id)!.add(p.date);
+      }
+
+      // 6. Build the response.
+      return Array.from(byEmployee.values())
+        .map((emp) => {
+          const sorted = emp.windows.slice().sort((a, b) => a.start.localeCompare(b.start));
+          const first = sorted[0];
+          const last  = sorted[sorted.length - 1];
+          return {
+            id: emp.id,
+            full_name: emp.full_name,
+            employee_id: emp.employee_id,
+            days_worked: daysByEmp.get(emp.id)?.size ?? 0,
+            joined_mid_week_on: first.start > weekStart! ? first.start : null,
+            left_mid_week_on:   last.end   < weekEnd!   ? last.end   : null,
+          };
+        })
+        // Alphabetical so the invoice line order is stable run-to-run.
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    },
+  });
+}
+
 export function useCreateInvoice() {
   const qc = useQueryClient();
   return useMutation({

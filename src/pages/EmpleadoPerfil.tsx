@@ -48,6 +48,9 @@ import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequ
 import { EmploymentHistoryCard } from "@/components/employee-profile/EmploymentHistoryCard";
 import { ThirtyDayReviewCard } from "@/components/employee-profile/ThirtyDayReviewCard";
 import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
+import { ClockInHistoryCard } from "@/components/employee-profile/ClockInHistoryCard";
+import { CampaignHistoryCard } from "@/components/employee-profile/CampaignHistoryCard";
+import { ChangeCampaignDialog } from "@/components/ChangeCampaignDialog";
 
 // ── A1: Personal & Tax Info validation ──────────────────────────────
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
@@ -272,11 +275,11 @@ export default function EmpleadoPerfil() {
       if (!campaignId) return [];
       const { data, error } = await supabase
         .from('shift_settings')
-        .select('id, shift_name, start_time, end_time, days_of_week')
+        .select('id, shift_name, start_time, end_time, days_of_week, grace_minutes')
         .eq('campaign_id', campaignId)
         .order('shift_name');
       if (error) throw error;
-      return data as { id: string; shift_name: string; start_time: string; end_time: string; days_of_week: number[] | null }[];
+      return data as { id: string; shift_name: string; start_time: string; end_time: string; days_of_week: number[] | null; grace_minutes: number | null }[];
     },
     enabled: !!campaignId,
   });
@@ -314,6 +317,7 @@ export default function EmpleadoPerfil() {
   });
   const [taxErrors, setTaxErrors] = useState<Record<string, string>>({});
   const [changeRoleOpen, setChangeRoleOpen] = useState(false);
+  const [pendingCampaignChange, setPendingCampaignChange] = useState<{ id: string; name: string } | null>(null);
   const [emailEditOpen, setEmailEditOpen] = useState(false);
   const [emailEditDraft, setEmailEditDraft] = useState("");
   const [emailEditError, setEmailEditError] = useState("");
@@ -518,17 +522,30 @@ export default function EmpleadoPerfil() {
                 value={{ clientId: selectedClientId || null, campaignId: campaignId || null }}
                 onChange={async ({ clientId, campaignId: newCampaignId }) => {
                   setSelectedClientId(clientId || "");
-                  if (newCampaignId !== campaignId) {
+                  if (newCampaignId && newCampaignId !== campaignId) {
+                    // Open the change dialog (writes history rows + employees.campaign_id).
+                    // Fetch the new campaign's name for the dialog header.
+                    const { data: cmp } = await supabase
+                      .from("campaigns")
+                      .select("id, name")
+                      .eq("id", newCampaignId)
+                      .single();
+                    if (cmp) {
+                      setPendingCampaignChange({ id: cmp.id, name: cmp.name });
+                    }
+                  } else if (newCampaignId === null && campaignId) {
+                    // Removing campaign entirely — keep old direct-update behavior for now.
+                    // TODO: history-aware "remove from campaign" with effective date.
                     const { error } = await supabase
                       .from("employees")
-                      .update({ campaign_id: newCampaignId })
+                      .update({ campaign_id: null })
                       .eq("employee_id", emp.id);
                     if (error) {
-                      toast.error(`Failed to assign campaign: ${error.message}`);
+                      toast.error(`Failed to remove campaign: ${error.message}`);
                       return;
                     }
                     queryClient.invalidateQueries({ queryKey: ["employees"] });
-                    toast.success("Campaign assigned");
+                    toast.success("Campaign removed");
                   }
                 }}
               />
@@ -608,6 +625,45 @@ export default function EmpleadoPerfil() {
                 <p className="text-sm">{supervisorName || "—"}</p>
               )}
             </div>
+
+            {/* Salary Configuration — leadership only, embedded inside Assignment */}
+            {isLeadership && (
+              <>
+                <Separator />
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salary Configuration</p>
+                <div className="grid gap-2">
+                  <Label>Monthly Base Salary</Label>
+                  <Input
+                    type="number"
+                    value={salaryDraft.sueldoBase}
+                    onChange={(e) => setSalaryDraft((d) => ({ ...d, sueldoBase: e.target.value }))}
+                    onBlur={() => saveField("sueldoBase", parseFloat(salaryDraft.sueldoBase) || 0)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Daily Absence Discount</Label>
+                  <Input
+                    type="number"
+                    value={salaryDraft.descuentoPorDia}
+                    onChange={(e) => setSalaryDraft((d) => ({ ...d, descuentoPorDia: e.target.value }))}
+                    onBlur={() => saveField("descuentoPorDia", parseFloat(salaryDraft.descuentoPorDia) || 0)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>KPI Bonus Amount</Label>
+                  <Input
+                    type="number"
+                    value={salaryDraft.kpiMonto}
+                    onChange={(e) => setSalaryDraft((d) => ({ ...d, kpiMonto: e.target.value }))}
+                    onBlur={() => saveField("kpiMonto", parseFloat(salaryDraft.kpiMonto) || 0)}
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-muted">
+                  <p className="text-sm text-muted-foreground">Daily Rate (Base ÷ 30)</p>
+                  <p className="text-xl font-bold">{dailySalary > 0 ? fmt(dailySalary) : "—"}</p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -855,48 +911,29 @@ export default function EmpleadoPerfil() {
           </CardContent>
         </Card>}
 
-        {/* Salary Configuration — leadership only */}
-        {isLeadership && (
-        <Card>
-          <CardHeader><CardTitle className="text-lg">Salary Configuration</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label>Monthly Base Salary</Label>
-              <Input
-                type="number"
-                value={salaryDraft.sueldoBase}
-                onChange={(e) => setSalaryDraft((d) => ({ ...d, sueldoBase: e.target.value }))}
-                onBlur={() => saveField("sueldoBase", parseFloat(salaryDraft.sueldoBase) || 0)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Daily Absence Discount</Label>
-              <Input
-                type="number"
-                value={salaryDraft.descuentoPorDia}
-                onChange={(e) => setSalaryDraft((d) => ({ ...d, descuentoPorDia: e.target.value }))}
-                onBlur={() => saveField("descuentoPorDia", parseFloat(salaryDraft.descuentoPorDia) || 0)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>KPI Bonus Amount</Label>
-              <Input
-                type="number"
-                value={salaryDraft.kpiMonto}
-                onChange={(e) => setSalaryDraft((d) => ({ ...d, kpiMonto: e.target.value }))}
-                onBlur={() => saveField("kpiMonto", parseFloat(salaryDraft.kpiMonto) || 0)}
-              />
-            </div>
-            <Separator />
-            <div className="p-3 rounded-lg bg-muted">
-              <p className="text-sm text-muted-foreground">Daily Rate (Base ÷ 30)</p>
-              <p className="text-xl font-bold">{dailySalary > 0 ? fmt(dailySalary) : "—"}</p>
-            </div>
-          </CardContent>
-        </Card>
-        )}
-
       </div>
+
+      {/* Campaign History — visible to TL+ ; hidden when only one assignment exists */}
+      {(isLeadership || isTeamLead) && emp._uuid && (
+        <CampaignHistoryCard employeeUuid={emp._uuid} />
+      )}
+
+      {/* Clock-in History — visible to TL+ ; reuses campaignShifts (single shift per campaign) */}
+      {(isLeadership || isTeamLead) && emp._uuid && (
+        <ClockInHistoryCard
+          employeeUuid={emp._uuid}
+          employeeName={emp._workName || emp.nombre}
+          hireDate={emp._hireDate ?? null}
+          lastWorkedDay={emp._lastWorkedDay ?? null}
+          clientId={currentCampaign?.client_id ?? null}
+          shift={campaignShifts[0] ? {
+            start_time: campaignShifts[0].start_time,
+            end_time: campaignShifts[0].end_time,
+            grace_minutes: campaignShifts[0].grace_minutes,
+            days_of_week: campaignShifts[0].days_of_week,
+          } : null}
+        />
+      )}
 
       {/* A3a: Compliance Enforcement — leadership only */}
       {isLeadership && (
@@ -972,6 +1009,20 @@ export default function EmpleadoPerfil() {
           employeeId={emp._uuid}
           employeeName={emp.nombre}
           currentTitle={(emp.title || "agent") as "agent" | "team_lead" | "manager" | "admin" | "owner"}
+        />
+      )}
+
+      {emp._uuid && pendingCampaignChange && (
+        <ChangeCampaignDialog
+          open={!!pendingCampaignChange}
+          onOpenChange={(open) => { if (!open) setPendingCampaignChange(null); }}
+          employeeUuid={emp._uuid}
+          employeeTextId={emp.id}
+          employeeName={emp._workName || emp.nombre}
+          currentCampaignId={campaignId || null}
+          currentCampaignName={currentCampaign?.name || null}
+          newCampaignId={pendingCampaignChange.id}
+          newCampaignName={pendingCampaignChange.name}
         />
       )}
 

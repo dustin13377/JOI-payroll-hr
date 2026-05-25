@@ -16,12 +16,14 @@ export interface ClientWithCampaigns {
   campaigns: Campaign[];
 }
 
-export function useCampaigns(clientId?: string) {
+export function useCampaigns(clientId?: string, options?: { includeInactive?: boolean }) {
+  const includeInactive = options?.includeInactive ?? false;
   return useQuery({
-    queryKey: ["campaigns", clientId],
+    queryKey: ["campaigns", clientId, includeInactive],
     queryFn: async () => {
       let query = supabase.from("campaigns").select("*").order("name");
       if (clientId) query = query.eq("client_id", clientId);
+      if (!includeInactive) query = query.eq("is_active", true);
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as Campaign[];
