@@ -48,6 +48,7 @@ import PayrollWeek from "@/pages/admin/PayrollWeek";
 import PayrollRates from "@/pages/admin/PayrollRates";
 import PayrollAgent from "@/pages/admin/PayrollAgent";
 import PayrollHolidays from "@/pages/admin/PayrollHolidays";
+import ClientHolidays from "@/pages/admin/ClientHolidays";
 import PayrollPeriods from "@/pages/admin/PayrollPeriods";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -175,6 +176,7 @@ const App = () => (
                     <Route path="/admin/payroll/rates" element={<RequireLeadership><PayrollRates /></RequireLeadership>} />
                     <Route path="/admin/payroll/agent/:id" element={<RequireLeadership><PayrollAgent /></RequireLeadership>} />
                     <Route path="/admin/payroll/holidays" element={<RequireLeadership><PayrollHolidays /></RequireLeadership>} />
+                    <Route path="/admin/payroll/client-holidays" element={<RequireLeadership><ClientHolidays /></RequireLeadership>} />
                     <Route path="/admin/payroll/periods" element={<RequireLeadership><PayrollPeriods /></RequireLeadership>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>

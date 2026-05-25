@@ -341,6 +341,22 @@ export default function Payroll() {
             </Card>
           </Link>
 
+          <Link to="/admin/payroll/client-holidays" className="block">
+            <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/40 h-full">
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="shrink-0 w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                  <CalendarCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Client Holidays</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Days a client is closed (US holidays etc.). Agents not penalized.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
           <Link to="/admin/payroll/periods" className="block">
             <Card className="hover:shadow-sm transition-shadow cursor-pointer hover:border-primary/40 h-full">
               <CardContent className="p-4 flex items-start gap-3">

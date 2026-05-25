@@ -479,6 +479,7 @@ export type Database = {
           eod_morning_bundle_time: string | null
           eod_reply_to_email: string | null
           id: string
+          is_active: boolean
           name: string
           team_lead_id: string | null
         }
@@ -490,6 +491,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          is_active?: boolean
           name: string
           team_lead_id?: string | null
         }
@@ -501,6 +503,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           team_lead_id?: string | null
         }
@@ -654,6 +657,44 @@ export type Database = {
           },
         ]
       }
+      client_holidays: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          date: string
+          id?: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_holidays_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           bill_to_address: string | null
@@ -763,6 +804,57 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      employee_campaign_assignments: {
+        Row: {
+          campaign_id: string
+          changed_by: string | null
+          created_at: string
+          employee_id: string
+          end_date: string | null
+          id: string
+          organization_id: string
+          reason: string | null
+          start_date: string
+        }
+        Insert: {
+          campaign_id: string
+          changed_by?: string | null
+          created_at?: string
+          employee_id: string
+          end_date?: string | null
+          id?: string
+          organization_id: string
+          reason?: string | null
+          start_date: string
+        }
+        Update: {
+          campaign_id?: string
+          changed_by?: string | null
+          created_at?: string
+          employee_id?: string
+          end_date?: string | null
+          id?: string
+          organization_id?: string
+          reason?: string | null
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_campaign_assignments_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_campaign_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employee_documents: {
         Row: {
