@@ -50,6 +50,36 @@ export function formatDateMXLong(d: string | Date | null | undefined): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+const MONTHS_EN = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * American long-form date for client-facing US documents: "May 18, 2026".
+ * Use this on invoices billed to US clients.
+ */
+export function formatDateUSLong(d: string | Date | null | undefined): string {
+  if (d == null) return "";
+  const date = typeof d === "string" ? parseLocalDate(d.slice(0, 10)) : d;
+  if (isNaN(date.getTime())) return "";
+  return `${MONTHS_EN[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+/**
+ * American numeric date format: MM/DD/YYYY. Use if `formatDateUSLong` is too
+ * wordy for the layout.
+ */
+export function formatDateUSShort(d: string | Date | null | undefined): string {
+  if (d == null) return "";
+  const date = typeof d === "string" ? parseLocalDate(d.slice(0, 10)) : d;
+  if (isNaN(date.getTime())) return "";
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
 /**
  * Returns Mon-Sun week range as ISO date strings, for any date inside the week.
  * Used by the weekly invoice batch generator.

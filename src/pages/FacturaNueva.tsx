@@ -6,7 +6,7 @@
  * that already have an invoice for the chosen week are skipped automatically.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   useWeeklyPreview,
@@ -309,6 +309,14 @@ export default function FacturaNueva() {
                 key={c.client_id}
                 preview={c}
                 stagedSpiffs={stagedSpiffs}
+                onUpdateSpiff={(empId, amount) => {
+                  setStagedSpiffs((prev) => {
+                    const next = new Map(prev);
+                    if (amount > 0) next.set(empId, amount);
+                    else next.delete(empId);
+                    return next;
+                  });
+                }}
                 skippedEmployeeIds={skippedEmployeeIds}
                 onToggleSkip={toggleSkip}
               />
@@ -359,11 +367,13 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 function ClientPreviewCard({
   preview,
   stagedSpiffs,
+  onUpdateSpiff,
   skippedEmployeeIds,
   onToggleSkip,
 }: {
   preview: ClientPreview;
   stagedSpiffs: Map<string, number>;
+  onUpdateSpiff: (employeeId: string, amount: number) => void;
   skippedEmployeeIds: Set<string>;
   onToggleSkip: (empId: string) => void;
 }) {
@@ -554,7 +564,13 @@ function ClientPreviewCard({
                         />
                       </TableCell>
                       <TableCell className="text-right">
-                        {spiff > 0 ? <span className="text-green-700">{fmtUSD(spiff)}</span> : <span className="text-muted-foreground">—</span>}
+                        <InlineSpiffEditor
+                          employeeId={l.employee_id}
+                          employeeName={l.employee_name}
+                          currentSpiff={spiff}
+                          disabled={isSkipped}
+                          onChange={onUpdateSpiff}
+                        />
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {fmtUSD(subtotal)}
@@ -658,6 +674,84 @@ function InlineRateEditor({
       {update.isPending && (
         <Loader2 className={`h-3 w-3 animate-spin ${isMissing ? "text-amber-700" : "text-muted-foreground"}`} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Editable spiff cell. Writes to the in-memory stagedSpiffs map on the parent
+ * page — nothing hits the DB until "Generate all drafts" runs (same path as
+ * the CSV uploader uses). Empty / 0 clears the spiff for that employee.
+ */
+function InlineSpiffEditor({
+  employeeId,
+  employeeName,
+  currentSpiff,
+  disabled,
+  onChange,
+}: {
+  employeeId: string;
+  employeeName: string;
+  currentSpiff: number;
+  disabled?: boolean;
+  onChange: (employeeId: string, amount: number) => void;
+}) {
+  const [value, setValue] = useState(currentSpiff > 0 ? String(currentSpiff) : "");
+
+  // If the parent's stagedSpiffs map changes from elsewhere (CSV upload, week
+  // change, skip toggle), keep the input in sync.
+  const lastSeen = useRef(currentSpiff);
+  if (lastSeen.current !== currentSpiff) {
+    lastSeen.current = currentSpiff;
+    const synced = currentSpiff > 0 ? String(currentSpiff) : "";
+    if (synced !== value) setValue(synced);
+  }
+
+  const commit = () => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      if (currentSpiff > 0) {
+        onChange(employeeId, 0);
+        toast.success(`Cleared spiff for ${employeeName}`);
+      }
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isNaN(n) || n < 0) {
+      toast.error("Spiff must be 0 or a positive number");
+      setValue(currentSpiff > 0 ? String(currentSpiff) : "");
+      return;
+    }
+    if (n === currentSpiff) return;
+    onChange(employeeId, n);
+    if (n > 0) toast.success(`Set ${employeeName}'s spiff to ${fmtUSD(n)}`);
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <span className={`text-sm ${currentSpiff > 0 ? "text-green-700 font-medium" : "text-muted-foreground"}`}>$</span>
+      <Input
+        type="number"
+        min={0}
+        step="any"
+        placeholder="0"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => setValue(e.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            setValue(currentSpiff > 0 ? String(currentSpiff) : "");
+            e.currentTarget.blur();
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className={`h-7 w-24 text-right text-sm ${
+          currentSpiff > 0 ? "border-green-400 focus-visible:ring-green-500" : ""
+        }`}
+      />
     </div>
   );
 }
