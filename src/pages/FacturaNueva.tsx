@@ -27,7 +27,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowLeft, CalendarRange, AlertTriangle, CheckCircle2, Sparkles, Loader2, ChevronDown, ChevronRight,
+  ArrowLeft, CalendarRange, AlertTriangle, CheckCircle2, Sparkles, Loader2, ChevronDown, ChevronRight, X, RotateCcw,
 } from "lucide-react";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { toast } from "sonner";
@@ -50,12 +50,27 @@ export default function FacturaNueva() {
   // Applied to invoice lines AFTER the generate RPC creates them.
   const [stagedSpiffs, setStagedSpiffs] = useState<Map<string, number>>(new Map());
 
+  // Employees the user has chosen to exclude from this week's invoices.
+  // Lines get created by the RPC regardless (it doesn't take an exclusion list),
+  // then we delete the skipped ones immediately after generation. If a client
+  // ends up with zero lines, we also delete the now-empty invoice.
+  const [skippedEmployeeIds, setSkippedEmployeeIds] = useState<Set<string>>(new Set());
+  function toggleSkip(empId: string) {
+    setSkippedEmployeeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId);
+      else next.add(empId);
+      return next;
+    });
+  }
+
   // When the week changes, the staged spiffs no longer apply.
   function clearSpiffsOnWeekChange() {
     if (stagedSpiffs.size > 0) {
       setStagedSpiffs(new Map());
       toast.info("Cleared staged spiffs (week changed).");
     }
+    if (skippedEmployeeIds.size > 0) setSkippedEmployeeIds(new Set());
   }
 
   function shiftWeek(direction: -1 | 1) {
@@ -79,12 +94,58 @@ export default function FacturaNueva() {
   const eligible = preview.filter((c) => !c.existing_invoice_id);
   const alreadyDone = preview.filter((c) => c.existing_invoice_id);
   const stagedSpiffsTotal = Array.from(stagedSpiffs.values()).reduce((s, v) => s + v, 0);
-  const totalAcrossEligible = eligible.reduce((s, c) => s + c.total_amount, 0) + stagedSpiffsTotal;
-  const totalLines = eligible.reduce((s, c) => s + c.line_count, 0);
+  // Subtract the projected value of any rows the user has skipped — so the
+  // summary chip reflects what'll actually post.
+  const skippedAmount = eligible.reduce((sum, c) => {
+    return sum + c.lines.reduce((s, l) => {
+      if (!skippedEmployeeIds.has(l.employee_id)) return s;
+      if (l.is_flat_bill) return s + Number(l.flat_amount);
+      return s + Number(l.days_worked) * Number(l.daily_bill_rate);
+    }, 0);
+  }, 0);
+  const totalAcrossEligible = eligible.reduce((s, c) => s + c.total_amount, 0) + stagedSpiffsTotal - skippedAmount;
+  const totalLines = eligible.reduce(
+    (s, c) => s + c.lines.filter((l) => !skippedEmployeeIds.has(l.employee_id)).length,
+    0,
+  );
 
   async function handleGenerate() {
     try {
       const result = await generate.mutateAsync({ monday, sunday });
+
+      // Delete any lines the user marked as Skip. The RPC creates lines for
+      // every eligible employee — we post-delete the unwanted ones here, then
+      // also delete any invoice that ended up with zero lines after the cleanup.
+      let skippedDeleted = 0;
+      let emptyInvoicesDeleted = 0;
+      if (result.length > 0 && skippedEmployeeIds.size > 0) {
+        const invoiceIds = result.map((r) => r.invoice_id);
+        const { data: skippedLines, error: skipFindErr } = await supabase
+          .from("invoice_lines")
+          .select("id, invoice_id")
+          .in("invoice_id", invoiceIds)
+          .in("employee_id", Array.from(skippedEmployeeIds));
+        if (skipFindErr) throw skipFindErr;
+        const lineIdsToDelete = (skippedLines ?? []).map((l: any) => l.id);
+        if (lineIdsToDelete.length > 0) {
+          const { error: delErr } = await supabase.from("invoice_lines").delete().in("id", lineIdsToDelete);
+          if (delErr) throw delErr;
+          skippedDeleted = lineIdsToDelete.length;
+        }
+        // Drop any invoices left empty after the skip-delete pass.
+        const { data: remainingByInvoice, error: countErr } = await supabase
+          .from("invoice_lines")
+          .select("invoice_id")
+          .in("invoice_id", invoiceIds);
+        if (countErr) throw countErr;
+        const stillHasLines = new Set((remainingByInvoice ?? []).map((r: any) => r.invoice_id));
+        const emptyInvoiceIds = invoiceIds.filter((id) => !stillHasLines.has(id));
+        if (emptyInvoiceIds.length > 0) {
+          const { error: emptyDelErr } = await supabase.from("invoices").delete().in("id", emptyInvoiceIds);
+          if (emptyDelErr) throw emptyDelErr;
+          emptyInvoicesDeleted = emptyInvoiceIds.length;
+        }
+      }
 
       // Apply any staged spiffs to the newly-created invoice lines.
       let spiffsApplied = 0;
@@ -97,6 +158,9 @@ export default function FacturaNueva() {
         if (linesErr) throw linesErr;
 
         for (const line of lines || []) {
+          // Skip lines the user excluded — they were already deleted above, but
+          // the in-flight `lines` list is from before the delete, so guard here too.
+          if (line.employee_id && skippedEmployeeIds.has(line.employee_id)) continue;
           const spiff = line.employee_id ? stagedSpiffs.get(line.employee_id) : undefined;
           if (!spiff || spiff <= 0) continue;
           const days = Number(line.days_worked);
@@ -116,13 +180,20 @@ export default function FacturaNueva() {
         }
       }
 
-      const totalDollars = result.reduce((s, r) => s + Number(r.total_amount), 0) + stagedSpiffsTotal;
+      const totalDollars = result.reduce((s, r) => s + Number(r.total_amount), 0) + stagedSpiffsTotal - skippedAmount;
+      const draftsRemaining = result.length - emptyInvoicesDeleted;
+      const extras: string[] = [];
+      if (spiffsApplied > 0) extras.push(`${spiffsApplied} with spiffs`);
+      if (skippedDeleted > 0) extras.push(`${skippedDeleted} line${skippedDeleted === 1 ? "" : "s"} skipped`);
+      if (emptyInvoicesDeleted > 0) extras.push(`${emptyInvoicesDeleted} empty draft${emptyInvoicesDeleted === 1 ? "" : "s"} removed`);
+      const extrasStr = extras.length > 0 ? `, ${extras.join(", ")}` : "";
       toast.success(
         result.length === 0
           ? "Nothing to generate — all clients already have invoices for this week."
-          : `Generated ${result.length} ${result.length === 1 ? "draft" : "drafts"} (${totalDollars.toLocaleString("en-US", { style: "currency", currency: "USD" })} total)${spiffsApplied > 0 ? `, ${spiffsApplied} with spiffs` : ""}. Review and send.`
+          : `Generated ${draftsRemaining} ${draftsRemaining === 1 ? "draft" : "drafts"} (${totalDollars.toLocaleString("en-US", { style: "currency", currency: "USD" })} total)${extrasStr}. Review and send.`
       );
       setStagedSpiffs(new Map());
+      setSkippedEmployeeIds(new Set());
       navigate("/facturas");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Generate failed");
@@ -224,7 +295,13 @@ export default function FacturaNueva() {
           {/* Per-client cards */}
           <div className="space-y-3">
             {preview.map((c) => (
-              <ClientPreviewCard key={c.client_id} preview={c} stagedSpiffs={stagedSpiffs} />
+              <ClientPreviewCard
+                key={c.client_id}
+                preview={c}
+                stagedSpiffs={stagedSpiffs}
+                skippedEmployeeIds={skippedEmployeeIds}
+                onToggleSkip={toggleSkip}
+              />
             ))}
           </div>
 
@@ -269,23 +346,45 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; stagedSpiffs: Map<string, number> }) {
+function ClientPreviewCard({
+  preview,
+  stagedSpiffs,
+  skippedEmployeeIds,
+  onToggleSkip,
+}: {
+  preview: ClientPreview;
+  stagedSpiffs: Map<string, number>;
+  skippedEmployeeIds: Set<string>;
+  onToggleSkip: (empId: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
 
   const alreadyExists = !!preview.existing_invoice_id;
 
-  // Spiffs that match an employee on this client's lines
+  // Spiffs that match an employee on this client's lines (skipped ones excluded —
+  // a skipped row's spiff money won't apply either).
   const clientSpiffs = useMemo(() => {
     const out = new Map<string, number>();
     for (const l of preview.lines) {
+      if (skippedEmployeeIds.has(l.employee_id)) continue;
       const s = stagedSpiffs.get(l.employee_id);
       if (s && s > 0) out.set(l.employee_id, s);
     }
     return out;
-  }, [preview.lines, stagedSpiffs]);
+  }, [preview.lines, stagedSpiffs, skippedEmployeeIds]);
   const clientSpiffsTotal = Array.from(clientSpiffs.values()).reduce((s, v) => s + v, 0);
-  const projectedClientTotal = preview.total_amount + clientSpiffsTotal;
+
+  // Per-client subtotal excluding skipped lines.
+  const skippedAmountForClient = useMemo(() => {
+    return preview.lines.reduce((sum, l) => {
+      if (!skippedEmployeeIds.has(l.employee_id)) return sum;
+      if (l.is_flat_bill) return sum + Number(l.flat_amount);
+      return sum + Number(l.days_worked) * Number(l.daily_bill_rate);
+    }, 0);
+  }, [preview.lines, skippedEmployeeIds]);
+  const projectedClientTotal = preview.total_amount + clientSpiffsTotal - skippedAmountForClient;
+  const skippedCount = preview.lines.filter((l) => skippedEmployeeIds.has(l.employee_id)).length;
 
   return (
     <Card className={alreadyExists ? "opacity-60" : ""}>
@@ -309,6 +408,11 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                 {preview.missing_rate_count > 0 && !alreadyExists && (
                   <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-xs">
                     <AlertTriangle className="h-3 w-3 mr-1" /> {preview.missing_rate_count} missing rate{preview.missing_rate_count === 1 ? "" : "s"}
+                  </Badge>
+                )}
+                {skippedCount > 0 && !alreadyExists && (
+                  <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">
+                    <X className="h-3 w-3 mr-1" /> {skippedCount} skipped
                   </Badge>
                 )}
               </div>
@@ -353,14 +457,30 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                   <TableHead className="text-right">Rate</TableHead>
                   <TableHead className="text-right">Spiff</TableHead>
                   <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.lines.map((l) => {
+                  const isSkipped = skippedEmployeeIds.has(l.employee_id);
                   const spiff = clientSpiffs.get(l.employee_id) ?? 0;
+                  const SkipButton = (
+                    <button
+                      type="button"
+                      onClick={() => onToggleSkip(l.employee_id)}
+                      title={isSkipped ? "Bring this line back" : "Skip this line — exclude from invoice"}
+                      className={`h-7 w-7 inline-flex items-center justify-center rounded transition-colors ${
+                        isSkipped
+                          ? "text-muted-foreground hover:bg-muted"
+                          : "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      }`}
+                    >
+                      {isSkipped ? <RotateCcw className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                    </button>
+                  );
                   if (l.is_flat_bill) {
                     return (
-                      <TableRow key={l.employee_id} className="bg-blue-50/40">
+                      <TableRow key={l.employee_id} className={isSkipped ? "bg-muted/30 opacity-50 line-through" : "bg-blue-50/40"}>
                         <TableCell className="font-medium">
                           {l.employee_name}
                           <div className="text-xs text-muted-foreground">{l.employee_code}</div>
@@ -370,35 +490,35 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right font-medium">{fmtUSD(l.flat_amount)}</TableCell>
+                        <TableCell className="text-right no-underline">{SkipButton}</TableCell>
                       </TableRow>
                     );
                   }
                   const base = l.days_worked * l.daily_bill_rate;
                   const subtotal = base + spiff;
                   const isMissingRate = l.daily_bill_rate === 0;
+                  const rowClass = isSkipped
+                    ? "bg-muted/40 opacity-50 line-through"
+                    : isMissingRate
+                      ? "bg-amber-100 hover:bg-amber-200/80 border-l-4 border-amber-500"
+                      : spiff > 0
+                        ? "bg-green-50/40"
+                        : "";
                   return (
-                    <TableRow
-                      key={l.employee_id}
-                      className={
-                        isMissingRate
-                          ? "bg-amber-100 hover:bg-amber-200/80 border-l-4 border-amber-500"
-                          : spiff > 0
-                            ? "bg-green-50/40"
-                            : ""
-                      }
-                    >
-                      <TableCell className={isMissingRate ? "font-semibold text-amber-900" : "font-medium"}>
+                    <TableRow key={l.employee_id} className={rowClass}>
+                      <TableCell className={isSkipped ? "font-medium" : isMissingRate ? "font-semibold text-amber-900" : "font-medium"}>
                         <div className="flex items-center gap-1.5">
-                          {isMissingRate && <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />}
+                          {!isSkipped && isMissingRate && <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />}
                           <span>{l.employee_name}</span>
                         </div>
-                        <div className={`text-xs ${isMissingRate ? "text-amber-700" : "text-muted-foreground"}`}>
+                        <div className={`text-xs ${isSkipped ? "text-muted-foreground" : isMissingRate ? "text-amber-700" : "text-muted-foreground"}`}>
                           {l.employee_code}
                         </div>
                       </TableCell>
-                      <TableCell className={isMissingRate ? "text-amber-800" : "text-muted-foreground"}>{l.campaign_name}</TableCell>
+                      <TableCell className={isSkipped ? "text-muted-foreground" : isMissingRate ? "text-amber-800" : "text-muted-foreground"}>{l.campaign_name}</TableCell>
                       <TableCell className="text-right">{l.days_worked}</TableCell>
                       <TableCell className="text-right">
+                        {/* Inline editor still works on skipped rows — D might fix the rate then un-skip */}
                         {isMissingRate ? (
                           <InlineRateEditor employeeId={l.employee_id} employeeName={l.employee_name} />
                         ) : (
@@ -411,6 +531,7 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                       <TableCell className="text-right font-medium">
                         {fmtUSD(subtotal)}
                       </TableCell>
+                      <TableCell className="text-right no-underline">{SkipButton}</TableCell>
                     </TableRow>
                   );
                 })}
