@@ -22,7 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, AlertTriangle, Send } from "lucide-react";
+import { Clock, AlertTriangle, Send, Pencil } from "lucide-react";
 import { todayLocal } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -39,6 +39,7 @@ import {
   SubmitEODForAgentDialog,
   type SubmitEODKPIField,
 } from "@/components/SubmitEODForAgentDialog";
+import { EditPunchDialog } from "@/components/EditPunchDialog";
 
 interface Props {
   tlEmployeeId: string;
@@ -86,6 +87,14 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
 
   // Which agent is currently in the SubmitEODForAgentDialog (if any)
   const [submitTarget, setSubmitTarget] = useState<MissingYesterdayAgent | null>(null);
+
+  // Which agent is currently in the EditPunchDialog (for clocking in/out on
+  // behalf of a no-email agent or fixing a missed punch). null = closed.
+  const [punchTarget, setPunchTarget] = useState<{
+    employeeId: string;
+    employeeName: string;
+    clockIn: string | null;
+  } | null>(null);
 
   // Yesterday's date (for the dialog's defaultDate)
   const yesterday = useMemo(() => {
@@ -187,6 +196,14 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
             });
             const nudge = nudges.data?.get(entry.employeeId);
             const showNudgeButton = entry.status === "late" || entry.status === "absent";
+            // Show the "Clock in for them" pencil on actionable rows.
+            // No-email agents will never clock themselves in via the app, so
+            // this is the TL's only path. Login agents may also need a fix
+            // when the app failed or they forgot.
+            const showPunchButton =
+              entry.status === "absent" ||
+              entry.status === "late" ||
+              entry.status === "expected";
             return (
               <div
                 key={entry.employeeId}
@@ -206,6 +223,23 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
                     <span className="text-xs text-muted-foreground">
                       {entry.clockInTime ? `In: ${formatTime(entry.clockInTime)}` : "Not in yet"}
                     </span>
+                  )}
+                  {showPunchButton && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      title={entry.clockInTime ? "Edit punch" : "Clock in for them"}
+                      onClick={() =>
+                        setPunchTarget({
+                          employeeId: entry.employeeId,
+                          employeeName: name,
+                          clockIn: entry.clockInTime,
+                        })
+                      }
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                   )}
                   {showNudgeButton && (
                     nudge ? (
@@ -259,6 +293,32 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
           missingYesterday.refetch();
         }}
       />
+
+      {/* Clock-in / fix-punch on behalf of an agent (no-email or app failure).
+          Dialog auto-upserts (existing row OR new), audits via edit-time-clock. */}
+      {punchTarget && (
+        <EditPunchDialog
+          open={!!punchTarget}
+          onOpenChange={(o) => { if (!o) { setPunchTarget(null); timeclock.refetch(); } }}
+          employeeId={punchTarget.employeeId}
+          employeeName={punchTarget.employeeName}
+          date={todayLocal()}
+          existing={
+            punchTarget.clockIn
+              ? {
+                  clock_in: punchTarget.clockIn,
+                  clock_out: null,
+                  lunch_start: null,
+                  lunch_end: null,
+                  break1_start: null,
+                  break1_end: null,
+                  break2_start: null,
+                  break2_end: null,
+                }
+              : undefined
+          }
+        />
+      )}
     </>
   );
 }
