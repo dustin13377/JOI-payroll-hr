@@ -374,17 +374,32 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                   }
                   const base = l.days_worked * l.daily_bill_rate;
                   const subtotal = base + spiff;
+                  const isMissingRate = l.daily_bill_rate === 0;
                   return (
-                    <TableRow key={l.employee_id} className={l.daily_bill_rate === 0 ? "bg-amber-50/40" : spiff > 0 ? "bg-green-50/40" : ""}>
-                      <TableCell className="font-medium">
-                        {l.employee_name}
-                        <div className="text-xs text-muted-foreground">{l.employee_code}</div>
+                    <TableRow
+                      key={l.employee_id}
+                      className={
+                        isMissingRate
+                          ? "bg-amber-100 hover:bg-amber-200/80 border-l-4 border-amber-500"
+                          : spiff > 0
+                            ? "bg-green-50/40"
+                            : ""
+                      }
+                    >
+                      <TableCell className={isMissingRate ? "font-semibold text-amber-900" : "font-medium"}>
+                        <div className="flex items-center gap-1.5">
+                          {isMissingRate && <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />}
+                          <span>{l.employee_name}</span>
+                        </div>
+                        <div className={`text-xs ${isMissingRate ? "text-amber-700" : "text-muted-foreground"}`}>
+                          {l.employee_code}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{l.campaign_name}</TableCell>
+                      <TableCell className={isMissingRate ? "text-amber-800" : "text-muted-foreground"}>{l.campaign_name}</TableCell>
                       <TableCell className="text-right">{l.days_worked}</TableCell>
                       <TableCell className="text-right">
-                        {l.daily_bill_rate === 0 ? (
-                          <span className="text-amber-700">No rate</span>
+                        {isMissingRate ? (
+                          <span className="font-semibold text-amber-800">No rate</span>
                         ) : (
                           fmtUSD(l.daily_bill_rate)
                         )}
