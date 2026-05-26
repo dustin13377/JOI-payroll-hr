@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   useWeeklyPreview,
   useGenerateWeekly,
@@ -518,12 +518,14 @@ function ClientPreviewCard({
                       <TableCell className={isSkipped ? "text-muted-foreground" : isMissingRate ? "text-amber-800" : "text-muted-foreground"}>{l.campaign_name}</TableCell>
                       <TableCell className="text-right">{l.days_worked}</TableCell>
                       <TableCell className="text-right">
-                        {/* Inline editor still works on skipped rows — D might fix the rate then un-skip */}
-                        {isMissingRate ? (
-                          <InlineRateEditor employeeId={l.employee_id} employeeName={l.employee_name} />
-                        ) : (
-                          fmtUSD(l.daily_bill_rate)
-                        )}
+                        {/* Every rate is editable. Missing-rate rows show amber styling;
+                            existing rates show as a plain editable number you can overwrite.
+                            Changes persist to employees.daily_bill_rate. */}
+                        <InlineRateEditor
+                          employeeId={l.employee_id}
+                          employeeName={l.employee_name}
+                          currentRate={l.daily_bill_rate}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         {spiff > 0 ? <span className="text-green-700">{fmtUSD(spiff)}</span> : <span className="text-muted-foreground">—</span>}
@@ -552,31 +554,51 @@ function ClientPreviewCard({
 }
 
 /**
- * Click-to-edit inline rate editor for "No rate" cells. Saves directly to
- * employees.daily_bill_rate on Enter or blur. Invalidates the weekly preview
- * so the cell flips from input → formatted dollar amount automatically.
+ * Click-to-edit inline rate editor for any rate cell in the weekly preview.
+ * Saves directly to employees.daily_bill_rate on Enter or blur, then invalidates
+ * the preview so all consumers see the new rate.
  *
- * Why inline rather than a separate /admin/bill-rates page: D's case is usually
- * "I just hired this person and I'm trying to invoice them right now" — fewest
- * clicks wins. Worst-case typo is recoverable (just retype).
+ * Two visual modes:
+ *   - Missing rate (currentRate === 0): amber-styled, empty by default, placeholder "0"
+ *   - Existing rate: plain styling, current value prefilled, ready to overwrite
+ *
+ * Why inline rather than a separate /admin/bill-rates page: D's common case
+ * is "I just hired this person" or "I want to bump their rate" — fewest clicks
+ * wins. Worst-case typo is recoverable (just retype). Note: changes persist to
+ * the employee, so next week's invoice auto-fills with the new rate.
  */
-function InlineRateEditor({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
-  const [value, setValue] = useState("");
+function InlineRateEditor({
+  employeeId,
+  employeeName,
+  currentRate,
+}: {
+  employeeId: string;
+  employeeName: string;
+  currentRate: number;
+}) {
+  const isMissing = currentRate === 0;
+  const [value, setValue] = useState(isMissing ? "" : String(currentRate));
   const update = useUpdateBillRate();
 
   const commit = async () => {
     const trimmed = value.trim();
-    if (!trimmed) return; // empty — do nothing, leave at $0
+    // Empty submit on a missing-rate row = no-op. On an existing rate, also no-op
+    // (don't accidentally clear a rate). User must type Escape to cancel.
+    if (!trimmed) {
+      setValue(isMissing ? "" : String(currentRate));
+      return;
+    }
     const n = Number(trimmed);
     if (Number.isNaN(n) || n <= 0) {
       toast.error("Rate must be a positive number");
-      setValue("");
+      setValue(isMissing ? "" : String(currentRate));
       return;
     }
+    // Skip the network call if nothing changed (avoid spurious toasts).
+    if (n === currentRate) return;
     try {
       await update.mutateAsync({ employeeId, rate: n });
       toast.success(`Set ${employeeName}'s rate to ${fmtUSD(n)}`);
-      // value resets via preview refetch — cell unmounts when daily_bill_rate > 0
     } catch (e) {
       toast.error(`Couldn't save rate: ${(e as Error).message}`);
     }
@@ -584,7 +606,7 @@ function InlineRateEditor({ employeeId, employeeName }: { employeeId: string; em
 
   return (
     <div className="flex items-center justify-end gap-1">
-      <span className="text-amber-700 text-sm font-medium">$</span>
+      <span className={`text-sm font-medium ${isMissing ? "text-amber-700" : "text-muted-foreground"}`}>$</span>
       <Input
         type="number"
         min={1}
@@ -598,14 +620,18 @@ function InlineRateEditor({ employeeId, employeeName }: { employeeId: string; em
           if (e.key === "Enter") {
             e.currentTarget.blur(); // triggers commit via onBlur
           } else if (e.key === "Escape") {
-            setValue("");
+            setValue(isMissing ? "" : String(currentRate));
             e.currentTarget.blur();
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="h-7 w-24 text-right text-sm border-amber-400 focus-visible:ring-amber-500"
+        className={`h-7 w-24 text-right text-sm ${
+          isMissing ? "border-amber-400 focus-visible:ring-amber-500" : ""
+        }`}
       />
-      {update.isPending && <Loader2 className="h-3 w-3 animate-spin text-amber-700" />}
+      {update.isPending && (
+        <Loader2 className={`h-3 w-3 animate-spin ${isMissing ? "text-amber-700" : "text-muted-foreground"}`} />
+      )}
     </div>
   );
 }
