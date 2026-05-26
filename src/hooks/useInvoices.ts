@@ -353,6 +353,30 @@ export function useDeleteInvoice() {
   });
 }
 
+/**
+ * Set an employee's daily bill rate. Used by the inline editor on "No rate"
+ * cells in the weekly invoice preview — the rate persists to employees table
+ * so subsequent weeks auto-fill, and the preview query is invalidated so the
+ * UI refreshes immediately.
+ *
+ * employeeId is the UUID (employees.id), not the EMP-XXX code.
+ */
+export function useUpdateBillRate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { employeeId: string; rate: number }) => {
+      const { error } = await supabase
+        .from("employees")
+        .update({ daily_bill_rate: params.rate })
+        .eq("id", params.employeeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["weekly-preview"] });
+    },
+  });
+}
+
 /* ----------------------------------------------------------------- */
 /*  Helpers                                                            */
 /* ----------------------------------------------------------------- */

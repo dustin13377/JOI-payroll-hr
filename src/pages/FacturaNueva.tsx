@@ -7,10 +7,11 @@
  */
 
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   useWeeklyPreview,
   useGenerateWeekly,
+  useUpdateBillRate,
   fmtUSD,
   type ClientPreview,
 } from "@/hooks/useInvoices";
@@ -399,7 +400,7 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
                       <TableCell className="text-right">{l.days_worked}</TableCell>
                       <TableCell className="text-right">
                         {isMissingRate ? (
-                          <span className="font-semibold text-amber-800">No rate</span>
+                          <InlineRateEditor employeeId={l.employee_id} employeeName={l.employee_name} />
                         ) : (
                           fmtUSD(l.daily_bill_rate)
                         )}
@@ -418,14 +419,72 @@ function ClientPreviewCard({ preview, stagedSpiffs }: { preview: ClientPreview; 
             {preview.missing_rate_count > 0 && (
               <div className="px-4 py-2 bg-amber-50 border-t text-xs text-amber-900">
                 {preview.missing_rate_count} agent{preview.missing_rate_count === 1 ? "" : "s"} on this invoice {preview.missing_rate_count === 1 ? "has" : "have"} no bill rate.
-                You can still generate the draft, but{" "}
-                <Link to="/admin/bill-rates" className="underline font-medium">set their rates</Link>{" "}
-                before downloading the PDF.
+                Type the rate directly in the highlighted row{preview.missing_rate_count === 1 ? "" : "s"} above — it saves to
+                the employee so future weeks auto-fill.
               </div>
             )}
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Click-to-edit inline rate editor for "No rate" cells. Saves directly to
+ * employees.daily_bill_rate on Enter or blur. Invalidates the weekly preview
+ * so the cell flips from input → formatted dollar amount automatically.
+ *
+ * Why inline rather than a separate /admin/bill-rates page: D's case is usually
+ * "I just hired this person and I'm trying to invoice them right now" — fewest
+ * clicks wins. Worst-case typo is recoverable (just retype).
+ */
+function InlineRateEditor({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
+  const [value, setValue] = useState("");
+  const update = useUpdateBillRate();
+
+  const commit = async () => {
+    const trimmed = value.trim();
+    if (!trimmed) return; // empty — do nothing, leave at $0
+    const n = Number(trimmed);
+    if (Number.isNaN(n) || n <= 0) {
+      toast.error("Rate must be a positive number");
+      setValue("");
+      return;
+    }
+    try {
+      await update.mutateAsync({ employeeId, rate: n });
+      toast.success(`Set ${employeeName}'s rate to ${fmtUSD(n)}`);
+      // value resets via preview refetch — cell unmounts when daily_bill_rate > 0
+    } catch (e) {
+      toast.error(`Couldn't save rate: ${(e as Error).message}`);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <span className="text-amber-700 text-sm font-medium">$</span>
+      <Input
+        type="number"
+        min={1}
+        step="any"
+        placeholder="0"
+        value={value}
+        disabled={update.isPending}
+        onChange={(e) => setValue(e.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur(); // triggers commit via onBlur
+          } else if (e.key === "Escape") {
+            setValue("");
+            e.currentTarget.blur();
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="h-7 w-24 text-right text-sm border-amber-400 focus-visible:ring-amber-500"
+      />
+      {update.isPending && <Loader2 className="h-3 w-3 animate-spin text-amber-700" />}
+    </div>
   );
 }
