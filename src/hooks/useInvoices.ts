@@ -17,6 +17,9 @@ export interface Invoice {
   week_start: string;
   week_end: string;
   due_date: string;
+  submitted_on: string | null;
+  project_name: string | null;
+  notes: string | null;
   status: string;
   created_at: string;
   client?: Client;
@@ -25,13 +28,21 @@ export interface Invoice {
 export interface InvoiceLine {
   id: string;
   invoice_id: string;
+  employee_id: string | null;
   agent_name: string;
+  campaign_name: string | null;
   days_worked: number;
+  holiday_days: number;
   unit_price: number;
   total: number;
   spiffs: number;
   total_price: number;
+  is_flat_total: boolean;
 }
+
+/* ----------------------------------------------------------------- */
+/*  Read hooks                                                         */
+/* ----------------------------------------------------------------- */
 
 export function useClients() {
   return useQuery({
@@ -47,14 +58,23 @@ export function useClients() {
   });
 }
 
-export function useInvoices(clientId?: string) {
+/**
+ * Invoices list. statusGroup="active" → drafts + sent. "archive" → paid.
+ */
+export function useInvoices(opts: { statusGroup?: "active" | "archive"; clientId?: string } = {}) {
+  const { statusGroup, clientId } = opts;
   return useQuery({
-    queryKey: ["invoices", clientId],
+    queryKey: ["invoices", statusGroup ?? "all", clientId ?? "all"],
     queryFn: async () => {
       let query = supabase
         .from("invoices")
         .select("*, clients(*)")
         .order("created_at", { ascending: false });
+      if (statusGroup === "active") {
+        query = query.in("status", ["draft", "sent"]);
+      } else if (statusGroup === "archive") {
+        query = query.eq("status", "paid");
+      }
       if (clientId) {
         query = query.eq("client_id", clientId);
       }
@@ -96,218 +116,125 @@ export function useInvoice(id: string | undefined) {
   });
 }
 
-export function useAgentsByClient(clientId: string | undefined) {
-  return useQuery({
-    queryKey: ["agentsByClient", clientId],
-    enabled: !!clientId,
-    queryFn: async () => {
-      // Get all campaign IDs for this client
-      const { data: campaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("client_id", clientId!);
-      const campaignIds = (campaigns || []).map(c => c.id);
-      if (campaignIds.length === 0) return [];
+/* ----------------------------------------------------------------- */
+/*  Weekly preview + bulk generate                                     */
+/* ----------------------------------------------------------------- */
 
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, full_name, employee_id")
-        .eq("is_active", true)
-        .in("campaign_id", campaignIds);
-      if (error) throw error;
-      return data || [];
-    },
-  });
+export interface WeeklyPreviewRow {
+  client_id: string;
+  client_prefix: string;
+  client_name: string;
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  campaign_id: string | null;
+  campaign_name: string;
+  daily_bill_rate: number;
+  days_worked: number;
+  existing_invoice_id: string | null;
+  is_flat_bill: boolean;
+  flat_amount: number;
 }
 
-/**
- * Historical version of useAgentsByClient — picks agents whose assignment to
- * ANY campaign under this client overlapped with [weekStart, weekEnd].
- *
- * Returns each agent with:
- *   - days_worked: count of distinct time_clock dates (clock_in NOT NULL)
- *     during their assignment window for this specific client. Holidays
- *     and absences naturally fall out because they have no clock-in.
- *   - joined_mid_week_on: date if assignment started AFTER weekStart, else null
- *   - left_mid_week_on:   date if assignment ended BEFORE weekEnd, else null
- *
- * Use this instead of useAgentsByClient for new invoices so people who
- * moved campaigns mid-period appear on the correct client's invoice for
- * the days they were actually there.
- */
-export type AgentForClientPeriod = {
-  id: string;
-  full_name: string;
-  employee_id: string;
-  days_worked: number;
-  joined_mid_week_on: string | null;
-  left_mid_week_on: string | null;
-  /** Explicit per-employee daily bill rate from employees.daily_bill_rate.
-   *  Used to prefill the invoice line's unit_price. 0 means "no rate set" —
-   *  PDF download stays disabled until the operator types one in. */
-  daily_bill_rate: number;
-};
+export interface ClientPreview {
+  client_id: string;
+  client_name: string;
+  client_prefix: string;
+  existing_invoice_id: string | null;
+  lines: WeeklyPreviewRow[];
+  line_count: number;
+  total_days: number;
+  total_amount: number;
+  missing_rate_count: number;
+}
 
-export function useAgentsForClientPeriod(
-  clientId: string | undefined,
-  weekStart: string | undefined,
-  weekEnd: string | undefined,
-) {
+export function useWeeklyPreview(monday: string | null, sunday: string | null) {
   return useQuery({
-    queryKey: ["agentsForClientPeriod", clientId, weekStart, weekEnd],
-    enabled: !!clientId && !!weekStart && !!weekEnd,
-    queryFn: async (): Promise<AgentForClientPeriod[]> => {
-      // 1. Campaigns under this client — exclude DEV_MOCK_* campaigns which
-      //    exist for development/testing only and should never appear on a
-      //    real invoice. They stay visible on the Campaigns admin page.
-      const { data: campaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("client_id", clientId!)
-        .not("name", "ilike", "DEV_MOCK%");
-      const campaignIds = (campaigns || []).map((c) => c.id);
-      if (campaignIds.length === 0) return [];
-
-      // 2. Assignment rows under those campaigns that overlap the period.
-      //    Overlap: start_date <= weekEnd AND (end_date IS NULL OR end_date >= weekStart)
-      //    Also pulls employees.daily_bill_rate so we can prefill the
-      //    invoice line's unit_price downstream.
-      const { data: assignments, error: aErr } = await supabase
-        .from("employee_campaign_assignments")
-        .select("employee_id, campaign_id, start_date, end_date, employee:employees(id, full_name, employee_id, daily_bill_rate)")
-        .in("campaign_id", campaignIds)
-        .lte("start_date", weekEnd!)
-        .or(`end_date.is.null,end_date.gte.${weekStart!}`);
-      if (aErr) throw aErr;
-
-      // 3. Bucket by employee. A single employee may have multiple overlap
-      //    windows (e.g. moved from campaign A to campaign B within the same
-      //    client during the week — rare but possible).
-      type Window = { start: string; end: string };
-      const byEmployee = new Map<string, {
-        id: string;
-        full_name: string;
-        employee_id: string;
-        daily_bill_rate: number;
-        windows: Window[];
-      }>();
-      for (const a of (assignments || []) as unknown as Array<{
-        employee_id: string;
-        start_date: string;
-        end_date: string | null;
-        employee: { id: string; full_name: string; employee_id: string; daily_bill_rate: number | null } | null;
-      }>) {
-        if (!a.employee) continue;
-        const effStart = a.start_date > weekStart! ? a.start_date : weekStart!;
-        const effEnd   = (a.end_date === null || a.end_date > weekEnd!) ? weekEnd! : a.end_date;
-        const cur = byEmployee.get(a.employee.id);
-        if (cur) {
-          cur.windows.push({ start: effStart, end: effEnd });
+    queryKey: ["weekly-preview", monday, sunday],
+    enabled: !!monday && !!sunday,
+    queryFn: async (): Promise<ClientPreview[]> => {
+      const { data, error } = await supabase.rpc("weekly_invoice_preview", {
+        p_monday: monday!,
+        p_sunday: sunday!,
+      });
+      if (error) throw error;
+      const rawRows = (data || []) as WeeklyPreviewRow[];
+      // Filter out test / mock campaigns — they shouldn't appear in real invoice
+      // generation. Filter is on campaign_name with the DEV_MOCK_ prefix; keep
+      // it client-side so the RPC stays general-purpose (other consumers may
+      // want to see all campaigns).
+      const rows = rawRows.filter(
+        (r) => !(r.campaign_name ?? "").toUpperCase().startsWith("DEV_MOCK"),
+      );
+      const byClient = new Map<string, ClientPreview>();
+      for (const r of rows) {
+        let bucket = byClient.get(r.client_id);
+        if (!bucket) {
+          bucket = {
+            client_id: r.client_id,
+            client_name: r.client_name,
+            client_prefix: r.client_prefix,
+            existing_invoice_id: r.existing_invoice_id,
+            lines: [],
+            line_count: 0,
+            total_days: 0,
+            total_amount: 0,
+            missing_rate_count: 0,
+          };
+          byClient.set(r.client_id, bucket);
+        }
+        bucket.lines.push({
+          ...r,
+          daily_bill_rate: Number(r.daily_bill_rate),
+          days_worked: Number(r.days_worked),
+          flat_amount: Number(r.flat_amount),
+        });
+        bucket.line_count += 1;
+        if (r.is_flat_bill) {
+          // Flat-billed lines contribute their fixed amount, no days/rate math
+          bucket.total_amount += Number(r.flat_amount);
         } else {
-          byEmployee.set(a.employee.id, {
-            id: a.employee.id,
-            full_name: a.employee.full_name,
-            employee_id: a.employee.employee_id,
-            daily_bill_rate: Number(a.employee.daily_bill_rate) || 0,
-            windows: [{ start: effStart, end: effEnd }],
-          });
+          bucket.total_days += Number(r.days_worked);
+          bucket.total_amount += Number(r.days_worked) * Number(r.daily_bill_rate);
+          if (Number(r.daily_bill_rate) === 0) bucket.missing_rate_count += 1;
         }
       }
-
-      const employeeIds = Array.from(byEmployee.keys());
-      if (!employeeIds.length) return [];
-
-      // 4. Pull punches for all relevant employees within the week.
-      const { data: punches } = await supabase
-        .from("time_clock")
-        .select("employee_id, date")
-        .in("employee_id", employeeIds)
-        .gte("date", weekStart!)
-        .lte("date", weekEnd!)
-        .not("clock_in", "is", null);
-
-      // 5. Count unique dates per employee that fall inside one of their
-      //    windows for this client. Outside-window punches don't count
-      //    (they're billable on a different client's invoice).
-      const daysByEmp = new Map<string, Set<string>>();
-      for (const p of (punches || []) as Array<{ employee_id: string; date: string }>) {
-        const emp = byEmployee.get(p.employee_id);
-        if (!emp) continue;
-        const inWindow = emp.windows.some((w) => p.date >= w.start && p.date <= w.end);
-        if (!inWindow) continue;
-        if (!daysByEmp.has(p.employee_id)) daysByEmp.set(p.employee_id, new Set());
-        daysByEmp.get(p.employee_id)!.add(p.date);
-      }
-
-      // 6. Build the response.
-      return Array.from(byEmployee.values())
-        .map((emp) => {
-          const sorted = emp.windows.slice().sort((a, b) => a.start.localeCompare(b.start));
-          const first = sorted[0];
-          const last  = sorted[sorted.length - 1];
-          return {
-            id: emp.id,
-            full_name: emp.full_name,
-            employee_id: emp.employee_id,
-            days_worked: daysByEmp.get(emp.id)?.size ?? 0,
-            joined_mid_week_on: first.start > weekStart! ? first.start : null,
-            left_mid_week_on:   last.end   < weekEnd!   ? last.end   : null,
-            daily_bill_rate: emp.daily_bill_rate,
-          };
-        })
-        // Alphabetical so the invoice line order is stable run-to-run.
-        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+      return Array.from(byClient.values()).sort((a, b) =>
+        a.client_name.localeCompare(b.client_name)
+      );
     },
   });
 }
 
-export function useCreateInvoice() {
+export interface GenerateResult {
+  invoice_id: string;
+  client_id: string;
+  invoice_number: string;
+  line_count: number;
+  total_amount: number;
+}
+
+export function useGenerateWeekly() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      invoice,
-      lines,
-    }: {
-      invoice: {
-        client_id: string;
-        invoice_number: string;
-        week_number: number;
-        week_start: string;
-        week_end: string;
-        due_date: string;
-        status: string;
-      };
-      lines: {
-        agent_name: string;
-        days_worked: number;
-        unit_price: number;
-        total: number;
-        spiffs: number;
-        total_price: number;
-      }[];
-    }) => {
-      const { data: inv, error: invError } = await supabase
-        .from("invoices")
-        .insert(invoice)
-        .select()
-        .single();
-      if (invError) throw invError;
-
-      if (lines.length > 0) {
-        const lineRows = lines.map((l) => ({ ...l, invoice_id: inv.id }));
-        const { error: linesError } = await supabase
-          .from("invoice_lines")
-          .insert(lineRows);
-        if (linesError) throw linesError;
-      }
-
-      return inv;
+    mutationFn: async ({ monday, sunday }: { monday: string; sunday: string }) => {
+      const { data, error } = await supabase.rpc("generate_weekly_invoices", {
+        p_monday: monday,
+        p_sunday: sunday,
+      });
+      if (error) throw error;
+      return (data || []) as GenerateResult[];
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["weekly-preview"] });
     },
   });
 }
+
+/* ----------------------------------------------------------------- */
+/*  Edit single invoice / lines                                        */
+/* ----------------------------------------------------------------- */
 
 export function useUpdateInvoiceStatus() {
   const qc = useQueryClient();
@@ -325,6 +252,110 @@ export function useUpdateInvoiceStatus() {
     },
   });
 }
+
+export function useUpdateInvoiceLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<Pick<InvoiceLine, "days_worked" | "holiday_days" | "unit_price" | "total" | "spiffs" | "is_flat_total" | "total_price">>;
+    }) => {
+      const { error } = await supabase
+        .from("invoice_lines")
+        .update(patch as Record<string, unknown>)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoice"] });
+    },
+  });
+}
+
+export function useDeleteInvoiceLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("invoice_lines").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoice"] });
+    },
+  });
+}
+
+export function useAddInvoiceLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (line: {
+      invoice_id: string;
+      employee_id?: string | null;
+      agent_name: string;
+      campaign_name?: string | null;
+      days_worked: number;
+      holiday_days?: number;
+      unit_price: number;
+      spiffs?: number;
+      is_flat_total?: boolean;
+      total_price?: number;
+    }) => {
+      const days = line.days_worked ?? 0;
+      const holiday = line.holiday_days ?? 0;
+      const unit = line.unit_price ?? 0;
+      const spiffs = line.spiffs ?? 0;
+      // `days` already includes holiday days. Holiday adds 2× premium ON TOP.
+      // Net effect = 3× rate per worked holiday (1× already in days + 2× premium). Matches D's formula.
+      const total = (days * unit) + (holiday * unit * 2);
+      const total_price = line.is_flat_total
+        ? (line.total_price ?? 0)
+        : total + spiffs;
+
+      const { error } = await supabase.from("invoice_lines").insert({
+        invoice_id: line.invoice_id,
+        employee_id: line.employee_id ?? null,
+        agent_name: line.agent_name,
+        campaign_name: line.campaign_name ?? null,
+        days_worked: days,
+        holiday_days: line.holiday_days ?? 0,
+        unit_price: unit,
+        total,
+        spiffs,
+        total_price,
+        is_flat_total: !!line.is_flat_total,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoice"] });
+    },
+  });
+}
+
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error: linesErr } = await supabase
+        .from("invoice_lines")
+        .delete()
+        .eq("invoice_id", id);
+      if (linesErr) throw linesErr;
+      const { error } = await supabase.from("invoices").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
+/* ----------------------------------------------------------------- */
+/*  Helpers                                                            */
+/* ----------------------------------------------------------------- */
 
 export const fmtUSD = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
