@@ -142,6 +142,10 @@ export type AgentForClientPeriod = {
   days_worked: number;
   joined_mid_week_on: string | null;
   left_mid_week_on: string | null;
+  /** Explicit per-employee daily bill rate from employees.daily_bill_rate.
+   *  Used to prefill the invoice line's unit_price. 0 means "no rate set" —
+   *  PDF download stays disabled until the operator types one in. */
+  daily_bill_rate: number;
 };
 
 export function useAgentsForClientPeriod(
@@ -153,19 +157,24 @@ export function useAgentsForClientPeriod(
     queryKey: ["agentsForClientPeriod", clientId, weekStart, weekEnd],
     enabled: !!clientId && !!weekStart && !!weekEnd,
     queryFn: async (): Promise<AgentForClientPeriod[]> => {
-      // 1. Campaigns under this client
+      // 1. Campaigns under this client — exclude DEV_MOCK_* campaigns which
+      //    exist for development/testing only and should never appear on a
+      //    real invoice. They stay visible on the Campaigns admin page.
       const { data: campaigns } = await supabase
         .from("campaigns")
         .select("id")
-        .eq("client_id", clientId!);
+        .eq("client_id", clientId!)
+        .not("name", "ilike", "DEV_MOCK%");
       const campaignIds = (campaigns || []).map((c) => c.id);
       if (campaignIds.length === 0) return [];
 
       // 2. Assignment rows under those campaigns that overlap the period.
       //    Overlap: start_date <= weekEnd AND (end_date IS NULL OR end_date >= weekStart)
+      //    Also pulls employees.daily_bill_rate so we can prefill the
+      //    invoice line's unit_price downstream.
       const { data: assignments, error: aErr } = await supabase
         .from("employee_campaign_assignments")
-        .select("employee_id, campaign_id, start_date, end_date, employee:employees(id, full_name, employee_id)")
+        .select("employee_id, campaign_id, start_date, end_date, employee:employees(id, full_name, employee_id, daily_bill_rate)")
         .in("campaign_id", campaignIds)
         .lte("start_date", weekEnd!)
         .or(`end_date.is.null,end_date.gte.${weekStart!}`);
@@ -179,13 +188,14 @@ export function useAgentsForClientPeriod(
         id: string;
         full_name: string;
         employee_id: string;
+        daily_bill_rate: number;
         windows: Window[];
       }>();
       for (const a of (assignments || []) as unknown as Array<{
         employee_id: string;
         start_date: string;
         end_date: string | null;
-        employee: { id: string; full_name: string; employee_id: string } | null;
+        employee: { id: string; full_name: string; employee_id: string; daily_bill_rate: number | null } | null;
       }>) {
         if (!a.employee) continue;
         const effStart = a.start_date > weekStart! ? a.start_date : weekStart!;
@@ -198,6 +208,7 @@ export function useAgentsForClientPeriod(
             id: a.employee.id,
             full_name: a.employee.full_name,
             employee_id: a.employee.employee_id,
+            daily_bill_rate: Number(a.employee.daily_bill_rate) || 0,
             windows: [{ start: effStart, end: effEnd }],
           });
         }
@@ -241,6 +252,7 @@ export function useAgentsForClientPeriod(
             days_worked: daysByEmp.get(emp.id)?.size ?? 0,
             joined_mid_week_on: first.start > weekStart! ? first.start : null,
             left_mid_week_on:   last.end   < weekEnd!   ? last.end   : null,
+            daily_bill_rate: emp.daily_bill_rate,
           };
         })
         // Alphabetical so the invoice line order is stable run-to-run.

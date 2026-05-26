@@ -44,15 +44,18 @@ export default function FacturaNueva() {
 
   // When agents change (client/dates change), reset lines and prefill
   // days_worked from actual punches within each agent's assignment window.
-  // Unit price stays at 0 — explicit-rates-only rule. Operator must fill it.
-  const agentSignature = agents.map((a) => `${a.id}:${a.days_worked}`).join(",");
+  // Unit price prefills from employees.daily_bill_rate (per-employee explicit
+  // rate). When the rate is unset, it stays at 0 and the PDF gate keeps the
+  // operator honest — the "never auto-default" rule only forbids hardcoded
+  // fallbacks like "$50 for everyone," not legitimate per-employee values.
+  const agentSignature = agents.map((a) => `${a.id}:${a.days_worked}:${a.daily_bill_rate}`).join(",");
   useEffect(() => {
     if (agents.length > 0) {
       setLines(
         agents.map((a) => ({
           agent_name: a.full_name,
           days_worked: a.days_worked,
-          unit_price: 0,
+          unit_price: a.daily_bill_rate,
           spiffs: 0,
           joined_mid_week_on: a.joined_mid_week_on,
           left_mid_week_on: a.left_mid_week_on,
