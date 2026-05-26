@@ -25,9 +25,9 @@ export default function Facturas() {
   const navigate = useNavigate();
   const [clientFilter, setClientFilter] = useState<string>("all");
   const { data: clients = [] } = useClients();
-  const { data: invoices = [], isLoading } = useInvoices(
-    clientFilter !== "all" ? clientFilter : undefined
-  );
+  const { data: invoices = [], isLoading } = useInvoices({
+    clientId: clientFilter !== "all" ? clientFilter : undefined,
+  });
 
   return (
     <div className="space-y-6">

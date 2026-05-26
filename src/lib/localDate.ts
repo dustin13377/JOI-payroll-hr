@@ -50,6 +50,33 @@ export function formatDateMXLong(d: string | Date | null | undefined): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/**
+ * Returns Mon-Sun week range as ISO date strings, for any date inside the week.
+ * Used by the weekly invoice batch generator.
+ */
+export function getWeekRange(d: Date | string = new Date()): { monday: string; sunday: string } {
+  const date = typeof d === "string" ? parseLocalDate(d.slice(0, 10)) : new Date(d);
+  // JS Sunday=0, Monday=1, ..., Saturday=6. Shift so Monday=0.
+  const dayShift = (date.getDay() + 6) % 7;
+  const mon = new Date(date);
+  mon.setDate(date.getDate() - dayShift);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return { monday: todayLocal(mon), sunday: todayLocal(sun) };
+}
+
+/**
+ * Returns the last *completed* Mon-Sun week relative to `today`. Used to default
+ * the weekly invoice batch generator to "the week that just ended."
+ */
+export function lastCompletedWeek(today: Date = new Date()): { monday: string; sunday: string } {
+  const thisWeek = getWeekRange(today);
+  const thisMonday = parseLocalDate(thisWeek.monday);
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+  return getWeekRange(lastMonday);
+}
+
 const WEEKDAYS_ES = [
   "domingo", "lunes", "martes", "miércoles",
   "jueves", "viernes", "sábado",
