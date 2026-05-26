@@ -27,7 +27,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowLeft, CalendarRange, AlertTriangle, CheckCircle2, Sparkles, Loader2, ChevronDown, ChevronRight, X, RotateCcw,
+  ArrowLeft, CalendarRange, AlertTriangle, CheckCircle2, Sparkles, Loader2, ChevronDown, ChevronRight, X, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { toast } from "sonner";
@@ -43,7 +43,7 @@ export default function FacturaNueva() {
     return todayLocal(s);
   }, [monday]);
 
-  const { data: preview = [], isLoading, error } = useWeeklyPreview(monday, sunday);
+  const { data: preview = [], isLoading, error, refetch, isFetching } = useWeeklyPreview(monday, sunday);
   const generate = useGenerateWeekly();
 
   // Spiffs staged in memory before generation. Keyed by employees.id (UUID).
@@ -227,11 +227,21 @@ export default function FacturaNueva() {
 
       {/* Week picker */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base flex items-center gap-2">
             <CalendarRange className="h-4 w-4" />
             Period
           </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Pull fresh punch + rate data without reloading the page (handy after editing a profile in another tab)"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            {isFetching ? "Refreshing…" : "Refresh data"}
+          </Button>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <Button variant="outline" size="sm" onClick={() => shiftWeek(-1)}>← Previous</Button>
@@ -482,7 +492,15 @@ function ClientPreviewCard({
                     return (
                       <TableRow key={l.employee_id} className={isSkipped ? "bg-muted/30 opacity-50 line-through" : "bg-blue-50/40"}>
                         <TableCell className="font-medium">
-                          {l.employee_name}
+                          <Link
+                            to={`/empleados/${l.employee_code}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline decoration-dotted underline-offset-2"
+                            title="Open profile in new tab (e.g. to fix time clock punches)"
+                          >
+                            {l.employee_name}
+                          </Link>
                           <div className="text-xs text-muted-foreground">{l.employee_code}</div>
                         </TableCell>
                         <TableCell><span className="text-xs italic text-muted-foreground">flat bill</span></TableCell>
@@ -509,7 +527,15 @@ function ClientPreviewCard({
                       <TableCell className={isSkipped ? "font-medium" : isMissingRate ? "font-semibold text-amber-900" : "font-medium"}>
                         <div className="flex items-center gap-1.5">
                           {!isSkipped && isMissingRate && <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />}
-                          <span>{l.employee_name}</span>
+                          <Link
+                            to={`/empleados/${l.employee_code}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline decoration-dotted underline-offset-2"
+                            title="Open profile in new tab (e.g. to fix time clock punches)"
+                          >
+                            {l.employee_name}
+                          </Link>
                         </div>
                         <div className={`text-xs ${isSkipped ? "text-muted-foreground" : isMissingRate ? "text-amber-700" : "text-muted-foreground"}`}>
                           {l.employee_code}
