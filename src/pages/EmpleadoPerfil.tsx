@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEmployees, useUpdateEmployee, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates } from "@/hooks/useSupabasePayroll";
 import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
+import { EditNameDialog } from "@/components/EditNameDialog";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -86,7 +87,8 @@ export default function EmpleadoPerfil() {
   const createPeriod = useCreatePeriod();
   const { data: records = [] } = usePayrollRecords(activePeriod?.id);
   const queryClient = useQueryClient();
-  const { isLeadership, isTeamLead, employeeId: authEmployeeId } = useAuth();
+  const { isLeadership, isTeamLead, isOwner, isAdmin, isManager, employeeId: authEmployeeId } = useAuth();
+  const [editNameOpen, setEditNameOpen] = useState(false);
 
   // Highlight inputs with an amber border when empty — leadership only, so
   // HR/admins can spot missing data at a glance. Skipped for fields where
@@ -502,15 +504,53 @@ export default function EmpleadoPerfil() {
         <ArrowLeft className="mr-2 h-4 w-4" /> {isLeadership ? "Back to Employees" : "Back to Attendance"}
       </Button>
 
-      <div className="flex items-center gap-3">
-        <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-          <span className="text-primary-foreground font-bold text-lg">{emp.nombre[0]}</span>
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold">{getDisplayName({ work_name: emp._workName, full_name: emp.nombre })}</h2>
-          <p className="text-muted-foreground">ID: {emp.id}</p>
-        </div>
-      </div>
+      {(() => {
+        // Permission rule for renaming this employee:
+        //   - owner / admin → always allowed
+        //   - manager       → allowed only when target is agent or team_lead
+        //   - everyone else → hidden (TLs ask a manager directly)
+        const targetTitle = emp.title || "agent";
+        const managerCanEdit =
+          isManager && (targetTitle === "agent" || targetTitle === "team_lead");
+        const canEditName = isOwner || isAdmin || managerCanEdit;
+
+        return (
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-lg">{emp.nombre[0]}</span>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-bold">
+                  {getDisplayName({ work_name: emp._workName, full_name: emp.nombre })}
+                </h2>
+                {canEditName && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => setEditNameOpen(true)}
+                    title="Edit name"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <p className="text-muted-foreground">ID: {emp.id}</p>
+            </div>
+
+            {canEditName && empUuid && (
+              <EditNameDialog
+                open={editNameOpen}
+                onOpenChange={setEditNameOpen}
+                employeeUuid={empUuid}
+                currentFullName={emp.nombre}
+                currentWorkName={emp._workName}
+              />
+            )}
+          </div>
+        );
+      })()}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Assignment Card — visible to Team Lead and above */}

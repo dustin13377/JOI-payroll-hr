@@ -88,6 +88,50 @@ export function useInvoices(opts: { statusGroup?: "active" | "archive"; clientId
   });
 }
 
+export interface InvoicePunch {
+  employee_id: string;
+  date: string;          // YYYY-MM-DD
+  clock_in: string;      // ISO timestamp
+  clock_out: string | null;
+  total_hours: number | null;
+}
+
+/**
+ * Fetch all time-clock punches for the given employees within the invoice's
+ * billing week. Returns a Map keyed by employee_id with the punches sorted
+ * by date (then clock_in). Used to render the per-agent timesheet pages on
+ * the invoice PDF and to detect days-worked vs punch-count mismatches.
+ */
+export function useInvoicePunches(
+  invoiceId: string | undefined,
+  employeeIds: string[],
+  weekStart: string | undefined,
+  weekEnd: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["invoice-punches", invoiceId, [...employeeIds].sort().join(","), weekStart, weekEnd],
+    enabled: !!invoiceId && !!weekStart && !!weekEnd && employeeIds.length > 0,
+    queryFn: async (): Promise<Map<string, InvoicePunch[]>> => {
+      const { data, error } = await supabase
+        .from("time_clock")
+        .select("employee_id, date, clock_in, clock_out, total_hours")
+        .in("employee_id", employeeIds)
+        .gte("date", weekStart!)
+        .lte("date", weekEnd!)
+        .order("date", { ascending: true })
+        .order("clock_in", { ascending: true });
+      if (error) throw error;
+      const byEmp = new Map<string, InvoicePunch[]>();
+      for (const row of (data || []) as InvoicePunch[]) {
+        const list = byEmp.get(row.employee_id) ?? [];
+        list.push(row);
+        byEmp.set(row.employee_id, list);
+      }
+      return byEmp;
+    },
+  });
+}
+
 export function useInvoice(id: string | undefined) {
   return useQuery({
     queryKey: ["invoice", id],
