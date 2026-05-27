@@ -6,8 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
+// Note: Self-service signup is intentionally disabled. JOI is invite-only —
+// new accounts are provisioned via the create-employee edge function. The
+// signUp() code path was removed 2026-05-27 to close audit finding C-1
+// (defense-in-depth: even if Supabase Auth signups are accidentally re-enabled
+// at the project level, the UI no longer exposes a way to use them).
+
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,21 +36,8 @@ export default function Auth() {
       return;
     }
 
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) toast.error("Invalid credentials");
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Account created. Check your email to confirm.");
-      }
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) toast.error("Invalid credentials");
     setLoading(false);
   };
 
@@ -57,7 +49,7 @@ export default function Auth() {
             <span className="text-primary-foreground font-bold text-lg">JOI</span>
           </div>
           <CardTitle className="text-2xl tracking-tight">
-            {showReset ? "Reset Password" : isLogin ? "Sign In" : "Create Account"}
+            {showReset ? "Reset Password" : "Sign In"}
           </CardTitle>
           <CardDescription>
             {showReset
@@ -90,7 +82,7 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  autoComplete="current-password"
                 />
               </div>
             )}
@@ -99,9 +91,7 @@ export default function Auth() {
                 ? "Processing..."
                 : showReset
                 ? "Send Link"
-                : isLogin
-                ? "Sign In"
-                : "Create Account"}
+                : "Sign In"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm space-y-2">
@@ -114,20 +104,15 @@ export default function Auth() {
                 Forgot your password?
               </button>
             )}
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setShowReset(false);
-                setIsLogin(!isLogin);
-              }}
-            >
-              {showReset
-                ? "Back to sign in"
-                : isLogin
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Sign in"}
-            </button>
+            {showReset && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setShowReset(false)}
+              >
+                Back to sign in
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>
