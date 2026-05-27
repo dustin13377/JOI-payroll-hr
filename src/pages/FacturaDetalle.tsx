@@ -12,6 +12,7 @@ import { useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useInvoice,
+  useInvoicePunches,
   useUpdateInvoiceStatus,
   useUpdateInvoiceLine,
   useDeleteInvoiceLine,
@@ -21,6 +22,7 @@ import {
 } from "@/hooks/useInvoices";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateUSLong } from "@/lib/localDate";
+import { generateInvoiceWithTimesheetPdf } from "@/lib/pdf/generateInvoiceWithTimesheetPdf";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +41,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, Printer, Send, CheckCircle, Trash2, Plus, Lock, Unlock, Loader2,
+  ArrowLeft, Printer, Send, CheckCircle, Trash2, Plus, Lock, Unlock, Loader2, Download, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -67,6 +69,25 @@ export default function FacturaDetalle() {
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [showAddMisc, setShowAddMisc] = useState(false);
   const [showAddAgent, setShowAddAgent] = useState(false);
+  const [downloadMismatches, setDownloadMismatches] = useState<MismatchInfo[] | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  // Collect punch-billed employee IDs for the punch lookup. Misc lines have
+  // null employee_id; flat-billed agents (is_flat_total=true) still have one
+  // but won't have day-level punches to reconcile against.
+  const punchEmployeeIds = useMemo(() => {
+    if (!invoice?.lines) return [];
+    return invoice.lines
+      .filter((l) => l.employee_id !== null && !l.is_flat_total)
+      .map((l) => l.employee_id as string);
+  }, [invoice?.lines]);
+
+  const { data: punchesByEmployee = new Map(), isLoading: punchesLoading } = useInvoicePunches(
+    invoice?.id,
+    punchEmployeeIds,
+    invoice?.week_start,
+    invoice?.week_end,
+  );
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20"><LogoLoadingIndicator /></div>;
@@ -91,6 +112,52 @@ export default function FacturaDetalle() {
   const isPaid = invoice.status === "paid";
   const isSent = invoice.status === "sent";
   const isLocked = isPaid || isSent;
+
+  // Compute invoice-days vs punch-days mismatches across all punch-billed
+  // lines. Used by the download flow.
+  const computeMismatches = (): MismatchInfo[] => {
+    const out: MismatchInfo[] = [];
+    for (const line of lines) {
+      if (!line.employee_id || line.is_flat_total) continue;
+      const punches = punchesByEmployee.get(line.employee_id) ?? [];
+      const distinctDays = new Set(punches.map((p) => p.date)).size;
+      const billed = Number(line.days_worked);
+      if (distinctDays !== billed) {
+        out.push({
+          agent_name: line.agent_name,
+          billed_days: billed,
+          punch_days: distinctDays,
+        });
+      }
+    }
+    return out;
+  };
+
+  const runPdfDownload = () => {
+    setDownloading(true);
+    try {
+      // invoice is guaranteed non-null inside the render branch — but TS
+      // doesn't know that, so re-assert.
+      generateInvoiceWithTimesheetPdf(invoice!, punchesByEmployee);
+    } catch (e: any) {
+      toast.error(`Couldn't generate PDF: ${e.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadClick = () => {
+    if (punchesLoading) {
+      toast.info("Still loading punches — try again in a moment.");
+      return;
+    }
+    const mismatches = computeMismatches();
+    if (mismatches.length === 0) {
+      runPdfDownload();
+    } else {
+      setDownloadMismatches(mismatches);
+    }
+  };
 
   const handleStatusChange = (status: string) => {
     updateStatus.mutate(
@@ -140,6 +207,16 @@ export default function FacturaDetalle() {
               </Button>
             </>
           )}
+          <Button
+            onClick={handleDownloadClick}
+            disabled={downloading || punchesLoading}
+          >
+            {downloading ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Building PDF…</>
+            ) : (
+              <><Download className="mr-2 h-4 w-4" /> Download Invoice + Timesheet</>
+            )}
+          </Button>
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="mr-2 h-4 w-4" /> Print
           </Button>
@@ -287,8 +364,73 @@ export default function FacturaDetalle() {
         weekEnd={invoice.week_end}
         existingEmployeeIds={lines.map((l) => l.employee_id).filter(Boolean) as string[]}
       />
+
+      {/* Download mismatch warning */}
+      <AlertDialog
+        open={downloadMismatches !== null}
+        onOpenChange={(v) => { if (!v) setDownloadMismatches(null); }}
+      >
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              Days on invoice don't match time-clock punches
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The following agents have a different number of billed days vs. days
+              they actually punched in. The mismatch will be noted on the timesheet
+              page in the PDF — you can still download if these are expected (PTO,
+              backfill, etc.).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-64 overflow-auto rounded-md border bg-muted/30">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-1.5 text-left">Agent</th>
+                  <th className="px-3 py-1.5 text-right">Billed</th>
+                  <th className="px-3 py-1.5 text-right">Punched</th>
+                  <th className="px-3 py-1.5 text-right">Diff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(downloadMismatches ?? []).map((m) => {
+                  const diff = m.billed_days - m.punch_days;
+                  return (
+                    <tr key={m.agent_name} className="border-t">
+                      <td className="px-3 py-1.5">{m.agent_name}</td>
+                      <td className="px-3 py-1.5 text-right">{m.billed_days}</td>
+                      <td className="px-3 py-1.5 text-right">{m.punch_days}</td>
+                      <td className={`px-3 py-1.5 text-right font-medium ${diff > 0 ? "text-amber-700" : "text-red-700"}`}>
+                        {diff > 0 ? "+" : ""}{diff}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDownloadMismatches(null);
+                runPdfDownload();
+              }}
+            >
+              Download anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
+}
+
+interface MismatchInfo {
+  agent_name: string;
+  billed_days: number;
+  punch_days: number;
 }
 
 /* ------------------------------------------------------------------ */
