@@ -393,6 +393,36 @@ function drawTimesheets(
   }
 }
 
+// Parse a YYYY-MM-DD string to "M-D" without time zone games.
+function fmtShortDate(ymd: string): string {
+  const [, m, d] = ymd.split("-").map(Number);
+  return `${m}-${d}`;
+}
+
+// Strip filesystem-unsafe characters from the client name so the download
+// filename works across browsers/OSes. Replaces / \ : * ? " < > | with a space
+// and collapses repeats.
+function sanitizeForFilename(s: string): string {
+  return s.replace(/[\/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Build the invoice PDF filename: "<Client> Invoice <M-D> to <M-D>.pdf"
+// e.g. "Torro Invoice 5-18 to 5-24.pdf". Falls back to the invoice number
+// when the client name isn't available.
+function buildInvoiceFilename(
+  invoice: Invoice & { client?: Client },
+): string {
+  const clientName = invoice.client?.name
+    ? sanitizeForFilename(invoice.client.name)
+    : null;
+  if (!clientName || !invoice.week_start || !invoice.week_end) {
+    return `${invoice.invoice_number}.pdf`;
+  }
+  const start = fmtShortDate(invoice.week_start);
+  const end = fmtShortDate(invoice.week_end);
+  return `${clientName} Invoice ${start} to ${end}.pdf`;
+}
+
 // ── Public entry point ──────────────────────────────────────────────
 export function generateInvoiceWithTimesheetPdf(
   invoice: Invoice & { lines: InvoiceLine[]; client?: Client },
@@ -402,5 +432,5 @@ export function generateInvoiceWithTimesheetPdf(
   const invoiceEndY = drawInvoicePage(doc, invoice);
   drawTimesheets(doc, invoice, punchesByEmployee, invoiceEndY);
   drawFooters(doc, invoice.invoice_number);
-  doc.save(`${invoice.invoice_number}.pdf`);
+  doc.save(buildInvoiceFilename(invoice));
 }
