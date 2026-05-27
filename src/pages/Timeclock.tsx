@@ -272,18 +272,12 @@ export default function Timeclock() {
         .maybeSingle();
       if (existing) throw new Error("Already clocked in today");
 
-      let isLate = false;
-      let lateMinutes = 0;
-      if (shiftSettings) {
-        const [shiftHour, shiftMinute] = shiftSettings.start_time.split(":").map(Number);
-        const shiftStart = new Date(now);
-        shiftStart.setHours(shiftHour, shiftMinute, 0, 0);
-        const lateTime = new Date(shiftStart.getTime() + (shiftSettings.grace_minutes || 0) * 60000);
-        if (now > lateTime) {
-          isLate = true;
-          lateMinutes = Math.floor((now.getTime() - lateTime.getTime()) / 60000);
-        }
-      }
+      // is_late / late_minutes are NOT set here anymore. The
+      // tg_time_clock_set_lateness BEFORE trigger (migration
+      // h3_server_side_lateness, 2026-05-27) computes them server-side
+      // from shift_settings — authoritative, so devtools can't falsify.
+      // The lateness banner UI below still uses shiftSettings directly,
+      // which is fine because it's read-only / ephemeral. Closes H-3.
 
       const shiftEndExpected = buildShiftEndExpected(now, shiftSettings || null);
 
@@ -293,8 +287,6 @@ export default function Timeclock() {
           employee_id: employeeId,
           clock_in: now.toISOString(),
           date: today,
-          is_late: isLate,
-          late_minutes: isLate ? lateMinutes : null,
           shift_end_expected: shiftEndExpected,
         })
         .select()
