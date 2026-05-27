@@ -7,10 +7,17 @@
  *
  * POST body: { requestId: string }
  *
+ * Required headers:
+ *   Authorization: Bearer <jwt>  — caller must be authenticated. The user's
+ *                                  user_profiles.role must be one of
+ *                                  ["team_lead","manager","admin","owner"].
+ *                                  Closes audit finding C-2 (2026-05-27).
+ *
  * Required secrets:
  *   GMAIL_USER, GMAIL_APP_PASSWORD
  *   DRY_RUN_HR_NOTIFICATIONS  — defaults true; set "false" to send
  *   APP_URL                   — for the deep link to the HR queue
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY (auto)
  */
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -21,6 +28,11 @@ const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD") ?? "";
 const DRY_RUN = Deno.env.get("DRY_RUN_HR_NOTIFICATIONS") !== "false";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// Prefer explicit APP_SUPABASE_KEY (sb_publishable_...) over the auto-injected
+// SUPABASE_ANON_KEY so we survive the legacy/publishable-key transition.
+// See docs/developer-handoff.md → "Edge function anon key pattern".
+const SUPABASE_ANON_KEY =
+  Deno.env.get("APP_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const APP_URL = Deno.env.get("APP_URL") ?? (() => { throw new Error("APP_URL not set"); })();
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
@@ -29,6 +41,10 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+// Roles permitted to trigger HR notifications. TLs file requests; leadership
+// is included so admin tooling can re-fire a notification if needed.
+const ALLOWED_ROLES = ["team_lead", "manager", "admin", "owner"];
 
 const NAVY = "#1B2A4A";
 const ORANGE = "#FFA700";
@@ -45,36 +61,72 @@ function emailShell(heading: string, bodyHtml: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${heading}</title></head><body style="margin:0;padding:24px;background:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="background:${NAVY};padding:24px 32px;"><p style="margin:0;color:${ORANGE};font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">JOI Payroll &amp; HR</p><h1 style="margin:6px 0 0;color:white;font-size:20px;font-weight:700;line-height:1.3;">${heading}</h1></div><div style="padding:24px 32px;">${bodyHtml}</div><div style="padding:14px 32px;border-top:1px solid ${BORDER};background:${LIGHT};"><p style="margin:0;font-size:11px;color:#9CA3AF;">Sent automatically by JOI Payroll &amp; HR &middot; ${GMAIL_USER}</p></div></div></body></html>`;
 }
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(
+    JSON.stringify(body),
+    { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
   }
 
   try {
-    const { requestId } = await req.json();
-    if (!requestId) {
-      return new Response(
-        JSON.stringify({ error: "Missing requestId" }),
-        { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
+    // -----------------------------------------------------------------------
+    // 0. Caller auth — verify JWT + role. Closes audit finding C-2.
+    // -----------------------------------------------------------------------
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return jsonResponse({ error: "Missing authorization" }, 401);
     }
 
+    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const {
+      data: { user: caller },
+      error: authError,
+    } = await anonClient.auth.getUser();
+    if (authError || !caller) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    const { data: profile } = await anonClient
+      .from("user_profiles")
+      .select("role")
+      .eq("id", caller.id)
+      .single();
+    const role = profile?.role;
+    if (!role || !ALLOWED_ROLES.includes(role)) {
+      return jsonResponse({ error: "Forbidden: TL or leadership only" }, 403);
+    }
+
+    // -----------------------------------------------------------------------
+    // 1. Parse body
+    // -----------------------------------------------------------------------
+    const { requestId } = await req.json();
+    if (!requestId) {
+      return jsonResponse({ error: "Missing requestId" }, 400);
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. Privileged work — use service role only AFTER caller is verified
+    // -----------------------------------------------------------------------
     const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Fetch the request
+    // 2a. Fetch the request
     const { data: request, error: reqErr } = await supa
       .from("hr_document_requests")
       .select("id, request_type, incident_date, tl_narrative, reason, employee_id, filed_by")
       .eq("id", requestId)
       .single();
     if (reqErr || !request) {
-      return new Response(
-        JSON.stringify({ error: "Request not found" }),
-        { status: 404, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
+      return jsonResponse({ error: "Request not found" }, 404);
     }
 
-    // 2. Fetch the agent
+    // 2b. Fetch the agent
     const { data: agent } = await supa
       .from("employees")
       .select("full_name, work_name, campaign_id, campaigns!campaign_id(name)")
@@ -83,7 +135,7 @@ Deno.serve(async (req) => {
     const agentName = agent?.work_name?.trim() || agent?.full_name || "Unknown";
     const campaignName = (agent?.campaigns as { name?: string } | null)?.name ?? "Unknown";
 
-    // 3. Fetch the filer (TL)
+    // 2c. Fetch the filer (TL)
     const { data: filer } = await supa
       .from("employees")
       .select("full_name, work_name")
@@ -91,7 +143,7 @@ Deno.serve(async (req) => {
       .single();
     const filerName = filer?.work_name?.trim() || filer?.full_name || "Unknown";
 
-    // 4. Fetch all leadership emails
+    // 2d. Fetch all leadership emails
     const { data: leaders } = await supa
       .from("employees")
       .select("email")
@@ -102,13 +154,12 @@ Deno.serve(async (req) => {
       .filter((e): e is string => !!e && e.includes("@"));
 
     if (emails.length === 0) {
-      return new Response(
-        JSON.stringify({ status: "no_recipients", recipientCount: 0 }),
-        { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
+      return jsonResponse({ status: "no_recipients", recipientCount: 0 });
     }
 
-    // 5. Build email
+    // -----------------------------------------------------------------------
+    // 3. Build email
+    // -----------------------------------------------------------------------
     const typeLabel = TYPE_LABELS[request.request_type] ?? request.request_type;
     const subject = `New ${typeLabel} Request — ${agentName}`;
 
@@ -126,13 +177,12 @@ Deno.serve(async (req) => {
 
     const html = emailShell(subject, bodyHtml);
 
-    // 6. Send or dry-run
+    // -----------------------------------------------------------------------
+    // 4. Send or dry-run
+    // -----------------------------------------------------------------------
     if (DRY_RUN) {
       console.log(`[DRY_RUN] Would send "${subject}" to ${emails.length} recipients: ${emails.join(", ")}`);
-      return new Response(
-        JSON.stringify({ status: "dry_run", recipientCount: emails.length }),
-        { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-      );
+      return jsonResponse({ status: "dry_run", recipientCount: emails.length });
     }
 
     const client = new SMTPClient({
@@ -154,15 +204,9 @@ Deno.serve(async (req) => {
       await client.close();
     }
 
-    return new Response(
-      JSON.stringify({ status: "sent", recipientCount: emails.length }),
-      { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ status: "sent", recipientCount: emails.length });
   } catch (err) {
     console.error("notify-hr-request-filed error:", err);
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ error: String(err) }, 500);
   }
 });
