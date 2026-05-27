@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ACCEPTED_DOCUMENT_TYPES, MAX_DOCUMENT_SIZE_BYTES, sanitizeFilename } from "@/lib/documentUpload";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export interface PolicyDocument {
   id: string;
@@ -102,6 +103,9 @@ export function usePolicyVersions(policyId: string | undefined | null) {
 
 export function useCreatePolicy() {
   const qc = useQueryClient();
+  // organization_id is NOT NULL on policy_documents — must be set explicitly
+  // on every INSERT. Closes audit finding H-2 (2026-05-27).
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async ({
       title,
@@ -124,6 +128,13 @@ export function useCreatePolicy() {
     }) => {
       validateFile(file);
 
+      if (!organizationId) {
+        throw new Error(
+          "Cannot create policy: your user profile is missing organization_id. " +
+          "Reload the page and try again — if it persists, contact an admin.",
+        );
+      }
+
       // Create policy document
       const { data: policy, error: pErr } = await supabase
         .from("policy_documents")
@@ -133,6 +144,7 @@ export function useCreatePolicy() {
           is_global: isGlobal,
           scoped_campaign_ids: isGlobal ? null : (scopedCampaignIds || null),
           applicable_roles: applicableRoles?.length ? applicableRoles : null,
+          organization_id: organizationId,
         })
         .select()
         .single();

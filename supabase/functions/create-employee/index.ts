@@ -1,17 +1,36 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// ---------------------------------------------------------------------------
+// CORS — env-driven allowlist. Closes audit finding H-1 (2026-05-27).
+//
+// ALLOWED_ORIGIN secret is a comma-separated list of origins (no spaces
+// required, leading/trailing whitespace stripped). The function echoes back
+// the request's Origin header IF and ONLY IF it matches one of those entries.
+// Falls back to the first entry on mismatch — which fails closed because the
+// browser will refuse to send the actual POST when the echoed origin doesn't
+// match the request origin.
+//
+// Default in prod: "https://app.justoutsource.it". For local dev, update the
+// Supabase secret to "https://app.justoutsource.it,http://localhost:8080".
+// ---------------------------------------------------------------------------
+const ALLOWED_ORIGINS_RAW =
+  Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
+const ALLOWED_ORIGINS = ALLOWED_ORIGINS_RAW
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
 }
 
 // Find an existing auth user by email. Returns null if not found.
@@ -33,8 +52,15 @@ async function findAuthUserByEmail(
 }
 
 Deno.serve(async (req: Request) => {
+  const headers = corsHeaders(req);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers });
   }
 
   try {

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export type QuestionType = "multiple_choice" | "open_ended";
 
@@ -130,6 +131,8 @@ export function useRecognitionHistory() {
 export function useCreateRecognition() {
   const qc = useQueryClient();
   const { employeeId } = useAuth();
+  // organization_id is NOT NULL on bulletin_posts — see H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async (payload: {
       recognizedEmployeeId: string;
@@ -137,6 +140,9 @@ export function useCreateRecognition() {
       reason: string;
       monthLabel: string; // e.g. "May 2026"
     }) => {
+      if (!organizationId) {
+        throw new Error("Cannot create post: missing organization_id on your profile.");
+      }
       const { data, error } = await supabase
         .from("bulletin_posts")
         .insert({
@@ -148,6 +154,7 @@ export function useCreateRecognition() {
           requires_ack: false,
           is_published: true,
           published_at: new Date().toISOString(),
+          organization_id: organizationId,
         })
         .select()
         .single();
@@ -195,6 +202,8 @@ export function usePostAcks(postId: string | null) {
 export function useCreatePost() {
   const qc = useQueryClient();
   const { employeeId } = useAuth();
+  // organization_id is NOT NULL on bulletin_posts — see H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async (payload: {
       title: string;
@@ -203,6 +212,9 @@ export function useCreatePost() {
       campaign_id?: string | null;
       expires_at?: string | null;
     }) => {
+      if (!organizationId) {
+        throw new Error("Cannot create post: missing organization_id on your profile.");
+      }
       const { data, error } = await supabase
         .from("bulletin_posts")
         .insert({
@@ -214,6 +226,7 @@ export function useCreatePost() {
           expires_at: payload.expires_at ?? null,
           author_id: employeeId ?? null,
           is_published: false,
+          organization_id: organizationId,
         })
         .select()
         .single();
@@ -345,6 +358,8 @@ export function useMyResponsesForPost(postId: string | null) {
 export function useCreateQuestionnaire() {
   const qc = useQueryClient();
   const { employeeId } = useAuth();
+  // organization_id is NOT NULL on bulletin_posts — see H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async (payload: {
       title: string;
@@ -354,6 +369,9 @@ export function useCreateQuestionnaire() {
       publish: boolean;
       questions: { question_text: string; type: QuestionType; options: string[] | null }[];
     }) => {
+      if (!organizationId) {
+        throw new Error("Cannot create questionnaire: missing organization_id on your profile.");
+      }
       // 1. Create the post
       const { data: post, error: postErr } = await supabase
         .from("bulletin_posts")
@@ -367,6 +385,7 @@ export function useCreateQuestionnaire() {
           requires_ack: false,
           is_published: payload.publish,
           published_at: payload.publish ? new Date().toISOString() : null,
+          organization_id: organizationId,
         })
         .select()
         .single();

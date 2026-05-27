@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { todayLocal } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 
@@ -412,13 +413,19 @@ export function useCompanyHolidays() {
 export function useAddCompanyHoliday() {
   const qc = useQueryClient();
   const { user } = useAuth();
+  // organization_id is NOT NULL on company_holidays — see H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async ({ date, name }: { date: string; name: string }) => {
+      if (!organizationId) {
+        throw new Error("Cannot add holiday: missing organization_id on your profile.");
+      }
       const { error } = await supabase.from("company_holidays").insert({
         date,
         name,
         is_statutory: false,
         created_by: user?.id ?? null,
+        organization_id: organizationId,
       });
       if (error) throw error;
     },

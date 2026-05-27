@@ -33,17 +33,27 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// ---------------------------------------------------------------------------
+// CORS — env-driven allowlist. Closes audit finding H-1 (2026-05-27).
+// See create-employee/index.ts for the full pattern explanation.
+// ---------------------------------------------------------------------------
+const ALLOWED_ORIGINS_RAW =
+  Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
+const ALLOWED_ORIGINS = ALLOWED_ORIGINS_RAW
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
 }
 
 // Fields a caller is allowed to set via this function.
@@ -57,7 +67,14 @@ const EDITABLE_FIELDS = [
 type EditableField = typeof EDITABLE_FIELDS[number];
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const headers = corsHeaders(req);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+
+  if (req.method === "OPTIONS") return new Response(null, { headers });
 
   try {
     const authHeader = req.headers.get("Authorization");
