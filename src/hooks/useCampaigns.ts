@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export interface Campaign {
   id: string;
@@ -52,11 +53,15 @@ export function useCampaignsByClient() {
 
 export function useCreateCampaign() {
   const qc = useQueryClient();
+  // organization_id is NOT NULL on campaigns with no DB default; the RLS
+  // WITH CHECK requires (organization_id = my_org_id()). See audit finding H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async ({ clientId, name }: { clientId: string; name: string }) => {
+      if (!organizationId) throw new Error('Cannot create campaign: your profile has no organization. Refresh and try again.');
       const { data, error } = await supabase
         .from("campaigns")
-        .insert({ client_id: clientId, name: name.trim() })
+        .insert({ client_id: clientId, name: name.trim(), organization_id: organizationId })
         .select()
         .single();
       if (error) throw error;

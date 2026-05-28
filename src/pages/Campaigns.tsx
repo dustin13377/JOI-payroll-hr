@@ -18,6 +18,7 @@ import {
 import { Building2, Plus, ChevronRight, ChevronDown, Users, Clock, Pencil, Trash2, ArrowLeft, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { useUserProfile } from '@/hooks/useUserProfile';
 
 interface Campaign {
   id: string;
@@ -40,6 +41,11 @@ interface ClientWithCampaigns {
 export default function Campaigns() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // organization_id is NOT NULL on both clients and campaigns with no DB
+  // default, and the RLS WITH CHECK requires (organization_id = my_org_id()).
+  // Missing it silently fails with "new row violates row-level security policy".
+  // See audit finding H-2.
+  const { organizationId } = useUserProfile();
 
   // Dialog state
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
@@ -127,9 +133,14 @@ export default function Campaigns() {
           .eq('id', editingClient.id);
         if (error) throw error;
       } else {
+        if (!organizationId) throw new Error('Cannot create client: your profile has no organization. Refresh and try again.');
         const { error } = await supabase
           .from('clients')
-          .insert({ name: newName.trim(), prefix: newPrefix.trim().toUpperCase() });
+          .insert({
+            name: newName.trim(),
+            prefix: newPrefix.trim().toUpperCase(),
+            organization_id: organizationId,
+          });
         if (error) throw error;
       }
     },
@@ -166,9 +177,14 @@ export default function Campaigns() {
           .eq('id', editingCampaign.id);
         if (error) throw error;
       } else {
+        if (!organizationId) throw new Error('Cannot create campaign: your profile has no organization. Refresh and try again.');
         const { error } = await supabase
           .from('campaigns')
-          .insert({ client_id: targetClientId, name: newName.trim() });
+          .insert({
+            client_id: targetClientId,
+            name: newName.trim(),
+            organization_id: organizationId,
+          });
         if (error) throw error;
       }
     },
