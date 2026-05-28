@@ -3098,6 +3098,7 @@ export type Database = {
           assigned_to: string | null
           city: string | null
           created_at: string
+          curp: string | null
           email: string | null
           english_level_assessed: string | null
           english_level_self: string
@@ -3127,6 +3128,7 @@ export type Database = {
           assigned_to?: string | null
           city?: string | null
           created_at?: string
+          curp?: string | null
           email?: string | null
           english_level_assessed?: string | null
           english_level_self?: string
@@ -3156,6 +3158,7 @@ export type Database = {
           assigned_to?: string | null
           city?: string | null
           created_at?: string
+          curp?: string | null
           email?: string | null
           english_level_assessed?: string | null
           english_level_self?: string

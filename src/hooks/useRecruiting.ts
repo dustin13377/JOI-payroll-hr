@@ -8,6 +8,7 @@ export interface Candidate {
   updated_at: string;
   source: "form" | "referral" | "other";
   full_name: string | null;
+  curp: string | null;
   email: string | null;
   phone: string | null;
   city: string | null;
