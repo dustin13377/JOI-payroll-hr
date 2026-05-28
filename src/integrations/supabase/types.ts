@@ -925,6 +925,7 @@ export type Database = {
           bill_to_name: string | null
           created_at: string | null
           id: string
+          is_active: boolean
           name: string
           organization_id: string
           prefix: string
@@ -935,6 +936,7 @@ export type Database = {
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name: string
           organization_id: string
           prefix: string
@@ -945,6 +947,7 @@ export type Database = {
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           organization_id?: string
           prefix?: string

@@ -15,13 +15,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Building2, Plus, ChevronRight, ChevronDown, Users, Clock, Pencil, Trash2, ArrowLeft } from 'lucide-react';
+import { Building2, Plus, ChevronRight, ChevronDown, Users, Clock, Pencil, Trash2, ArrowLeft, RotateCcw } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 interface Campaign {
   id: string;
   client_id: string;
   name: string;
+  is_active: boolean;
   agentCount: number;
   shiftName: string | null;
 }
@@ -30,6 +32,7 @@ interface ClientWithCampaigns {
   id: string;
   name: string;
   prefix: string;
+  is_active: boolean;
   campaigns: Campaign[];
   totalAgents: number;
 }
@@ -49,18 +52,25 @@ export default function Campaigns() {
 
   // Expanded client
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  // Show soft-deleted clients + campaigns so they can be reactivated.
+  const [showInactive, setShowInactive] = useState(false);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['clients-with-campaigns'] });
   };
 
   const { data: clientsWithCampaigns = [], isLoading } = useQuery({
-    queryKey: ['clients-with-campaigns'],
+    queryKey: ['clients-with-campaigns', showInactive],
     queryFn: async () => {
+      // Fetch active + inactive in one shot when showInactive is true; the UI
+      // greys out inactives. When false we apply is_active=true filters to
+      // keep the active list lean.
+      const clientsQuery = supabase.from('clients').select('id, name, prefix, is_active').order('name');
+      const campaignsQuery = supabase.from('campaigns').select('id, client_id, name, is_active').order('name');
       const [{ data: clients }, { data: campaigns }, { data: employees }, { data: shifts }] =
         await Promise.all([
-          supabase.from('clients').select('id, name, prefix').eq('is_active', true).order('name'),
-          supabase.from('campaigns').select('id, client_id, name').eq('is_active', true).order('name'),
+          showInactive ? clientsQuery : clientsQuery.eq('is_active', true),
+          showInactive ? campaignsQuery : campaignsQuery.eq('is_active', true),
           supabase.from('employees').select('campaign_id').eq('is_active', true).eq('is_system_user', false),
           supabase.from('shift_settings').select('campaign_id, shift_name'),
         ]);
@@ -80,6 +90,31 @@ export default function Campaigns() {
         };
       }) as ClientWithCampaigns[];
     },
+  });
+
+  // Reactivate mutations — flip is_active back to true.
+  const reactivateClientMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('clients').update({ is_active: true }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast.success('Client reactivated');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reactivateCampaignMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('campaigns').update({ is_active: true }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast.success('Campaign reactivated');
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   // Client CRUD
@@ -108,8 +143,9 @@ export default function Campaigns() {
 
   const deleteClientMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Soft delete — preserves all historical data (campaigns, employees,
-      // invoices, payroll). Hide-from-UI is enough for the trash icon.
+      // Soft delete — preserves campaigns, employees, invoices, payroll
+      // tied to this client. Hidden from the active list, reactivatable
+      // via the "Show inactive" toggle.
       const { error } = await supabase.from('clients').update({ is_active: false }).eq('id', id);
       if (error) throw error;
     },
@@ -194,10 +230,22 @@ export default function Campaigns() {
             Manage clients and their campaigns — shifts, KPIs, and EOD questions
           </p>
         </div>
-        <Button onClick={openAddClient}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add Client
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-inactive"
+              checked={showInactive}
+              onCheckedChange={setShowInactive}
+            />
+            <Label htmlFor="show-inactive" className="text-sm text-muted-foreground cursor-pointer">
+              Show inactive
+            </Label>
+          </div>
+          <Button onClick={openAddClient}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Client
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -214,7 +262,7 @@ export default function Campaigns() {
           {clientsWithCampaigns.map((cl) => {
             const isExpanded = expandedClient === cl.id;
             return (
-              <Card key={cl.id}>
+              <Card key={cl.id} className={cl.is_active === false ? 'opacity-60' : ''}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <button
@@ -227,7 +275,10 @@ export default function Campaigns() {
                         <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
                       )}
                       <div>
-                        <CardTitle className="text-lg">{cl.name}</CardTitle>
+                        <CardTitle className="text-lg">
+                          {cl.name}
+                          {cl.is_active === false && <span className="ml-2 text-xs font-normal text-muted-foreground">(inactive)</span>}
+                        </CardTitle>
                         <p className="text-sm text-muted-foreground mt-0.5">
                           {cl.prefix} · {cl.campaigns.length} campaign{cl.campaigns.length !== 1 ? 's' : ''} · {cl.totalAgents} agent{cl.totalAgents !== 1 ? 's' : ''}
                         </p>
@@ -237,22 +288,33 @@ export default function Campaigns() {
                       <Button variant="ghost" size="icon" onClick={() => openEditClient(cl)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => {
-                          if (cl.campaigns.length > 0) {
-                            toast.error('Deactivate all campaigns first');
-                            return;
-                          }
-                          if (confirm(`Deactivate client "${cl.name}"? It will be hidden from the list but all historical data is preserved.`)) {
-                            deleteClientMutation.mutate(cl.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {cl.is_active === false ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Reactivate client"
+                          onClick={() => reactivateClientMutation.mutate(cl.id)}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (cl.campaigns.filter((c) => c.is_active !== false).length > 0) {
+                              toast.error('Deactivate all campaigns first');
+                              return;
+                            }
+                            if (confirm(`Deactivate client "${cl.name}"? It will be hidden from the list. All historical data is preserved and you can bring it back via the "Show inactive" toggle.`)) {
+                              deleteClientMutation.mutate(cl.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -267,14 +329,17 @@ export default function Campaigns() {
                       cl.campaigns.map((camp) => (
                         <div
                           key={camp.id}
-                          className="flex items-center justify-between p-3 rounded-lg border hover:border-primary/50 transition-colors"
+                          className={`flex items-center justify-between p-3 rounded-lg border hover:border-primary/50 transition-colors ${camp.is_active === false ? 'opacity-60' : ''}`}
                         >
                           <button
                             className="flex-1 text-left flex items-center gap-3"
                             onClick={() => navigate(`/campaigns/${camp.id}`)}
                           >
                             <div>
-                              <span className="font-medium text-sm">{camp.name}</span>
+                              <span className="font-medium text-sm">
+                                {camp.name}
+                                {camp.is_active === false && <span className="ml-2 text-xs font-normal text-muted-foreground">(inactive)</span>}
+                              </span>
                               <div className="flex gap-2 mt-1">
                                 <Badge variant="outline" className="gap-1 text-xs">
                                   <Users className="h-3 w-3" />
@@ -293,22 +358,34 @@ export default function Campaigns() {
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditCampaign(camp)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (camp.agentCount > 0) {
-                                  toast.error('Reassign active agents first');
-                                  return;
-                                }
-                                if (confirm(`Deactivate campaign "${camp.name}"? It will be hidden from the list but all historical data (EOD logs, payroll, reviews) is preserved.`)) {
-                                  deleteCampaignMutation.mutate(camp.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {camp.is_active === false ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Reactivate campaign"
+                                onClick={() => reactivateCampaignMutation.mutate(camp.id)}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  if (camp.agentCount > 0) {
+                                    toast.error('Reassign active agents first');
+                                    return;
+                                  }
+                                  if (confirm(`Deactivate campaign "${camp.name}"? It will be hidden from the list but all historical data (EOD logs, payroll, reviews) is preserved.`)) {
+                                    deleteCampaignMutation.mutate(camp.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))

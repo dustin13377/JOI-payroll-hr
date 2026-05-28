@@ -37,7 +37,7 @@ export function useCampaignsByClient() {
     queryFn: async () => {
       const [{ data: clients, error: cErr }, { data: campaigns, error: campErr }] =
         await Promise.all([
-          supabase.from("clients").select("*").eq("is_active", true).order("name"),
+          supabase.from("clients").select("*").order("name"),
           supabase.from("campaigns").select("*").eq("is_active", true).order("name"),
         ]);
       if (cErr) throw cErr;
