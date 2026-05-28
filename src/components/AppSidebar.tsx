@@ -22,6 +22,7 @@ import {
   ClipboardEdit,
   ShieldCheck,
   Megaphone,
+  UserPlus,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,6 +53,7 @@ const leadershipItems = [
   { title: "Payroll History", url: "/historial", icon: History },
   { title: "Invoices (USD)", url: "/facturas", icon: FileText },
   { title: "Campaigns", url: "/campaigns", icon: Building2 },
+  { title: "Recruiting", url: "/recruiting", icon: UserPlus },
   { title: "My Policies", url: "/policies", icon: ScrollText },
   { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
