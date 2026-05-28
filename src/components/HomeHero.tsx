@@ -449,7 +449,7 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start h-11">
-              <Link to="/solicitudes">
+              <Link to="/vacation">
                 <CalendarDays className="mr-2 h-4 w-4" /> Request Time Off
               </Link>
             </Button>

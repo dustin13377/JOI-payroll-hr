@@ -7,6 +7,7 @@ import {
   useMyVacationRequests,
   useRequestVacationOff,
   useCancelVacationRequest,
+  type TimeOffRequestType,
 } from "@/hooks/useVacationRequests";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,15 +15,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays, CalendarCheck, AlertCircle } from "lucide-react";
 import { formatDateMX, todayLocal } from "@/lib/localDate";
 import { toast } from "sonner";
 
-function minStartDate(): string {
+// Notice rules: Vacation = 21 days (LFT), everything else = 7 days.
+// See TIME_OFF_UNIFICATION_PLAN.md.
+function noticeDaysFor(type: TimeOffRequestType): number {
+  return type === "vacation" ? 21 : 7;
+}
+
+function minStartDateFor(type: TimeOffRequestType): string {
   const d = new Date();
-  d.setDate(d.getDate() + 21);
+  d.setDate(d.getDate() + noticeDaysFor(type));
   return todayLocal(d);
 }
 
@@ -31,6 +39,13 @@ function daysBetween(start: string, end: string): number {
   const e = new Date(`${end}T00:00:00`);
   return Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
 }
+
+const REASON_LABEL: Record<TimeOffRequestType, string> = {
+  vacation: "Vacation (paid)",
+  sick: "Sick",
+  personal: "Personal",
+  other: "Other",
+};
 
 const STATUS_LABELS: Record<string, string> = {
   pending_tl: "Pending TL",
@@ -50,11 +65,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function VacationRequests() {
   const { employeeId } = useAuth();
+  const [requestType, setRequestType] = useState<TimeOffRequestType>("vacation");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Fetch campaign_id for the logged-in employee
   const { data: campaignId } = useQuery({
     queryKey: ["employeeCampaign", employeeId],
     enabled: !!employeeId,
@@ -74,11 +89,25 @@ export default function VacationRequests() {
   const requestMutation = useRequestVacationOff();
   const cancelMutation = useCancelVacationRequest();
 
-  const min = minStartDate();
+  // Tenure gate. balance.years_of_service comes from get_vacation_balance().
+  // If we don't have a balance yet, conservatively assume untenured so the
+  // Vacation option stays disabled until we know.
+  const isTenured = (balance?.years_of_service ?? 0) >= 1;
+
+  // If user picked vacation but isn't tenured (race condition or balance arrived
+  // late), force their selection back to sick.
+  if (requestType === "vacation" && balance && !isTenured) {
+    setRequestType("sick");
+  }
+
+  const min = minStartDateFor(requestType);
   const liveDays =
     startDate && endDate && endDate >= startDate
       ? daysBetween(startDate, endDate)
       : null;
+
+  const isPaid = requestType === "vacation";
+  const pageTitle = isPaid ? "Paid Time Off Request" : "Time Off Request";
 
   async function handleSubmit() {
     if (!employeeId || !campaignId || !startDate || !endDate) return;
@@ -89,8 +118,9 @@ export default function VacationRequests() {
         startDate,
         endDate,
         notes: notes.trim() || undefined,
+        requestType,
       });
-      toast.success("Vacation request submitted.");
+      toast.success("Time off request submitted.");
       setStartDate("");
       setEndDate("");
       setNotes("");
@@ -114,13 +144,13 @@ export default function VacationRequests() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Vacation Requests</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Time Off</h1>
         <p className="text-muted-foreground mt-2">
-          View your vacation balance and submit time-off requests.
+          Submit a time off request and track your balance.
         </p>
       </div>
 
-      {/* Balance Card */}
+      {/* Balance card — only meaningful for tenured employees */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -140,13 +170,14 @@ export default function VacationRequests() {
             <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
               <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-yellow-800">First Year — No Vacation Entitlement Yet</p>
+                <p className="font-semibold text-yellow-800">First Year — No Paid Vacation Yet</p>
                 <p className="text-sm text-yellow-700 mt-1">
-                  Employees become eligible for vacation after completing one full year of service.
+                  Per LFT, paid vacation starts after your first full year of service. You can still
+                  submit unpaid Sick, Personal, or Other time-off requests.
                 </p>
                 {balance.next_entitlement_date && (
                   <p className="text-sm text-yellow-700 mt-1">
-                    Your entitlement begins on{" "}
+                    Your paid entitlement begins on{" "}
                     <span className="font-medium">{formatDateMX(balance.next_entitlement_date)}</span>.
                   </p>
                 )}
@@ -171,81 +202,120 @@ export default function VacationRequests() {
         </CardContent>
       </Card>
 
-      {/* Request Form */}
-      {balance && balance.years_of_service > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>New Vacation Request</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    min={min}
-                    value={startDate}
-                    onChange={(e) => {
-                      setStartDate(e.target.value);
-                      if (endDate && e.target.value > endDate) setEndDate("");
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    min={startDate || min}
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-              </div>
+      {/* Request form */}
+      <Card>
+        <CardHeader>
+          <CardTitle>New {pageTitle}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Reason — first decision the agent makes */}
+            <div className="space-y-2">
+              <Label htmlFor="reason">Reason</Label>
+              <Select
+                value={requestType}
+                onValueChange={(v) => {
+                  const next = v as TimeOffRequestType;
+                  setRequestType(next);
+                  // If new notice rule pushes min further, clear out-of-range dates
+                  const newMin = minStartDateFor(next);
+                  if (startDate && startDate < newMin) {
+                    setStartDate("");
+                    setEndDate("");
+                  }
+                }}
+              >
+                <SelectTrigger id="reason">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vacation" disabled={!isTenured}>
+                    {REASON_LABEL.vacation}
+                    {!isTenured && " — requires 1 year of service"}
+                  </SelectItem>
+                  <SelectItem value="sick">{REASON_LABEL.sick} (unpaid)</SelectItem>
+                  <SelectItem value="personal">{REASON_LABEL.personal} (unpaid)</SelectItem>
+                  <SelectItem value="other">{REASON_LABEL.other} (unpaid)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              {liveDays !== null && (
-                <p className="text-sm text-muted-foreground">
-                  Duration:{" "}
-                  <span className="font-semibold text-foreground">
-                    {liveDays} {liveDays === 1 ? "day" : "days"}
-                  </span>
-                </p>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Requests must be submitted at least 21 days in advance (earliest start:{" "}
-                <span className="font-medium">{formatDateMX(min)}</span>).
-              </p>
-
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="notes">Notes (optional)</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Any additional details..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="min-h-20"
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  min={min}
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    if (endDate && e.target.value > endDate) setEndDate("");
+                  }}
                 />
               </div>
-
-              <Button
-                onClick={handleSubmit}
-                disabled={
-                  requestMutation.isPending ||
-                  !startDate ||
-                  !endDate ||
-                  !campaignId
-                }
-                className="w-full"
-              >
-                Submit Request
-              </Button>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  min={startDate || min}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+
+            {liveDays !== null && (
+              <p className="text-sm text-muted-foreground">
+                Duration:{" "}
+                <span className="font-semibold text-foreground">
+                  {liveDays} {liveDays === 1 ? "day" : "days"}
+                </span>
+                {isPaid && (
+                  <span className="ml-2 text-xs">
+                    (will deduct from vacation balance)
+                  </span>
+                )}
+                {!isPaid && (
+                  <span className="ml-2 text-xs">(unpaid)</span>
+                )}
+              </p>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              {isPaid
+                ? "Vacation requires at least 21 days notice"
+                : "Sick / Personal / Other requires at least 7 days notice"}
+              {" "}(earliest start: <span className="font-medium">{formatDateMX(min)}</span>).
+            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes (optional)</Label>
+              <Textarea
+                id="notes"
+                placeholder="Any additional details..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-20"
+              />
+            </div>
+
+            <Button
+              onClick={handleSubmit}
+              disabled={
+                requestMutation.isPending ||
+                !startDate ||
+                !endDate ||
+                !campaignId
+              }
+              className="w-full"
+            >
+              Submit Request
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* My Requests */}
       <Card>
@@ -264,7 +334,7 @@ export default function VacationRequests() {
             </div>
           ) : requests.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
-              No vacation requests yet.
+              No time off requests yet.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -273,6 +343,7 @@ export default function VacationRequests() {
                   <TableRow>
                     <TableHead>Dates</TableHead>
                     <TableHead>Days</TableHead>
+                    <TableHead>Reason</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead></TableHead>
@@ -288,6 +359,18 @@ export default function VacationRequests() {
                         </div>
                       </TableCell>
                       <TableCell>{req.days_requested}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm capitalize">
+                            {req.request_type ?? "vacation"}
+                          </span>
+                          {req.is_paid ? (
+                            <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">Paid</span>
+                          ) : (
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Unpaid</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge className={STATUS_COLORS[req.status] ?? "bg-gray-100 text-gray-800"}>
                           {STATUS_LABELS[req.status] ?? req.status}

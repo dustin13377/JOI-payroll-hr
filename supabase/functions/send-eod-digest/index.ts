@@ -151,8 +151,9 @@ interface AgentContext {
 
 /**
  * Categorize each agent for the day AND compute team-coverage roll-ups.
- * Fetches user_profiles, time_clock, and approved time_off_requests in
- * parallel and joins them in memory.
+ * Fetches user_profiles, time_clock, and approved time-off rows from the
+ * unified vacation_requests table in parallel and joins them in memory.
+ * (Time-off table consolidation 2026-05-28 — see TIME_OFF_UNIFICATION_PLAN.md.)
  *
  * Coverage definitions:
  *   scheduled = active campaign agents NOT on approved PTO
@@ -179,7 +180,7 @@ async function enrichAgents(
       .select("employee_id, clock_in, clock_out, shift_end_expected, is_late, early_release, auto_clocked_out")
       .eq("date", date)
       .in("employee_id", ids),
-    supabase.from("time_off_requests")
+    supabase.from("vacation_requests")
       .select("employee_id, start_date, end_date, status")
       .eq("status", "approved")
       .in("employee_id", ids)

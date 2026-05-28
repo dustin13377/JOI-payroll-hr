@@ -18,6 +18,9 @@ export interface VacationRequest {
   hr_reviewed_at: string | null;
   denial_reason: string | null;
   created_at: string;
+  // Phase A additions — type of time off + paid/unpaid (LFT: paid only for vacation)
+  request_type: "vacation" | "sick" | "personal" | "other";
+  is_paid: boolean;
 }
 
 export interface VacationBalance {
@@ -59,12 +62,16 @@ export function useMyVacationRequests(employeeId: string | null | undefined) {
   });
 }
 
+export type TimeOffRequestType = "vacation" | "sick" | "personal" | "other";
+
 interface RequestVacationOffVars {
   employeeId: string;
   campaignId: string;
   startDate: string;
   endDate: string;
   notes?: string;
+  /** Defaults to 'vacation' for backward compat with old call sites. */
+  requestType?: TimeOffRequestType;
 }
 
 export function useRequestVacationOff() {
@@ -77,6 +84,7 @@ export function useRequestVacationOff() {
         p_start_date: vars.startDate,
         p_end_date: vars.endDate,
         p_notes: vars.notes ?? null,
+        p_request_type: vars.requestType ?? "vacation",
       });
       if (error) throw error;
       return data as VacationRequest;
@@ -84,6 +92,8 @@ export function useRequestVacationOff() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["vacationRequests", vars.employeeId] });
       queryClient.invalidateQueries({ queryKey: ["vacationBalance", vars.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+      queryClient.invalidateQueries({ queryKey: ["home-timeoff", vars.employeeId] });
     },
   });
 }
@@ -106,6 +116,8 @@ export function useCancelVacationRequest() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["vacationRequests", vars.employeeId] });
       queryClient.invalidateQueries({ queryKey: ["vacationBalance", vars.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+      queryClient.invalidateQueries({ queryKey: ["home-timeoff", vars.employeeId] });
     },
   });
 }
@@ -163,6 +175,8 @@ export function useTLApproveVacationRequest() {
     },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tlPendingVacationRequests", vars.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
     },
   });
 }
@@ -191,6 +205,8 @@ export function useTLDenyVacationRequest() {
     },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tlPendingVacationRequests", vars.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
     },
   });
 }
@@ -200,18 +216,46 @@ export function useTLDenyVacationRequest() {
 export interface HRVacationRequest extends VacationRequest {
   displayName: string;
   campaignName: string;
+  /** Primary TL on the campaign — shows owner who's the bottleneck on pending_tl rows. */
+  tlName: string | null;
 }
 
 function mapHRRow(row: Record<string, unknown>): HRVacationRequest {
   const e = row.employees as { work_name: string | null; full_name: string | null } | null;
-  const c = row.campaigns as { name: string | null } | null;
+  const c = row.campaigns as {
+    name: string | null;
+    team_lead: { work_name: string | null; full_name: string | null } | null;
+  } | null;
   const { employees: _e, campaigns: _c, ...rest } = row;
   void _e; void _c;
+  const tl = c?.team_lead ?? null;
   return {
     ...(rest as VacationRequest),
     displayName: getDisplayName({ work_name: e?.work_name ?? null, full_name: e?.full_name ?? "" }),
     campaignName: c?.name ?? "",
+    tlName: tl ? getDisplayName({ work_name: tl.work_name ?? null, full_name: tl.full_name ?? "" }) : null,
   };
+}
+
+// Pulled in by HR Time Off page so D / admins / managers can see requests
+// stuck at the TL stage and override-approve. Joined to campaigns.team_lead_id
+// → employees so we can show who the bottleneck TL is.
+export function useHRPendingTLVacationRequests() {
+  return useQuery({
+    queryKey: ["hrPendingTLVacationRequests"],
+    queryFn: async (): Promise<HRVacationRequest[]> => {
+      const { data, error } = await supabase
+        .from("vacation_requests")
+        .select(
+          "*, employees!vacation_requests_employee_id_fkey(work_name, full_name), " +
+          "campaigns(name, team_lead:employees!campaigns_team_lead_id_fkey(work_name, full_name))"
+        )
+        .eq("status", "pending_tl")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((row) => mapHRRow(row as unknown as Record<string, unknown>));
+    },
+  });
 }
 
 export function useHRPendingVacationRequests() {
@@ -220,7 +264,10 @@ export function useHRPendingVacationRequests() {
     queryFn: async (): Promise<HRVacationRequest[]> => {
       const { data, error } = await supabase
         .from("vacation_requests")
-        .select("*, employees!vacation_requests_employee_id_fkey(work_name, full_name), campaigns(name)")
+        .select(
+          "*, employees!vacation_requests_employee_id_fkey(work_name, full_name), " +
+          "campaigns(name, team_lead:employees!campaigns_team_lead_id_fkey(work_name, full_name))"
+        )
         .eq("status", "pending_hr")
         .order("start_date", { ascending: true });
       if (error) throw error;
@@ -235,7 +282,10 @@ export function useHRAllVacationRequests() {
     queryFn: async (): Promise<HRVacationRequest[]> => {
       const { data, error } = await supabase
         .from("vacation_requests")
-        .select("*, employees!vacation_requests_employee_id_fkey(work_name, full_name), campaigns(name)")
+        .select(
+          "*, employees!vacation_requests_employee_id_fkey(work_name, full_name), " +
+          "campaigns(name, team_lead:employees!campaigns_team_lead_id_fkey(work_name, full_name))"
+        )
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row) => mapHRRow(row as unknown as Record<string, unknown>));
@@ -265,6 +315,41 @@ export function useHRApproveVacationRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hrPendingVacationRequests"] });
       queryClient.invalidateQueries({ queryKey: ["hrAllVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+    },
+  });
+}
+
+// Owner override: approve a request stuck at pending_tl, jumping straight to
+// 'approved' without waiting on the TL. Sets both tl_reviewed_by and
+// hr_reviewed_by to the owner (audit trail = "owner overrode TL stage").
+interface OwnerOverrideVars {
+  id: string;
+}
+
+export function useOwnerOverrideApproveVacationRequest() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (vars: OwnerOverrideVars) => {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("vacation_requests")
+        .update({
+          status: "approved",
+          tl_reviewed_by: user?.id ?? null,
+          tl_reviewed_at: now,
+          hr_reviewed_by: user?.id ?? null,
+          hr_reviewed_at: now,
+        })
+        .eq("id", vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hrPendingTLVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hrPendingVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hrAllVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
     },
   });
 }
@@ -293,6 +378,7 @@ export function useHRDenyVacationRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hrPendingVacationRequests"] });
       queryClient.invalidateQueries({ queryKey: ["hrAllVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
     },
   });
 }

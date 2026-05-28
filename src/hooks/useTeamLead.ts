@@ -42,8 +42,10 @@ interface TimeOffRow {
   employee_id: string;
   start_date: string;
   end_date: string;
+  // request_type from unified vacation_requests table: vacation | sick | personal | other
   reason: string;
   status: string;
+  is_paid: boolean;
 }
 
 interface EODLogRow {
@@ -296,18 +298,34 @@ export function usePendingTimeOffForTeam(tlEmployeeId: string | null) {
       const memberIds = members.map((m) => m.id);
       const nameMap = new Map(members.map((m) => [m.id, { full_name: m.full_name, work_name: m.work_name }]));
 
-      // 2. Fetch pending time_off_requests
+      // 2. Fetch pending time-off requests from the unified table.
+      // status='pending_tl' = waiting on TL approval (first stage).
+      // See TIME_OFF_UNIFICATION_PLAN.md.
       const { data: requests, error: reqErr } = await supabase
-        .from("time_off_requests")
-        .select("id, employee_id, start_date, end_date, reason, status")
+        .from("vacation_requests")
+        .select("id, employee_id, start_date, end_date, request_type, is_paid, status")
         .in("employee_id", memberIds)
-        .eq("status", "pending");
+        .eq("status", "pending_tl");
       if (reqErr) throw reqErr;
 
-      return ((requests || []) as TimeOffRow[]).map((r) => {
+      return ((requests || []) as Array<{
+        id: string;
+        employee_id: string;
+        start_date: string;
+        end_date: string;
+        request_type: string;
+        is_paid: boolean;
+        status: string;
+      }>).map((r) => {
         const names = nameMap.get(r.employee_id);
         return {
-          ...r,
+          id: r.id,
+          employee_id: r.employee_id,
+          start_date: r.start_date,
+          end_date: r.end_date,
+          reason: r.request_type,
+          is_paid: r.is_paid,
+          status: r.status,
           fullName: names?.full_name ?? "Unknown",
           workName: names?.work_name ?? null,
         };

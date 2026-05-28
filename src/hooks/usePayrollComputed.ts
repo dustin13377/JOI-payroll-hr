@@ -123,9 +123,13 @@ export function usePayrollComputed(
         (holidayRows ?? []).map((r: any) => r.date as string)
       );
 
-      // 5. Fetch approved time_off_requests overlapping the period
+      // 5. Fetch approved time-off (any type) overlapping the period.
+      // Reads from vacation_requests — the unified time-off table that holds
+      // all approved leave (paid Vacation + unpaid Sick/Personal/Other). PTO
+      // day math doesn't care if it's paid; absence is absence.
+      // See TIME_OFF_UNIFICATION_PLAN.md.
       const { data: timeOffRows, error: toErr } = await supabase
-        .from("time_off_requests")
+        .from("vacation_requests")
         .select("employee_id, start_date, end_date")
         .eq("status", "approved")
         .lte("start_date", pEnd)
