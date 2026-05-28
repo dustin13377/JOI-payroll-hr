@@ -1,6 +1,6 @@
 # Time Off Unification Plan
 
-**Status:** Planned, not yet built
+**Status:** COMPLETE — all 4 phases shipped 2026-05-28
 **Last updated:** 2026-05-28
 **Owner:** D
 
