@@ -66,6 +66,27 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Helper: fetch the calling TL's team member UUIDs                   */
+/*                                                                     */
+/*  Calls my_team_member_ids() which UNIONs:                           */
+/*    (a) employees.reports_to = me                                    */
+/*    (b) active 'agent' employees in any campaign I lead              */
+/*        (via campaigns.team_lead_id OR team_lead_campaigns)          */
+/*                                                                     */
+/*  Pre-2026-05-28 every TL hook here inlined `.eq("reports_to", id)`, */
+/*  which silently returned 0 rows for cross-campaign TLs (Adrian on   */
+/*  3 Torro campaigns via the join table only). Centralizing through   */
+/*  the RPC means the union is enforced server-side and all hooks      */
+/*  inherit the fix.                                                   */
+/* ------------------------------------------------------------------ */
+
+async function fetchMyTeamMemberIds(): Promise<string[]> {
+  const { data, error } = await supabase.rpc("my_team_member_ids");
+  if (error) throw error;
+  return (data ?? []) as string[];
+}
+
 /* ================================================================== */
 /*  Hook 1 – useTeamRoster                                             */
 /* ================================================================== */
@@ -76,13 +97,17 @@ export function useTeamRoster(tlEmployeeId: string | null) {
     queryFn: async () => {
       if (!tlEmployeeId) return [];
 
+      // Resolve team via the union helper (reports_to ∪ campaigns-I-lead).
+      const memberIds = await fetchMyTeamMemberIds();
+      if (memberIds.length === 0) return [];
+
       // Query the view (no salary columns) instead of the base table.
       // The view has no FK so we can't use PostgREST joins; fetch
       // campaign names in a second query and merge in memory.
       const { data: rows, error } = await supabase
         .from("employees_no_pay")
         .select("id, employee_id, full_name, work_name, title, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", memberIds)
         .eq("is_active", true);
       if (error) throw error;
       if (!rows || rows.length === 0) return [];
@@ -136,11 +161,13 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
     queryFn: async (): Promise<TimeclockStatusRow[]> => {
       if (!tlEmployeeId) return [];
 
-      // 1. Team roster
+      // 1. Team roster (union helper)
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster || []) as { id: string; full_name: string; work_name: string | null; campaign_id: string | null }[];
@@ -285,11 +312,13 @@ export function usePendingTimeOffForTeam(tlEmployeeId: string | null) {
     queryFn: async (): Promise<PendingTimeOff[]> => {
       if (!tlEmployeeId) return [];
 
-      // 1. Get team member IDs + names
+      // 1. Get team member IDs + names (union helper)
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster || []) as { id: string; full_name: string; work_name: string | null }[];
@@ -361,11 +390,13 @@ export function useTeamEODThisWeek(tlEmployeeId: string | null) {
     queryFn: async (): Promise<TeamEODWeekResult> => {
       if (!tlEmployeeId) return { summaries: [], kpiFields: [] };
 
-      // 1. Team roster (with campaign_id so we can check min_target)
+      // 1. Team roster (union helper) — campaign_id needed for min_target
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return { summaries: [], kpiFields: [] };
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster || []) as { id: string; full_name: string; work_name: string | null; campaign_id: string | null }[];
@@ -505,11 +536,13 @@ export function useUnderperformerAlerts(tlEmployeeId: string | null) {
     queryFn: async (): Promise<UnderperformerAlert[]> => {
       if (!tlEmployeeId) return [];
 
-      // 1. Team roster with campaign_id
+      // 1. Team roster (union helper) with campaign_id
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster || []) as { id: string; full_name: string; work_name: string | null; campaign_id: string | null }[];
@@ -885,11 +918,13 @@ export function useUnderperformerTrend(tlEmployeeId: string | null) {
     queryFn: async (): Promise<AgentUnderperformerTrend[]> => {
       if (!tlEmployeeId) return [];
 
-      // 1. Team roster
+      // 1. Team roster (union helper)
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster ?? []) as { id: string; full_name: string; work_name: string | null; campaign_id: string | null }[];
@@ -1123,11 +1158,13 @@ export function useMissingYesterdayEod(tlEmployeeId: string | null) {
       yesterdayDt.setDate(yesterdayDt.getDate() - 1);
       const yesterday = todayLocal(yesterdayDt);
 
-      // 1. Team roster (active, reports to this TL)
+      // 1. Team roster (union helper — active members across reports_to + campaigns I lead)
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id, full_name, work_name, campaign_id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const members = (roster || []) as {
@@ -1197,11 +1234,13 @@ export function useTodayNudges(tlEmployeeId: string | null) {
       if (!tlEmployeeId) return new Map();
       const today = todayLocal();
 
-      // 1. Team member IDs (so we only return nudges for THIS TL's team)
+      // 1. Team member IDs (union helper — only nudges for THIS TL's team)
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return new Map();
       const { data: roster, error: rosterErr } = await supabase
         .from("employees_no_pay")
         .select("id")
-        .eq("reports_to", tlEmployeeId)
+        .in("id", teamIds)
         .eq("is_active", true);
       if (rosterErr) throw rosterErr;
       const memberIds = (roster || []).map((r) => r.id as string);

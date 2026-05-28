@@ -81,15 +81,31 @@ export default function Attendance() {
     );
   }
 
-  // Fetch campaigns (scoped for TLs)
+  // Fetch campaigns (scoped for TLs).
+  // For TLs we resolve campaigns via my_tl_campaign_ids() — that RPC
+  // UNIONs both campaigns.team_lead_id (primary) and team_lead_campaigns
+  // (cross-campaign join). The old `.eq("team_lead_id", employeeId)`
+  // missed every cross-campaign TL.
   const { data: campaignsData } = useQuery({
     queryKey: ["attendance-campaigns", employeeId, isLeadership, isTeamLead],
     queryFn: async () => {
-      let q = supabase.from("campaigns").select("id, name").order("name");
       if (isTeamLead && !isLeadership) {
-        q = q.eq("team_lead_id", employeeId!);
+        const { data: ids, error: idsErr } = await supabase.rpc("my_tl_campaign_ids");
+        if (idsErr) throw idsErr;
+        const list = (ids ?? []) as string[];
+        if (list.length === 0) return [];
+        const { data, error } = await supabase
+          .from("campaigns")
+          .select("id, name")
+          .in("id", list)
+          .order("name");
+        if (error) throw error;
+        return data || [];
       }
-      const { data, error } = await q;
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("id, name")
+        .order("name");
       if (error) throw error;
       return data || [];
     },
@@ -122,8 +138,16 @@ export default function Attendance() {
         .select("id, employee_id, full_name, work_name, campaign_id")
         .eq("is_active", true);
 
-      if (isTeamLead && employeeId) {
-        employeesQuery = employeesQuery.eq("reports_to", employeeId);
+      // For TLs, scope to the union helper my_team_member_ids() — covers
+      // both direct reports and agents in campaigns the TL leads via
+      // team_lead_campaigns. The old `.eq("reports_to", employeeId)`
+      // returned 0 rows for cross-campaign TLs like Adrian.
+      if (isTeamLead && !isLeadership && employeeId) {
+        const { data: ids, error: idsErr } = await supabase.rpc("my_team_member_ids");
+        if (idsErr) throw idsErr;
+        const list = (ids ?? []) as string[];
+        if (list.length === 0) return [];
+        employeesQuery = employeesQuery.in("id", list);
       }
 
       const { data: employees, error: employeesError } = await employeesQuery;

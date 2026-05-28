@@ -275,7 +275,12 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
   }
 
   const weekHours = weekEntries.reduce((s, e) => s + (e.total_hours || 0), 0);
-  const daysWorked = weekEntries.filter((e) => !!e.clock_out).length;
+  // Count every day with a punch — including today's in-progress shift.
+  // Old logic required clock_out, so anyone viewing mid-shift saw the
+  // current day excluded (Deysi saw "1" all of Thursday until she
+  // clocked out at night). time_clock.clock_in is NOT NULL so row
+  // count == days with a punch.
+  const daysWorked = weekEntries.length;
   const minutesLate = weekEntries.reduce((s, e) => s + (e.late_minutes || 0), 0);
 
   // ---------- Status badge ----------

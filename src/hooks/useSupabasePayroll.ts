@@ -235,9 +235,16 @@ export function useEditTimeClock() {
         warning?: string;
       };
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["attendance"] });
       qc.invalidateQueries({ queryKey: ["time_clock"] });
+      // HomeHero stat row + today-status are keyed by the punch-owner's
+      // employee_id, not the editor. Without these, fixing someone's punch
+      // (e.g. TL clocks in a no-email agent, or back-fills a missed
+      // clock-out) leaves their dashboard stale until next focus.
+      qc.invalidateQueries({ queryKey: ["home-hero-today", vars.employee_id] });
+      qc.invalidateQueries({ queryKey: ["home-hero-week", vars.employee_id] });
+      qc.invalidateQueries({ queryKey: ["team-timeclock-today"] });
     },
   });
 }
