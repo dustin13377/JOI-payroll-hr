@@ -480,20 +480,31 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function TimeOffSection({ employeeId }: { employeeId: string }) {
+  const { user } = useAuth();
   const pendingTimeOff = usePendingTimeOffForTeam(employeeId);
   const queryClient = useQueryClient();
 
+  // TL approve = move pending_tl → pending_hr (HR still needs to sign off).
+  // TL deny = move pending_tl → denied (terminal).
+  // Writes to vacation_requests (unified time-off table). The tl_reviewed_by
+  // FK targets auth.users so we use user.id, not the TL's employees.id.
   const reviewMutation = useMutation({
     mutationFn: async ({ requestId, status }: { requestId: string; status: "approved" | "denied" }) => {
+      const nextStatus = status === "approved" ? "pending_hr" : "denied";
       const { error } = await supabase
-        .from("time_off_requests")
-        .update({ status, reviewed_by: employeeId, reviewed_at: new Date().toISOString() })
+        .from("vacation_requests")
+        .update({
+          status: nextStatus,
+          tl_reviewed_by: user?.id ?? null,
+          tl_reviewed_at: new Date().toISOString(),
+        })
         .eq("id", requestId);
       if (error) throw error;
     },
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
-      toast.success(`Request ${status}`);
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+      toast.success(status === "approved" ? "Sent to HR for final approval" : "Request denied");
     },
   });
 

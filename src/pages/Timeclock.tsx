@@ -255,6 +255,13 @@ export default function Timeclock() {
     queryClient.invalidateQueries({ queryKey: ["timeclock-today"] });
     queryClient.invalidateQueries({ queryKey: ["timeclock-week"] });
     queryClient.invalidateQueries({ queryKey: ["eod-today", employeeId] });
+    // HomeHero stat cards (Hours/Days Worked/Minutes Late) live in a
+    // separate query namespace. Without these invalidations, clock-out
+    // here leaves the dashboard stat stuck at the previously-cached value
+    // until the week rolls over or the user hard-refreshes — that's why
+    // Adrian saw "1 day worked" after actually working 2.
+    queryClient.invalidateQueries({ queryKey: ["home-hero-today", employeeId] });
+    queryClient.invalidateQueries({ queryKey: ["home-hero-week", employeeId] });
   };
 
   // Clock In

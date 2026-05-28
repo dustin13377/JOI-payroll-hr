@@ -60,14 +60,17 @@ const hrItems = [
   { title: "Attendance", url: "/asistencia", icon: Clock },
   { title: "Performance", url: "/desempeno", icon: BarChart3 },
   { title: "30-Day Reviews", url: "/reviews", icon: ClipboardEdit },
-  { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
   { title: "Document Types", url: "/settings/document-types", icon: FileCheck },
   { title: "Departments", url: "/settings/departments", icon: Building2 },
   { title: "Manage Policies", url: "/settings/policies", icon: ScrollText },
+  // Time Off has TWO entries: "Time Off" is the org-wide approval queue,
+  // "Request Time Off" is the personal submit form (same one agents/TLs use).
+  // Leadership has employee records too, so they need both views.
   { title: "Time Off", url: "/hr/time-off", icon: CalendarDays },
   { title: "Cartas y Actas", url: "/hr/document-queue", icon: ClipboardList },
   { title: "My Timeclock", url: "/reloj", icon: Timer },
   { title: "My EOD History", url: "/eod", icon: ClipboardCheck },
+  { title: "Request Time Off", url: "/vacation", icon: CalendarDays },
 ];
 
 // Team Lead — team-scoped views, shift settings (their campaign), no pay
@@ -75,11 +78,14 @@ const teamLeadItems = [
   { title: "Home", url: "/", icon: LayoutDashboard },
   { title: "My Team", url: "/asistencia", icon: Users },
   { title: "30-Day Reviews", url: "/reviews", icon: ClipboardEdit },
-  { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
+  // TLs approve their team's pending time-off in the Approvals card on Home.
+  // "Request Time Off" below is for the TL's own submissions (TLs are still
+  // employees who can request leave like anyone else).
   { title: "Shift Settings", url: "/settings/shifts", icon: Settings },
   { title: "My Policies", url: "/policies", icon: ScrollText },
   { title: "My Timeclock", url: "/reloj", icon: Timer },
   { title: "My EOD History", url: "/eod", icon: ClipboardCheck },
+  { title: "Request Time Off", url: "/vacation", icon: CalendarDays },
   { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
 
@@ -88,9 +94,10 @@ const agentItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "My Timeclock", url: "/reloj", icon: Timer },
   { title: "My EOD History", url: "/eod", icon: ClipboardCheck },
-  { title: "Time Off Requests", url: "/solicitudes", icon: CalendarDays },
   { title: "My Policies", url: "/policies", icon: ScrollText },
-  { title: "Vacation", url: "/vacation", icon: CalendarDays },
+  // Unified time-off form (vacation / sick / personal / other). One form,
+  // tenure determines what's available + paid vs unpaid.
+  { title: "Time Off", url: "/vacation", icon: CalendarDays },
   { title: "Holiday Requests", url: "/holidays", icon: CalendarCheck },
   { title: "Announcements", url: "/comunicados", icon: Megaphone },
 ];
@@ -109,7 +116,9 @@ export function AppSidebar() {
   const { data: pendingReviewsCount = 0 } = usePendingAgentReviewsCount(canApprove);
   const badgeCounts: Record<string, number> = {
     "/hr/document-queue": pendingHrDocCount,
-    "/solicitudes": pendingTimeOffCount,
+    // Sidebar badge moved here when /solicitudes was retired. Counts pending_tl +
+    // pending_hr from the unified vacation_requests table.
+    "/hr/time-off": pendingTimeOffCount,
     "/reviews": pendingReviewsCount,
   };
 

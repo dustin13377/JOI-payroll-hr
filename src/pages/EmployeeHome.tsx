@@ -82,7 +82,9 @@ interface TimeOffRequest {
   id: string;
   start_date: string;
   end_date: string;
+  // Derived from vacation_requests.request_type (vacation/sick/personal/other).
   reason: string;
+  // 'pending_tl' | 'pending_hr' | 'approved' | 'denied' | 'cancelled'
   status: string;
 }
 
@@ -345,21 +347,30 @@ export default function EmployeeHome() {
     enabled: !!employeeId,
   });
 
-  // Pending time-off
+  // Pending time-off. Reads the unified vacation_requests table — covers
+  // both pending (pending_tl or pending_hr) AND approved requests, mapped
+  // to the same TimeOffRequest shape the existing widget consumes.
+  // status badge below treats anything not 'approved' as "pending" coloring.
   const { data: pendingTimeOff = [] } = useQuery({
     queryKey: ["home-timeoff", employeeId],
     queryFn: async () => {
       if (!employeeId) return [];
       const { data, error } = await supabase
-        .from("time_off_requests")
-        .select("*")
+        .from("vacation_requests")
+        .select("id, start_date, end_date, request_type, status")
         .eq("employee_id", employeeId)
-        .in("status", ["pending", "approved"])
+        .in("status", ["pending_tl", "pending_hr", "approved"])
         .gte("start_date", todayLocal())
         .order("start_date", { ascending: true })
         .limit(3);
       if (error) throw error;
-      return (data || []) as TimeOffRequest[];
+      return (data || []).map((r) => ({
+        id: r.id as string,
+        start_date: r.start_date as string,
+        end_date: r.end_date as string,
+        reason: r.request_type as string,
+        status: r.status as string,
+      })) as TimeOffRequest[];
     },
     enabled: !!employeeId,
   });
@@ -744,7 +755,7 @@ export default function EmployeeHome() {
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full justify-start h-11">
-              <Link to="/solicitudes">
+              <Link to="/vacation">
                 <CalendarDays className="mr-2 h-4 w-4" /> Request Time Off
               </Link>
             </Button>

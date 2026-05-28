@@ -35,10 +35,12 @@ import {
   useActiveCampaignsWithHeadcount,
 } from "@/hooks/useHolidayRequests";
 import {
+  useHRPendingTLVacationRequests,
   useHRPendingVacationRequests,
   useHRAllVacationRequests,
   useHRApproveVacationRequest,
   useHRDenyVacationRequest,
+  useOwnerOverrideApproveVacationRequest,
 } from "@/hooks/useVacationRequests";
 
 // ── Coverage helpers ──────────────────────────────────────────────────────────
@@ -216,10 +218,12 @@ export default function HrTimeOff() {
   const { data: campaigns = [], isLoading: loadingCampaigns } = useActiveCampaignsWithHeadcount();
   const overrideMutation = useHROverrideHolidayRequest();
 
+  const { data: vacPendingTL = [], isLoading: loadingVacPendingTL } = useHRPendingTLVacationRequests();
   const { data: vacPending = [], isLoading: loadingVacPending } = useHRPendingVacationRequests();
   const { data: vacAll = [], isLoading: loadingVacAll } = useHRAllVacationRequests();
   const vacApproveMutation = useHRApproveVacationRequest();
   const vacDenyMutation = useHRDenyVacationRequest();
+  const ownerOverrideMutation = useOwnerOverrideApproveVacationRequest();
 
   const today = todayLocal();
 
@@ -246,10 +250,12 @@ export default function HrTimeOff() {
         <h1 className="text-2xl font-bold tracking-tight">Time Off</h1>
       </div>
 
-      <Tabs defaultValue="holidays">
+      {/* Default landed on Holidays which buried the time-off requests —
+          flipped to "vacation" tab so the queue is the first thing visible. */}
+      <Tabs defaultValue="vacation">
         <TabsList>
           <TabsTrigger value="holidays">Holidays</TabsTrigger>
-          <TabsTrigger value="vacation">Vacation</TabsTrigger>
+          <TabsTrigger value="vacation">Time Off</TabsTrigger>
         </TabsList>
 
         {/* ── Holidays tab ── */}
@@ -521,6 +527,140 @@ export default function HrTimeOff() {
         {/* ── Vacation tab ── */}
         <TabsContent value="vacation" className="space-y-8 pt-4">
 
+          {/* Section 0 — Pending TL Approval (owner can override) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span>Pending TL Approval</span>
+                {vacPendingTL.length > 0 && (
+                  <Badge className="bg-orange-500 text-white">{vacPendingTL.length}</Badge>
+                )}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground pt-1">
+                Requests waiting on the TL's review. Approving here is an owner override that skips the TL stage.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {loadingVacPendingTL ? (
+                <div className="flex justify-center py-6"><LogoLoadingIndicator /></div>
+              ) : vacPendingTL.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nothing stuck at the TL stage.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {vacPendingTL.map((req) => {
+                    const isDenying = vacDenyingId === req.id;
+                    const isActing =
+                      (ownerOverrideMutation.isPending && ownerOverrideMutation.variables?.id === req.id) ||
+                      (vacDenyMutation.isPending && vacDenyMutation.variables?.id === req.id);
+                    return (
+                      <li key={req.id} className="rounded-md border px-4 py-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div>
+                            <p className="text-sm font-medium">{req.displayName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {req.campaignName}
+                              {req.tlName && (
+                                <span className="ml-2">· TL: <span className="font-medium">{req.tlName}</span></span>
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {formatDateMX(req.start_date)} – {formatDateMX(req.end_date)}
+                              <span className="ml-1">· {req.days_requested} {req.days_requested === 1 ? "day" : "days"}</span>
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {req.request_type ?? "vacation"}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs ${req.is_paid ? "border-emerald-300 text-emerald-700" : "border-gray-300 text-gray-600"}`}
+                              >
+                                {req.is_paid ? "Paid" : "Unpaid"}
+                              </Badge>
+                            </div>
+                            {req.notes && (
+                              <p className="text-xs text-muted-foreground italic mt-1">{req.notes}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Submitted {formatDateMX(req.created_at)}
+                            </p>
+                          </div>
+                          {!isDenying && (
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={isActing}
+                                onClick={() =>
+                                  ownerOverrideMutation.mutate(
+                                    { id: req.id },
+                                    {
+                                      onSuccess: () => toast.success("Approved (owner override)"),
+                                      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+                                    }
+                                  )
+                                }
+                              >
+                                Approve (Override)
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={isActing}
+                                onClick={() => { setVacDenyingId(req.id); setVacDenyReason(""); }}
+                              >
+                                Deny
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        {isDenying && (
+                          <div className="flex gap-2 items-center flex-wrap">
+                            <Input
+                              placeholder="Reason for denial (required)"
+                              value={vacDenyReason}
+                              onChange={(e) => setVacDenyReason(e.target.value)}
+                              className="flex-1 h-8 text-sm min-w-48"
+                            />
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={!vacDenyReason.trim() || vacDenyMutation.isPending}
+                              onClick={() =>
+                                vacDenyMutation.mutate(
+                                  { id: req.id, reason: vacDenyReason.trim() },
+                                  {
+                                    onSuccess: () => {
+                                      toast.success("Request denied");
+                                      setVacDenyingId(null);
+                                      setVacDenyReason("");
+                                    },
+                                    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
+                                  }
+                                )
+                              }
+                            >
+                              Confirm Deny
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => { setVacDenyingId(null); setVacDenyReason(""); }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Section 1 — Pending HR Approval */}
           <Card>
             <CardHeader className="pb-2">
@@ -555,8 +695,19 @@ export default function HrTimeOff() {
                               {formatDateMX(req.start_date)} – {formatDateMX(req.end_date)}
                               <span className="ml-1">· {req.days_requested} {req.days_requested === 1 ? "day" : "days"}</span>
                             </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {req.request_type ?? "vacation"}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs ${req.is_paid ? "border-emerald-300 text-emerald-700" : "border-gray-300 text-gray-600"}`}
+                              >
+                                {req.is_paid ? "Paid" : "Unpaid"}
+                              </Badge>
+                            </div>
                             {req.notes && (
-                              <p className="text-xs text-muted-foreground italic mt-0.5">{req.notes}</p>
+                              <p className="text-xs text-muted-foreground italic mt-1">{req.notes}</p>
                             )}
                           </div>
                           {!isDenying && (
@@ -649,6 +800,7 @@ export default function HrTimeOff() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Campaign</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Dates</TableHead>
                       <TableHead className="text-right">Days</TableHead>
                       <TableHead>Status</TableHead>
@@ -660,6 +812,16 @@ export default function HrTimeOff() {
                       <TableRow key={req.id}>
                         <TableCell className="font-medium">{req.displayName}</TableCell>
                         <TableCell className="text-muted-foreground">{req.campaignName}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <span className="capitalize text-sm">{req.request_type ?? "vacation"}</span>
+                            {req.is_paid ? (
+                              <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">paid</span>
+                            ) : (
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">unpaid</span>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {formatDateMX(req.start_date)} – {formatDateMX(req.end_date)}
                         </TableCell>
