@@ -1,1 +1,22 @@
 project_id = "jpaihltkrohdqkqlbqkf"
+
+# Edge function settings
+#
+# verify_jwt = false on send-eod-digest because pg_cron authenticates via the
+# x-cron-secret header (checked inside the function). Without this, every cron
+# call returns 401 UNAUTHORIZED_NO_AUTH_HEADER from the platform layer before
+# our code runs. Manual-fire and test-send modes inside the function still
+# verify the user's JWT themselves.
+[functions.send-eod-digest]
+verify_jwt = false
+
+# Same reasoning — all our cron-triggered functions self-authenticate via
+# x-cron-secret. Add new cron-triggered functions here.
+[functions.compliance-notifications]
+verify_jwt = false
+
+[functions.holiday-notifications]
+verify_jwt = false
+
+[functions.review-notifications]
+verify_jwt = false
