@@ -127,9 +127,40 @@ interface AgentWithStatus extends Agent {
   status: AgentStatus;
 }
 
+interface TimeClockRow {
+  employee_id: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  shift_end_expected: string | null;
+  is_late: boolean | null;
+  early_release: boolean | null;
+  auto_clocked_out: boolean | null;
+}
+
+interface AgentContext {
+  enriched: AgentWithStatus[];
+  // Roll-ups for the TEAM COVERAGE block in the email header.
+  coverage: {
+    scheduled: number;
+    present: number;
+    missed: number;
+    late: number;
+    leftEarly: number;
+  };
+}
+
 /**
- * Categorize each agent for the day. Fetches user_profiles, time_clock, and
- * approved time_off_requests in parallel and joins them in memory.
+ * Categorize each agent for the day AND compute team-coverage roll-ups.
+ * Fetches user_profiles, time_clock, and approved time_off_requests in
+ * parallel and joins them in memory.
+ *
+ * Coverage definitions:
+ *   scheduled = active campaign agents NOT on approved PTO
+ *   present   = agents with a clock_in row for the date
+ *   missed    = scheduled - present (no-show / called out)
+ *   late      = sum of time_clock.is_late = true
+ *   leftEarly = clock_out is NOT NULL, clock_out < shift_end_expected,
+ *               early_release is false/null, auto_clocked_out is false/null
  */
 async function enrichAgents(
   supabase: SupabaseClient,
@@ -137,12 +168,17 @@ async function enrichAgents(
   agents: Agent[],
   eodLogs: EODLog[],
   date: string,
-): Promise<AgentWithStatus[]> {
+): Promise<AgentContext> {
   const ids = agents.map((a) => a.id);
-  if (ids.length === 0) return [];
+  if (ids.length === 0) {
+    return { enriched: [], coverage: { scheduled: 0, present: 0, missed: 0, late: 0, leftEarly: 0 } };
+  }
   const [profileRes, clockRes, ptoRes] = await Promise.all([
     supabase.from("user_profiles").select("employee_id").in("employee_id", ids),
-    supabase.from("time_clock").select("employee_id").eq("campaign_id", campaignId).eq("date", date).in("employee_id", ids),
+    supabase.from("time_clock")
+      .select("employee_id, clock_in, clock_out, shift_end_expected, is_late, early_release, auto_clocked_out")
+      .eq("date", date)
+      .in("employee_id", ids),
     supabase.from("time_off_requests")
       .select("employee_id, start_date, end_date, status")
       .eq("status", "approved")
@@ -153,15 +189,14 @@ async function enrichAgents(
   const hasLogin = new Set<string>(
     (profileRes.data ?? []).map((r: { employee_id: string }) => r.employee_id),
   );
-  const clockedIn = new Set<string>(
-    (clockRes.data ?? []).map((r: { employee_id: string }) => r.employee_id),
-  );
+  const clockRows = (clockRes.data ?? []) as TimeClockRow[];
+  const clockedIn = new Set<string>(clockRows.map((r) => r.employee_id));
   const onPto = new Set<string>(
     (ptoRes.data ?? []).map((r: { employee_id: string }) => r.employee_id),
   );
   const submitted = new Set<string>(eodLogs.map((l) => l.employee_id));
 
-  return agents.map((a): AgentWithStatus => {
+  const enriched = agents.map((a): AgentWithStatus => {
     let status: AgentStatus;
     if (submitted.has(a.id)) status = "submitted";
     else if (onPto.has(a.id)) status = "on_pto";
@@ -170,6 +205,19 @@ async function enrichAgents(
     else status = "did_not_work";
     return { ...a, status };
   });
+
+  const scheduled = agents.length - [...onPto].length;
+  const present = clockedIn.size;
+  const missed = Math.max(0, scheduled - present);
+  const late = clockRows.filter((r) => r.is_late === true).length;
+  const leftEarly = clockRows.filter((r) => {
+    if (!r.clock_out || !r.shift_end_expected) return false;
+    if (r.early_release === true) return false;
+    if (r.auto_clocked_out === true) return false;
+    return new Date(r.clock_out).getTime() < new Date(r.shift_end_expected).getTime();
+  }).length;
+
+  return { enriched, coverage: { scheduled, present, missed, late, leftEarly } };
 }
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
@@ -275,6 +323,7 @@ function buildDailyHtml(
   agents: AgentWithStatus[],
   eodLogs: EODLog[],
   tlNote: string | null,
+  coverage: { scheduled: number; present: number; missed: number; late: number; leftEarly: number },
 ): string {
   const submittedMap = new Map(eodLogs.map((l) => [l.employee_id, l]));
   const numericKpis = kpiFields.filter((f) => f.field_type === "number");
@@ -374,10 +423,20 @@ function buildDailyHtml(
   if (onPto.length + didNotWork.length > 0) summaryParts.push(`<span style="color:#6B7280;">${onPto.length + didNotWork.length} off</span>`);
   if (realMisses.length === 0 && awaitingTl.length === 0) summaryParts.push(`<span style="color:#15803D;">All accounted for</span>`);
 
+  // TEAM COVERAGE block \u2014 mirrors Joe's manual-email template at the top of
+  // the digest. Numbers are computed from time_clock + time_off in enrichAgents().
+  const coverageCell = (label: string, value: number, accent?: string) =>
+    `<td style="padding:10px 14px;border:1px solid ${BORDER};vertical-align:top;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6B7280;font-weight:600;">${label}</div><div style="font-size:22px;font-weight:700;color:${accent ?? NAVY};margin-top:2px;">${value}</div></td>`;
+  const coverageBlock = `<div style="margin-bottom:20px;"><p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.1em;color:${NAVY};text-transform:uppercase;">Team Coverage</p><table style="width:100%;border-collapse:collapse;font-size:13px;">${
+    `<tr>${coverageCell("Reps Scheduled", coverage.scheduled)}${coverageCell("Reps Present", coverage.present, coverage.present >= coverage.scheduled ? "#15803D" : NAVY)}${coverageCell("Missed Today", coverage.missed, coverage.missed > 0 ? "#DC2626" : NAVY)}${coverageCell("Late Arrivals", coverage.late, coverage.late > 0 ? "#B45309" : NAVY)}${coverageCell("Left Early", coverage.leftEarly, coverage.leftEarly > 0 ? "#B45309" : NAVY)}</tr>`
+  }</table></div>`;
+
+  const productionHeader = `<p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.1em;color:${NAVY};text-transform:uppercase;">Production</p>`;
+
   return emailShell({
     title: `EOD Digest \u2014 ${campaignName}`, label: "EOD Digest", campaignName, dateLabel,
     summaryHtml: summaryParts.join(" &nbsp;&middot;&nbsp; "),
-    bodyHtml: `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:480px;"><thead><tr><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Agent</th>${kpiHeaders}<th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Status</th><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Notes</th></tr></thead><tbody>${agentRows}</tbody></table></div>${allInSection}${tlNoteSection}`,
+    bodyHtml: `${coverageBlock}${productionHeader}<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:480px;"><thead><tr><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Agent</th>${kpiHeaders}<th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Status</th><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Notes</th></tr></thead><tbody>${agentRows}</tbody></table></div>${allInSection}${tlNoteSection}`,
   });
 }
 
@@ -536,10 +595,9 @@ async function sendDailyDigestForCampaign(
   }
   const recipients = Array.from(recipientSet.values()).map((email) => ({ email }));
 
-  // Enrich each agent with their submission status (submitted / clocked_no_eod
-  // / awaiting_tl / on_pto / did_not_work) so the digest can show why each
-  // missing agent is missing instead of lumping them into one red list.
-  const enriched = await enrichAgents(supabase, campaignId, agents, eodLogs, todayInTz);
+  // Enrich agents (status buckets) AND compute team coverage roll-ups
+  // (scheduled / present / missed / late / left-early) for the email header.
+  const { enriched, coverage } = await enrichAgents(supabase, campaignId, agents, eodLogs, todayInTz);
   const realMisses = enriched.filter((a) => a.status === "clocked_no_eod");
   const submittedCount = enriched.filter((a) => a.status === "submitted").length;
   // missing_agents JSON now carries status so the log row can answer "why was
@@ -553,7 +611,7 @@ async function sendDailyDigestForCampaign(
     return { campaign: campaignName, status: "no_recipients" };
   }
   const logBase = { campaign_id: campaignId, digest_date: todayInTz, digest_type: "daily", recipient_count: recipients.length, agent_submission_count: submittedCount, agent_missing_count: realMisses.length, missing_agents: missingAgentsForLog };
-  const result = await sendAndLog(supabase, logBase, { to: recipients.map((r) => r.email), subject: `[EOD Digest] ${campaignName} \u2014 ${todayInTz}`, html: buildDailyHtml(campaignName, todayInTz, kpiFields, enriched, eodLogs, tlNote) });
+  const result = await sendAndLog(supabase, logBase, { to: recipients.map((r) => r.email), subject: `[EOD Digest] ${campaignName} \u2014 ${todayInTz}`, html: buildDailyHtml(campaignName, todayInTz, kpiFields, enriched, eodLogs, tlNote, coverage) });
   return { campaign: campaignName, ...result, dryRun: DRY_RUN };
 }
 
@@ -736,12 +794,12 @@ async function handleTestSend(
   const eodLogs = (eodRes.data ?? []) as EODLog[];
   const tlNote = (tlNoteRes.data as { note: string | null } | null)?.note ?? null;
 
-  // Enrich with status (submitted/clocked_no_eod/awaiting_tl/on_pto/did_not_work)
-  // so the test email shows the same categorized buckets as the real digest.
-  const enriched = await enrichAgents(supabase, campaignId, agents, eodLogs, targetDate);
+  // Enrich with status + compute team coverage for the test email so it
+  // mirrors the real digest exactly.
+  const { enriched, coverage } = await enrichAgents(supabase, campaignId, agents, eodLogs, targetDate);
 
   // 4. Render + send (always real, regardless of DRY_RUN). Do NOT log.
-  const html = buildDailyHtml(camp.name, targetDate, kpiFields, enriched, eodLogs, tlNote);
+  const html = buildDailyHtml(camp.name, targetDate, kpiFields, enriched, eodLogs, tlNote, coverage);
   const subject = `[TEST \u2014 EOD Digest] ${camp.name} \u2014 ${targetDate}`;
   try {
     const messageId = await sendViaGmail({ to: [recipient], subject, html });
