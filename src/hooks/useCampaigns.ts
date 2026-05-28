@@ -37,8 +37,8 @@ export function useCampaignsByClient() {
     queryFn: async () => {
       const [{ data: clients, error: cErr }, { data: campaigns, error: campErr }] =
         await Promise.all([
-          supabase.from("clients").select("*").order("name"),
-          supabase.from("campaigns").select("*").order("name"),
+          supabase.from("clients").select("*").eq("is_active", true).order("name"),
+          supabase.from("campaigns").select("*").eq("is_active", true).order("name"),
         ]);
       if (cErr) throw cErr;
       if (campErr) throw campErr;
@@ -89,11 +89,20 @@ export function useUpdateCampaign() {
   });
 }
 
+/**
+ * Soft-delete a campaign. We never hard-delete because eod_logs, payroll_records,
+ * agent_reviews and other audit tables FK-reference campaigns.id. Setting
+ * is_active=false hides the campaign from every query that filters on
+ * is_active (which is almost all of them) without nuking history.
+ */
 export function useDeleteCampaign() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("campaigns").delete().eq("id", id);
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ is_active: false })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

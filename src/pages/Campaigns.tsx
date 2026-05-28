@@ -59,8 +59,8 @@ export default function Campaigns() {
     queryFn: async () => {
       const [{ data: clients }, { data: campaigns }, { data: employees }, { data: shifts }] =
         await Promise.all([
-          supabase.from('clients').select('id, name, prefix').order('name'),
-          supabase.from('campaigns').select('id, client_id, name').order('name'),
+          supabase.from('clients').select('id, name, prefix').eq('is_active', true).order('name'),
+          supabase.from('campaigns').select('id, client_id, name').eq('is_active', true).order('name'),
           supabase.from('employees').select('campaign_id').eq('is_active', true).eq('is_system_user', false),
           supabase.from('shift_settings').select('campaign_id, shift_name'),
         ]);
@@ -108,7 +108,9 @@ export default function Campaigns() {
 
   const deleteClientMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('clients').delete().eq('id', id);
+      // Soft delete — preserves all historical data (campaigns, employees,
+      // invoices, payroll). Hide-from-UI is enough for the trash icon.
+      const { error } = await supabase.from('clients').update({ is_active: false }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -144,12 +146,14 @@ export default function Campaigns() {
 
   const deleteCampaignMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('campaigns').delete().eq('id', id);
+      // Soft delete — keeps eod_logs, payroll_records, agent_reviews etc.
+      // intact for audit. The campaign drops out of all UI pickers.
+      const { error } = await supabase.from('campaigns').update({ is_active: false }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       invalidateAll();
-      toast.success('Campaign deleted');
+      toast.success('Campaign deactivated');
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -239,10 +243,10 @@ export default function Campaigns() {
                         className="text-destructive hover:text-destructive"
                         onClick={() => {
                           if (cl.campaigns.length > 0) {
-                            toast.error('Delete all campaigns first');
+                            toast.error('Deactivate all campaigns first');
                             return;
                           }
-                          if (confirm(`Delete client "${cl.name}"?`)) {
+                          if (confirm(`Deactivate client "${cl.name}"? It will be hidden from the list but all historical data is preserved.`)) {
                             deleteClientMutation.mutate(cl.id);
                           }
                         }}
@@ -295,10 +299,10 @@ export default function Campaigns() {
                               className="h-8 w-8 text-destructive hover:text-destructive"
                               onClick={() => {
                                 if (camp.agentCount > 0) {
-                                  toast.error('Reassign agents first');
+                                  toast.error('Reassign active agents first');
                                   return;
                                 }
-                                if (confirm(`Delete campaign "${camp.name}"?`)) {
+                                if (confirm(`Deactivate campaign "${camp.name}"? It will be hidden from the list but all historical data (EOD logs, payroll, reviews) is preserved.`)) {
                                   deleteCampaignMutation.mutate(camp.id);
                                 }
                               }}
