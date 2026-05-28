@@ -250,7 +250,9 @@ export default function HrTimeOff() {
         <h1 className="text-2xl font-bold tracking-tight">Time Off</h1>
       </div>
 
-      <Tabs defaultValue="holidays">
+      {/* Default landed on Holidays which buried the time-off requests —
+          flipped to "vacation" tab so the queue is the first thing visible. */}
+      <Tabs defaultValue="vacation">
         <TabsList>
           <TabsTrigger value="holidays">Holidays</TabsTrigger>
           <TabsTrigger value="vacation">Time Off</TabsTrigger>
