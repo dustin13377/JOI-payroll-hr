@@ -360,20 +360,43 @@ async function sendDailyDigestForCampaign(
   campaignName: string,
   todayInTz: string,
 ): Promise<DigestResult> {
-  const [kpiRes, agentRes, eodRes, tlNoteRes, recipientRes] = await Promise.all([
+  // Pull the include_agents flag along with everything else.
+  const [kpiRes, agentRes, eodRes, tlNoteRes, recipientRes, campaignFlagRes] = await Promise.all([
     supabase.from("campaign_kpi_config").select("field_name, field_label, field_type, min_target").eq("campaign_id", campaignId).eq("is_active", true).order("display_order"),
-    supabase.from("employees").select("id, full_name, work_name").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
+    supabase.from("employees").select("id, full_name, work_name, email, is_system_user").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
     supabase.from("eod_logs").select("employee_id, metrics, notes, created_at").eq("campaign_id", campaignId).eq("date", todayInTz),
     supabase.from("campaign_eod_tl_notes").select("note").eq("campaign_id", campaignId).eq("date", todayInTz).maybeSingle(),
     supabase.from("campaign_eod_recipients").select("email").eq("campaign_id", campaignId).eq("active", true),
+    supabase.from("campaigns").select("include_agents_in_eod_digest").eq("id", campaignId).maybeSingle(),
   ]);
   const fetchErr = [kpiRes, agentRes, eodRes, recipientRes].find((r) => r.error)?.error;
   if (fetchErr) return { campaign: campaignName, status: "error", error: fetchErr.message };
   const kpiFields = (kpiRes.data ?? []) as KPIField[];
-  const agents = (agentRes.data ?? []) as Agent[];
+  const allEmployees = (agentRes.data ?? []) as (Agent & { email: string | null; is_system_user: boolean })[];
+  // For the digest table we only render real workforce (not partners/auditors).
+  const agents = allEmployees.filter((e) => !e.is_system_user) as Agent[];
   const eodLogs = (eodRes.data ?? []) as EODLog[];
   const tlNote = (tlNoteRes.data as { note: string | null } | null)?.note ?? null;
-  const recipients = (recipientRes.data ?? []) as { email: string }[];
+  const manualRecipients = (recipientRes.data ?? []) as { email: string }[];
+  const includeAgents = (campaignFlagRes.data as { include_agents_in_eod_digest?: boolean } | null)?.include_agents_in_eod_digest === true;
+
+  // Build the final recipient list: manual entries (clients) ALWAYS, plus
+  // campaign employees when the flag is on. Dedupe case-insensitively.
+  const recipientSet = new Map<string, string>();
+  for (const r of manualRecipients) {
+    const e = r.email?.trim();
+    if (e) recipientSet.set(e.toLowerCase(), e);
+  }
+  if (includeAgents) {
+    for (const emp of allEmployees) {
+      if (emp.is_system_user) continue; // skip partners/auditors
+      const e = emp.email?.trim();
+      if (!e) continue;
+      recipientSet.set(e.toLowerCase(), e);
+    }
+  }
+  const recipients = Array.from(recipientSet.values()).map((email) => ({ email }));
+
   const submittedIds = new Set(eodLogs.map((l) => l.employee_id));
   const missingAgents = agents.filter((a) => !submittedIds.has(a.id));
   if (recipients.length === 0) {

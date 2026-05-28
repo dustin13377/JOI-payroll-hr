@@ -176,6 +176,7 @@ export default function CampaignDetail() {
   const [testDigestEmail, setTestDigestEmail] = useState('');
   const [testDigestDate, setTestDigestDate] = useState('');
   const [sendingManualDigest, setSendingManualDigest] = useState(false);
+  const [includeAgentsInDigest, setIncludeAgentsInDigest] = useState(false);
 
   // Early Release state (manager+ only feature)
   const [earlyReleaseEnabled, setEarlyReleaseEnabled] = useState(false);
@@ -609,6 +610,7 @@ export default function CampaignDetail() {
       setDigestTimezone(campaign.eod_digest_timezone ?? 'America/Denver');
       setDigestReplyTo(campaign.eod_reply_to_email ?? '');
       setDigestReplyToError('');
+      setIncludeAgentsInDigest(campaign.include_agents_in_eod_digest ?? false);
       setDigestDirty(false);
       setEarlyReleaseEnabled(campaign.early_release_enabled ?? false);
       setEarlyReleaseCriteria(campaign.early_release_criteria ?? '');
@@ -646,6 +648,7 @@ export default function CampaignDetail() {
           eod_morning_bundle_time: digestMorningBundle || null,
           eod_digest_timezone: digestTimezone,
           eod_reply_to_email: digestReplyTo.trim() || null,
+          include_agents_in_eod_digest: includeAgentsInDigest,
         })
         .eq('id', id!);
       if (error) throw error;
@@ -1246,6 +1249,26 @@ export default function CampaignDetail() {
             {digestReplyToError && (
               <p className="text-sm text-destructive">{digestReplyToError}</p>
             )}
+          </div>
+          <div className="space-y-1 pt-2 border-t">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="include-agents-toggle" className="cursor-pointer">
+                  Include campaign agents in digest recipients
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, every active employee on this campaign (excluding system users) is added to the digest To: line on top of the manual recipients below. Lets clients like Cameron use Reply All to reach the whole team.
+                </p>
+              </div>
+              <Switch
+                id="include-agents-toggle"
+                checked={includeAgentsInDigest}
+                onCheckedChange={(v) => {
+                  setIncludeAgentsInDigest(v);
+                  setDigestDirty(true);
+                }}
+              />
+            </div>
           </div>
           {digestDirty && (
             <Button onClick={handleSaveDigest} disabled={saveDigestMutation.isPending}>
