@@ -479,6 +479,7 @@ export type Database = {
           eod_morning_bundle_time: string | null
           eod_reply_to_email: string | null
           id: string
+          include_agents_in_eod_digest: boolean
           is_active: boolean
           name: string
           team_lead_id: string | null
@@ -491,6 +492,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          include_agents_in_eod_digest?: boolean
           is_active?: boolean
           name: string
           team_lead_id?: string | null
@@ -503,6 +505,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          include_agents_in_eod_digest?: boolean
           is_active?: boolean
           name?: string
           team_lead_id?: string | null

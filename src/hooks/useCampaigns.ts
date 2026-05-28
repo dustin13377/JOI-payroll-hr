@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export interface Campaign {
   id: string;
@@ -38,7 +39,7 @@ export function useCampaignsByClient() {
       const [{ data: clients, error: cErr }, { data: campaigns, error: campErr }] =
         await Promise.all([
           supabase.from("clients").select("*").order("name"),
-          supabase.from("campaigns").select("*").order("name"),
+          supabase.from("campaigns").select("*").eq("is_active", true).order("name"),
         ]);
       if (cErr) throw cErr;
       if (campErr) throw campErr;
@@ -52,11 +53,15 @@ export function useCampaignsByClient() {
 
 export function useCreateCampaign() {
   const qc = useQueryClient();
+  // organization_id is NOT NULL on campaigns with no DB default; the RLS
+  // WITH CHECK requires (organization_id = my_org_id()). See audit finding H-2.
+  const { organizationId } = useUserProfile();
   return useMutation({
     mutationFn: async ({ clientId, name }: { clientId: string; name: string }) => {
+      if (!organizationId) throw new Error('Cannot create campaign: your profile has no organization. Refresh and try again.');
       const { data, error } = await supabase
         .from("campaigns")
-        .insert({ client_id: clientId, name: name.trim() })
+        .insert({ client_id: clientId, name: name.trim(), organization_id: organizationId })
         .select()
         .single();
       if (error) throw error;
@@ -89,11 +94,20 @@ export function useUpdateCampaign() {
   });
 }
 
+/**
+ * Soft-delete a campaign. We never hard-delete because eod_logs, payroll_records,
+ * agent_reviews and other audit tables FK-reference campaigns.id. Setting
+ * is_active=false hides the campaign from every query that filters on
+ * is_active (which is almost all of them) without nuking history.
+ */
 export function useDeleteCampaign() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("campaigns").delete().eq("id", id);
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ is_active: false })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

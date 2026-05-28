@@ -687,6 +687,7 @@ export type Database = {
           eod_morning_bundle_time: string | null
           eod_reply_to_email: string | null
           id: string
+          include_agents_in_eod_digest: boolean
           is_active: boolean
           name: string
           organization_id: string
@@ -701,6 +702,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          include_agents_in_eod_digest?: boolean
           is_active?: boolean
           name: string
           organization_id: string
@@ -715,6 +717,7 @@ export type Database = {
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
           id?: string
+          include_agents_in_eod_digest?: boolean
           is_active?: boolean
           name?: string
           organization_id?: string
@@ -922,6 +925,7 @@ export type Database = {
           bill_to_name: string | null
           created_at: string | null
           id: string
+          is_active: boolean
           name: string
           organization_id: string
           prefix: string
@@ -932,6 +936,7 @@ export type Database = {
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name: string
           organization_id: string
           prefix: string
@@ -942,6 +947,7 @@ export type Database = {
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           organization_id?: string
           prefix?: string

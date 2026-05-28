@@ -176,6 +176,7 @@ export default function CampaignDetail() {
   const [testDigestEmail, setTestDigestEmail] = useState('');
   const [testDigestDate, setTestDigestDate] = useState('');
   const [sendingManualDigest, setSendingManualDigest] = useState(false);
+  const [includeAgentsInDigest, setIncludeAgentsInDigest] = useState(false);
 
   // Early Release state (manager+ only feature)
   const [earlyReleaseEnabled, setEarlyReleaseEnabled] = useState(false);
@@ -213,11 +214,11 @@ export default function CampaignDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('campaigns')
-        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, early_release_enabled, early_release_criteria, clients(id, name, prefix)')
+        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, early_release_enabled, early_release_criteria, include_agents_in_eod_digest, clients(id, name, prefix)')
         .eq('id', id!)
         .single();
       if (error) throw error;
-      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; early_release_enabled: boolean; early_release_criteria: string | null; clients: { id: string; name: string; prefix: string } | null };
+      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; early_release_enabled: boolean; early_release_criteria: string | null; include_agents_in_eod_digest: boolean; clients: { id: string; name: string; prefix: string } | null };
     },
     enabled: !!id,
   });
@@ -562,6 +563,25 @@ export default function CampaignDetail() {
     onSuccess: invalidateRecipients,
   });
 
+  // Auto-saves the include-agents flag on toggle. Matches the recipients UX
+  // pattern (no separate Save button — flip it and it persists).
+  const toggleIncludeAgentsMutation = useMutation({
+    mutationFn: async (val: boolean) => {
+      const { error } = await supabase
+        .from('campaigns')
+        .update({ include_agents_in_eod_digest: val })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateCampaign();
+      toast.success('Saved');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update');
+    },
+  });
+
   const deleteRecipientMutation = useMutation({
     mutationFn: async (recipientId: string) => {
       const { error } = await supabase
@@ -609,6 +629,7 @@ export default function CampaignDetail() {
       setDigestTimezone(campaign.eod_digest_timezone ?? 'America/Denver');
       setDigestReplyTo(campaign.eod_reply_to_email ?? '');
       setDigestReplyToError('');
+      setIncludeAgentsInDigest(campaign.include_agents_in_eod_digest ?? false);
       setDigestDirty(false);
       setEarlyReleaseEnabled(campaign.early_release_enabled ?? false);
       setEarlyReleaseCriteria(campaign.early_release_criteria ?? '');
@@ -1085,7 +1106,26 @@ export default function CampaignDetail() {
             Add Recipient
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="include-agents-toggle" className="cursor-pointer">
+                Include campaign agents automatically
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                When on, every active employee on this campaign (excluding system users) is added to the digest To: line on top of the manual recipients below. Lets clients use Reply All to reach the whole team.
+              </p>
+            </div>
+            <Switch
+              id="include-agents-toggle"
+              checked={includeAgentsInDigest}
+              disabled={toggleIncludeAgentsMutation.isPending}
+              onCheckedChange={(v) => {
+                setIncludeAgentsInDigest(v);
+                toggleIncludeAgentsMutation.mutate(v);
+              }}
+            />
+          </div>
           {recipients.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
               No recipients configured — digest will not send until at least one active recipient is added.

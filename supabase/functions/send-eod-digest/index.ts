@@ -48,12 +48,25 @@ const APP_DOMAIN = Deno.env.get("APP_DOMAIN") ?? (() => { throw new Error("APP_D
 // supabase.functions.invoke) require these headers. pg_cron never does
 // a preflight so CORS is a no-op for the cron path.
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Parse ALLOWED_ORIGIN as a comma-separated allow-list. The browser only
+// accepts ONE value in the Access-Control-Allow-Origin response header, so
+// we echo back whichever origin in the list matches the request — falling
+// back to the first entry if the caller's origin isn't recognized.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const reqOrigin = req.headers.get("Origin") ?? "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,6 +112,121 @@ interface EODLog {
   created_at: string;
   last_edited_at: string | null;
 }
+
+// Why an agent is or isn't in the EOD log for the day. Used to color and
+// section the digest so TLs/clients can tell process-gap vs real-miss vs
+// just-not-on-shift apart.
+type AgentStatus =
+  | "submitted"        // EOD log present
+  | "clocked_no_eod"   // Punched in but never submitted EOD — the real miss
+  | "awaiting_tl"      // No login yet (Day 1-30) — TL has to submit-for-agent
+  | "on_pto"           // Approved time off covers the date
+  | "did_not_work";    // Has login but no clock-in and no PTO — called out / no-show / not scheduled
+
+interface AgentWithStatus extends Agent {
+  status: AgentStatus;
+}
+
+interface TimeClockRow {
+  employee_id: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  shift_end_expected: string | null;
+  is_late: boolean | null;
+  early_release: boolean | null;
+  auto_clocked_out: boolean | null;
+}
+
+interface AgentContext {
+  enriched: AgentWithStatus[];
+  // Roll-ups for the TEAM COVERAGE block in the email header.
+  coverage: {
+    scheduled: number;
+    present: number;
+    missed: number;
+    late: number;
+    leftEarly: number;
+  };
+}
+
+/**
+ * Categorize each agent for the day AND compute team-coverage roll-ups.
+ * Fetches user_profiles, time_clock, and approved time_off_requests in
+ * parallel and joins them in memory.
+ *
+ * Coverage definitions:
+ *   scheduled = active campaign agents NOT on approved PTO
+ *   present   = agents with a clock_in row for the date
+ *   missed    = scheduled - present (no-show / called out)
+ *   late      = sum of time_clock.is_late = true
+ *   leftEarly = clock_out is NOT NULL, clock_out < shift_end_expected,
+ *               early_release is false/null, auto_clocked_out is false/null
+ */
+async function enrichAgents(
+  supabase: SupabaseClient,
+  campaignId: string,
+  agents: Agent[],
+  eodLogs: EODLog[],
+  date: string,
+): Promise<AgentContext> {
+  const ids = agents.map((a) => a.id);
+  if (ids.length === 0) {
+    return { enriched: [], coverage: { scheduled: 0, present: 0, missed: 0, late: 0, leftEarly: 0 } };
+  }
+  const [profileRes, clockRes, ptoRes] = await Promise.all([
+    supabase.from("user_profiles").select("employee_id").in("employee_id", ids),
+    supabase.from("time_clock")
+      .select("employee_id, clock_in, clock_out, shift_end_expected, is_late, early_release, auto_clocked_out")
+      .eq("date", date)
+      .in("employee_id", ids),
+    supabase.from("time_off_requests")
+      .select("employee_id, start_date, end_date, status")
+      .eq("status", "approved")
+      .in("employee_id", ids)
+      .lte("start_date", date)
+      .gte("end_date", date),
+  ]);
+  const hasLogin = new Set<string>(
+    (profileRes.data ?? []).map((r: { employee_id: string }) => r.employee_id),
+  );
+  const clockRows = (clockRes.data ?? []) as TimeClockRow[];
+  const clockedIn = new Set<string>(clockRows.map((r) => r.employee_id));
+  const onPto = new Set<string>(
+    (ptoRes.data ?? []).map((r: { employee_id: string }) => r.employee_id),
+  );
+  const submitted = new Set<string>(eodLogs.map((l) => l.employee_id));
+
+  const enriched = agents.map((a): AgentWithStatus => {
+    let status: AgentStatus;
+    if (submitted.has(a.id)) status = "submitted";
+    else if (onPto.has(a.id)) status = "on_pto";
+    else if (!hasLogin.has(a.id)) status = "awaiting_tl";
+    else if (clockedIn.has(a.id)) status = "clocked_no_eod";
+    else status = "did_not_work";
+    return { ...a, status };
+  });
+
+  const scheduled = agents.length - [...onPto].length;
+  const present = clockedIn.size;
+  const missed = Math.max(0, scheduled - present);
+  const late = clockRows.filter((r) => r.is_late === true).length;
+  const leftEarly = clockRows.filter((r) => {
+    if (!r.clock_out || !r.shift_end_expected) return false;
+    if (r.early_release === true) return false;
+    if (r.auto_clocked_out === true) return false;
+    return new Date(r.clock_out).getTime() < new Date(r.shift_end_expected).getTime();
+  }).length;
+
+  return { enriched, coverage: { scheduled, present, missed, late, leftEarly } };
+}
+
+const STATUS_LABEL: Record<AgentStatus, string> = {
+  submitted: "Submitted",
+  clocked_no_eod: "Clocked in, no EOD",
+  awaiting_tl: "Awaiting TL submission",
+  on_pto: "On PTO",
+  did_not_work: "Did not work",
+};
 
 type DigestResult = {
   campaign: string;
@@ -179,16 +307,25 @@ const BORDER = "#E5E7EB";
 // ---------------------------------------------------------------------------
 // Daily digest email builder
 // ---------------------------------------------------------------------------
+// Per-status colors for the Status column and section callouts.
+const STATUS_COLORS: Record<AgentStatus, { fg: string; bg: string; rowBg: string }> = {
+  submitted:      { fg: "#15803D", bg: "#F0FDF4", rowBg: "white"   },  // green
+  clocked_no_eod: { fg: "#DC2626", bg: "#FEF2F2", rowBg: "#FFF5F5" },  // red \u2014 the real miss
+  awaiting_tl:    { fg: "#B45309", bg: "#FFFBEB", rowBg: "#FFFBEB" },  // amber \u2014 process
+  on_pto:         { fg: "#4B5563", bg: "#F3F4F6", rowBg: "#F9FAFB" },  // gray
+  did_not_work:   { fg: "#4B5563", bg: "#F3F4F6", rowBg: "#F9FAFB" },  // gray
+};
+
 function buildDailyHtml(
   campaignName: string,
   date: string,
   kpiFields: KPIField[],
-  agents: Agent[],
+  agents: AgentWithStatus[],
   eodLogs: EODLog[],
   tlNote: string | null,
+  coverage: { scheduled: number; present: number; missed: number; late: number; leftEarly: number },
 ): string {
   const submittedMap = new Map(eodLogs.map((l) => [l.employee_id, l]));
-  const missingAgents = agents.filter((a) => !submittedMap.has(a.id));
   const numericKpis = kpiFields.filter((f) => f.field_type === "number");
   const [y, m, d] = date.split("-").map(Number);
   const dateLabel = new Date(y, m - 1, d).toLocaleDateString("en-US", {
@@ -197,10 +334,22 @@ function buildDailyHtml(
   const kpiHeaders = numericKpis
     .map((k) => `<th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;white-space:nowrap;">${k.field_label}</th>`)
     .join("");
-  const agentRows = agents.map((agent) => {
+
+  // Order rows by status priority: real misses first (visible), then awaiting_tl,
+  // then submitted, then PTO/no-show last. Within group, alphabetical.
+  const statusOrder: Record<AgentStatus, number> = {
+    clocked_no_eod: 0, awaiting_tl: 1, submitted: 2, on_pto: 3, did_not_work: 4,
+  };
+  const sortedAgents = [...agents].sort((a, b) => {
+    const so = statusOrder[a.status] - statusOrder[b.status];
+    if (so !== 0) return so;
+    return agentDisplayName(a).localeCompare(agentDisplayName(b));
+  });
+
+  const agentRows = sortedAgents.map((agent) => {
     const log = submittedMap.get(agent.id);
     const metrics = log?.metrics ?? null;
-    const submitted = !!log;
+    const colors = STATUS_COLORS[agent.status];
     const kpiCells = numericKpis.map((kpi) => {
       const val = metrics !== null ? (metrics[kpi.field_name] as number | undefined) : undefined;
       const below = kpi.min_target !== null && val !== undefined && val < kpi.min_target;
@@ -210,22 +359,84 @@ function buildDailyHtml(
     const noteCell = log?.notes
       ? `<td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:#6B7280;font-size:12px;max-width:200px;">${log.notes}</td>`
       : `<td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:#9CA3AF;">\u2014</td>`;
-    const statusCell = submitted
-      ? `<td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:#15803D;white-space:nowrap;">&#10003; Submitted</td>`
-      : `<td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:#DC2626;white-space:nowrap;">&#10005; Missing</td>`;
-    return `<tr style="background:${submitted ? "white" : "#FFF5F5"};"><td style="padding:8px 12px;border-bottom:1px solid ${BORDER};font-weight:500;white-space:nowrap;">${agentDisplayName(agent)}</td>${kpiCells}${statusCell}${noteCell}</tr>`;
+    const statusIcon = agent.status === "submitted" ? "&#10003;" : agent.status === "clocked_no_eod" ? "&#10005;" : "&#8226;";
+    const statusCell = `<td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:${colors.fg};white-space:nowrap;">${statusIcon} ${STATUS_LABEL[agent.status]}</td>`;
+    return `<tr style="background:${colors.rowBg};"><td style="padding:8px 12px;border-bottom:1px solid ${BORDER};font-weight:500;white-space:nowrap;">${agentDisplayName(agent)}</td>${kpiCells}${statusCell}${noteCell}</tr>`;
   }).join("");
+
   const tlNoteSection = tlNote
     ? `<div style="margin-top:24px;background:${LIGHT};border-left:4px solid ${ORANGE};padding:16px;border-radius:4px;"><p style="margin:0 0 6px;font-weight:600;color:${NAVY};font-size:13px;">TL Note</p><p style="margin:0;color:#374151;font-size:13px;line-height:1.5;">${tlNote.replace(/\n/g, "<br>")}</p></div>`
     : `<div style="margin-top:24px;background:${LIGHT};border-left:4px solid ${BORDER};padding:16px;border-radius:4px;"><p style="margin:0;color:#9CA3AF;font-size:13px;font-style:italic;">No TL note for today.</p></div>`;
-  const missingSection = missingAgents.length > 0
-    ? `<div style="margin-top:16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:4px;padding:12px 16px;"><p style="margin:0 0 6px;font-weight:600;color:#DC2626;font-size:13px;">${missingAgents.length} agent${missingAgents.length !== 1 ? "s" : ""} did not submit</p><p style="margin:0;color:#7F1D1D;font-size:13px;">${missingAgents.map((a) => agentDisplayName(a)).join(", ")}</p></div>`
-    : `<div style="margin-top:16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:4px;padding:12px 16px;"><p style="margin:0;color:#15803D;font-size:13px;font-weight:500;">&#10003; All agents submitted today</p></div>`;
-  const submittedCount = agents.length - missingAgents.length;
+
+  // Bucket the non-submitters by status for clear callouts.
+  const byStatus = (s: AgentStatus) => agents.filter((a) => a.status === s);
+  const realMisses = byStatus("clocked_no_eod");
+  const awaitingTl = byStatus("awaiting_tl");
+  const onPto = byStatus("on_pto");
+  const didNotWork = byStatus("did_not_work");
+  const submittedCount = byStatus("submitted").length;
+
+  const calloutBox = (
+    title: string,
+    names: string[],
+    fg: string,
+    bg: string,
+    border: string,
+  ): string =>
+    `<div style="margin-top:12px;background:${bg};border:1px solid ${border};border-radius:4px;padding:12px 16px;"><p style="margin:0 0 6px;font-weight:600;color:${fg};font-size:13px;">${title}</p><p style="margin:0;color:${fg};font-size:13px;">${names.join(", ")}</p></div>`;
+
+  const callouts: string[] = [];
+  if (realMisses.length > 0) {
+    callouts.push(calloutBox(
+      `${realMisses.length} clocked in but did not submit EOD`,
+      realMisses.map(agentDisplayName), "#7F1D1D", "#FEF2F2", "#FECACA",
+    ));
+  }
+  if (awaitingTl.length > 0) {
+    callouts.push(calloutBox(
+      `${awaitingTl.length} awaiting TL submission (no app login yet)`,
+      awaitingTl.map(agentDisplayName), "#92400E", "#FFFBEB", "#FDE68A",
+    ));
+  }
+  if (onPto.length > 0) {
+    callouts.push(calloutBox(
+      `${onPto.length} on approved PTO`,
+      onPto.map(agentDisplayName), "#374151", "#F3F4F6", "#E5E7EB",
+    ));
+  }
+  if (didNotWork.length > 0) {
+    callouts.push(calloutBox(
+      `${didNotWork.length} did not work today`,
+      didNotWork.map(agentDisplayName), "#374151", "#F3F4F6", "#E5E7EB",
+    ));
+  }
+  const allInSection = callouts.length === 0
+    ? `<div style="margin-top:16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:4px;padding:12px 16px;"><p style="margin:0;color:#15803D;font-size:13px;font-weight:500;">&#10003; All scheduled agents submitted today</p></div>`
+    : callouts.join("");
+
+  // Summary line: highlight the real miss number first.
+  const summaryParts: string[] = [
+    `<strong>${submittedCount}</strong> of <strong>${agents.length}</strong> agents submitted`,
+  ];
+  if (realMisses.length > 0) summaryParts.push(`<span style="color:#DC2626;">${realMisses.length} missed</span>`);
+  if (awaitingTl.length > 0) summaryParts.push(`<span style="color:#B45309;">${awaitingTl.length} awaiting TL</span>`);
+  if (onPto.length + didNotWork.length > 0) summaryParts.push(`<span style="color:#6B7280;">${onPto.length + didNotWork.length} off</span>`);
+  if (realMisses.length === 0 && awaitingTl.length === 0) summaryParts.push(`<span style="color:#15803D;">All accounted for</span>`);
+
+  // TEAM COVERAGE block \u2014 mirrors Joe's manual-email template at the top of
+  // the digest. Numbers are computed from time_clock + time_off in enrichAgents().
+  const coverageCell = (label: string, value: number, accent?: string) =>
+    `<td style="padding:10px 14px;border:1px solid ${BORDER};vertical-align:top;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6B7280;font-weight:600;">${label}</div><div style="font-size:22px;font-weight:700;color:${accent ?? NAVY};margin-top:2px;">${value}</div></td>`;
+  const coverageBlock = `<div style="margin-bottom:20px;"><p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.1em;color:${NAVY};text-transform:uppercase;">Team Coverage</p><table style="width:100%;border-collapse:collapse;font-size:13px;">${
+    `<tr>${coverageCell("Reps Scheduled", coverage.scheduled)}${coverageCell("Reps Present", coverage.present, coverage.present >= coverage.scheduled ? "#15803D" : NAVY)}${coverageCell("Missed Today", coverage.missed, coverage.missed > 0 ? "#DC2626" : NAVY)}${coverageCell("Late Arrivals", coverage.late, coverage.late > 0 ? "#B45309" : NAVY)}${coverageCell("Left Early", coverage.leftEarly, coverage.leftEarly > 0 ? "#B45309" : NAVY)}</tr>`
+  }</table></div>`;
+
+  const productionHeader = `<p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.1em;color:${NAVY};text-transform:uppercase;">Production</p>`;
+
   return emailShell({
     title: `EOD Digest \u2014 ${campaignName}`, label: "EOD Digest", campaignName, dateLabel,
-    summaryHtml: `<strong>${submittedCount}</strong> of <strong>${agents.length}</strong> agents submitted &nbsp;&middot;&nbsp; ${missingAgents.length === 0 ? `<span style="color:#15803D;">All submissions in</span>` : `<span style="color:#DC2626;">${missingAgents.length} missing</span>`}`,
-    bodyHtml: `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:480px;"><thead><tr><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Agent</th>${kpiHeaders}<th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Status</th><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Notes</th></tr></thead><tbody>${agentRows}</tbody></table></div>${missingSection}${tlNoteSection}`,
+    summaryHtml: summaryParts.join(" &nbsp;&middot;&nbsp; "),
+    bodyHtml: `${coverageBlock}${productionHeader}<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:480px;"><thead><tr><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Agent</th>${kpiHeaders}<th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Status</th><th style="padding:8px 12px;text-align:left;background:${NAVY};color:white;">Notes</th></tr></thead><tbody>${agentRows}</tbody></table></div>${allInSection}${tlNoteSection}`,
   });
 }
 
@@ -347,28 +558,60 @@ async function sendDailyDigestForCampaign(
   campaignName: string,
   todayInTz: string,
 ): Promise<DigestResult> {
-  const [kpiRes, agentRes, eodRes, tlNoteRes, recipientRes] = await Promise.all([
+  // Pull the include_agents flag along with everything else.
+  const [kpiRes, agentRes, eodRes, tlNoteRes, recipientRes, campaignFlagRes] = await Promise.all([
     supabase.from("campaign_kpi_config").select("field_name, field_label, field_type, min_target").eq("campaign_id", campaignId).eq("is_active", true).order("display_order"),
-    supabase.from("employees").select("id, full_name, work_name").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
+    supabase.from("employees").select("id, full_name, work_name, email, is_system_user").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
     supabase.from("eod_logs").select("employee_id, metrics, notes, created_at").eq("campaign_id", campaignId).eq("date", todayInTz),
     supabase.from("campaign_eod_tl_notes").select("note").eq("campaign_id", campaignId).eq("date", todayInTz).maybeSingle(),
     supabase.from("campaign_eod_recipients").select("email").eq("campaign_id", campaignId).eq("active", true),
+    supabase.from("campaigns").select("include_agents_in_eod_digest").eq("id", campaignId).maybeSingle(),
   ]);
   const fetchErr = [kpiRes, agentRes, eodRes, recipientRes].find((r) => r.error)?.error;
   if (fetchErr) return { campaign: campaignName, status: "error", error: fetchErr.message };
   const kpiFields = (kpiRes.data ?? []) as KPIField[];
-  const agents = (agentRes.data ?? []) as Agent[];
+  const allEmployees = (agentRes.data ?? []) as (Agent & { email: string | null; is_system_user: boolean })[];
+  // For the digest table we only render real workforce (not partners/auditors).
+  const agents = allEmployees.filter((e) => !e.is_system_user) as Agent[];
   const eodLogs = (eodRes.data ?? []) as EODLog[];
   const tlNote = (tlNoteRes.data as { note: string | null } | null)?.note ?? null;
-  const recipients = (recipientRes.data ?? []) as { email: string }[];
-  const submittedIds = new Set(eodLogs.map((l) => l.employee_id));
-  const missingAgents = agents.filter((a) => !submittedIds.has(a.id));
+  const manualRecipients = (recipientRes.data ?? []) as { email: string }[];
+  const includeAgents = (campaignFlagRes.data as { include_agents_in_eod_digest?: boolean } | null)?.include_agents_in_eod_digest === true;
+
+  // Build the final recipient list: manual entries (clients) ALWAYS, plus
+  // campaign employees when the flag is on. Dedupe case-insensitively.
+  const recipientSet = new Map<string, string>();
+  for (const r of manualRecipients) {
+    const e = r.email?.trim();
+    if (e) recipientSet.set(e.toLowerCase(), e);
+  }
+  if (includeAgents) {
+    for (const emp of allEmployees) {
+      if (emp.is_system_user) continue; // skip partners/auditors
+      const e = emp.email?.trim();
+      if (!e) continue;
+      recipientSet.set(e.toLowerCase(), e);
+    }
+  }
+  const recipients = Array.from(recipientSet.values()).map((email) => ({ email }));
+
+  // Enrich agents (status buckets) AND compute team coverage roll-ups
+  // (scheduled / present / missed / late / left-early) for the email header.
+  const { enriched, coverage } = await enrichAgents(supabase, campaignId, agents, eodLogs, todayInTz);
+  const realMisses = enriched.filter((a) => a.status === "clocked_no_eod");
+  const submittedCount = enriched.filter((a) => a.status === "submitted").length;
+  // missing_agents JSON now carries status so the log row can answer "why was
+  // this person missing?" without re-querying.
+  const missingAgentsForLog = enriched
+    .filter((a) => a.status !== "submitted")
+    .map((a) => ({ id: a.id, full_name: a.full_name, status: a.status }));
+
   if (recipients.length === 0) {
-    await supabase.from("eod_digest_log").upsert({ campaign_id: campaignId, digest_date: todayInTz, digest_type: "daily", recipient_count: 0, agent_submission_count: agents.length - missingAgents.length, agent_missing_count: missingAgents.length, missing_agents: missingAgents.map((a) => ({ id: a.id, full_name: a.full_name })), dry_run: DRY_RUN, error: "no_recipients" }, { onConflict: "campaign_id,digest_date,digest_type" });
+    await supabase.from("eod_digest_log").upsert({ campaign_id: campaignId, digest_date: todayInTz, digest_type: "daily", recipient_count: 0, agent_submission_count: submittedCount, agent_missing_count: realMisses.length, missing_agents: missingAgentsForLog, dry_run: DRY_RUN, error: "no_recipients" }, { onConflict: "campaign_id,digest_date,digest_type" });
     return { campaign: campaignName, status: "no_recipients" };
   }
-  const logBase = { campaign_id: campaignId, digest_date: todayInTz, digest_type: "daily", recipient_count: recipients.length, agent_submission_count: agents.length - missingAgents.length, agent_missing_count: missingAgents.length, missing_agents: missingAgents.map((a) => ({ id: a.id, full_name: a.full_name })) };
-  const result = await sendAndLog(supabase, logBase, { to: recipients.map((r) => r.email), subject: `[EOD Digest] ${campaignName} \u2014 ${todayInTz}`, html: buildDailyHtml(campaignName, todayInTz, kpiFields, agents, eodLogs, tlNote) });
+  const logBase = { campaign_id: campaignId, digest_date: todayInTz, digest_type: "daily", recipient_count: recipients.length, agent_submission_count: submittedCount, agent_missing_count: realMisses.length, missing_agents: missingAgentsForLog };
+  const result = await sendAndLog(supabase, logBase, { to: recipients.map((r) => r.email), subject: `[EOD Digest] ${campaignName} \u2014 ${todayInTz}`, html: buildDailyHtml(campaignName, todayInTz, kpiFields, enriched, eodLogs, tlNote, coverage) });
   return { campaign: campaignName, ...result, dryRun: DRY_RUN };
 }
 
@@ -471,7 +714,7 @@ async function handleTestSend(
   req: Request,
   body: { campaign_id?: string; test_to_email?: string; date?: string },
 ): Promise<Response> {
-  const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS };
+  const jsonHeaders = { "Content-Type": "application/json", ...buildCorsHeaders(req) };
   const fail = (status: number, error: string) =>
     new Response(JSON.stringify({ error }), { status, headers: jsonHeaders });
 
@@ -537,7 +780,7 @@ async function handleTestSend(
 
   const [kpiRes, agentRes, eodRes, tlNoteRes] = await Promise.all([
     supabase.from("campaign_kpi_config").select("field_name, field_label, field_type, min_target").eq("campaign_id", campaignId).eq("is_active", true).order("display_order"),
-    supabase.from("employees").select("id, full_name, work_name").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
+    supabase.from("employees").select("id, full_name, work_name, is_system_user").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
     supabase.from("eod_logs").select("employee_id, metrics, notes, created_at, last_edited_at").eq("campaign_id", campaignId).eq("date", targetDate),
     supabase.from("campaign_eod_tl_notes").select("note").eq("campaign_id", campaignId).eq("date", targetDate).maybeSingle(),
   ]);
@@ -545,12 +788,18 @@ async function handleTestSend(
   if (fetchErr) return fail(500, `Failed to load campaign data: ${fetchErr.message}`);
 
   const kpiFields = (kpiRes.data ?? []) as KPIField[];
-  const agents = (agentRes.data ?? []) as Agent[];
+  // Filter out system users (partners/auditors) from the digest table.
+  const agents = ((agentRes.data ?? []) as (Agent & { is_system_user: boolean })[])
+    .filter((a) => !a.is_system_user) as Agent[];
   const eodLogs = (eodRes.data ?? []) as EODLog[];
   const tlNote = (tlNoteRes.data as { note: string | null } | null)?.note ?? null;
 
+  // Enrich with status + compute team coverage for the test email so it
+  // mirrors the real digest exactly.
+  const { enriched, coverage } = await enrichAgents(supabase, campaignId, agents, eodLogs, targetDate);
+
   // 4. Render + send (always real, regardless of DRY_RUN). Do NOT log.
-  const html = buildDailyHtml(camp.name, targetDate, kpiFields, agents, eodLogs, tlNote);
+  const html = buildDailyHtml(camp.name, targetDate, kpiFields, enriched, eodLogs, tlNote, coverage);
   const subject = `[TEST \u2014 EOD Digest] ${camp.name} \u2014 ${targetDate}`;
   try {
     const messageId = await sendViaGmail({ to: [recipient], subject, html });
@@ -575,7 +824,7 @@ async function handleManualFire(
   req: Request,
   body: { campaign_id?: string },
 ): Promise<Response> {
-  const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS };
+  const jsonHeaders = { "Content-Type": "application/json", ...buildCorsHeaders(req) };
   const fail = (status: number, error: string) =>
     new Response(JSON.stringify({ error }), { status, headers: jsonHeaders });
 
@@ -625,9 +874,11 @@ async function handleManualFire(
 // Main handler
 // ---------------------------------------------------------------------------
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+
   // CORS preflight — browsers send OPTIONS before the real POST.
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS_HEADERS });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   const body = await req.json().catch(() => ({})) as { type?: string; mode?: string; campaign_id?: string; test_to_email?: string; date?: string };
@@ -646,7 +897,7 @@ Deno.serve(async (req) => {
   // Cron mode: authenticated via x-cron-secret header.
   if (CRON_SECRET) {
     if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
   }
   const digestType = body.type === "morning_bundle" ? "morning_bundle" : "daily";
@@ -654,10 +905,10 @@ Deno.serve(async (req) => {
     const results = digestType === "morning_bundle"
       ? await handleMorningBundle(supabase)
       : await handleDailyDigest(supabase);
-    return new Response(JSON.stringify({ digestType, dryRun: DRY_RUN, results }), { status: 200, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+    return new Response(JSON.stringify({ digestType, dryRun: DRY_RUN, results }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Fatal error:", msg);
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 });
