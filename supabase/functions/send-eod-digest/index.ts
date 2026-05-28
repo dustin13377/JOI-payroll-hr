@@ -469,7 +469,7 @@ async function handleMorningBundle(supabase: SupabaseClient): Promise<DigestResu
 async function handleTestSend(
   supabase: SupabaseClient,
   req: Request,
-  body: { campaign_id?: string },
+  body: { campaign_id?: string; test_to_email?: string; date?: string },
 ): Promise<Response> {
   const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS };
   const fail = (status: number, error: string) =>
@@ -477,6 +477,16 @@ async function handleTestSend(
 
   const campaignId = body.campaign_id;
   if (!campaignId) return fail(400, "campaign_id is required for test mode");
+
+  // Optional overrides — let owners/admins/managers/TLs send a test using
+  // a past date's EOD data and route it to any email (useful for testing
+  // without polluting the auth login inbox or waiting for shift end).
+  if (body.test_to_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.test_to_email.trim())) {
+    return fail(400, `test_to_email '${body.test_to_email}' is not a valid email address`);
+  }
+  if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
+    return fail(400, `date '${body.date}' must be YYYY-MM-DD`);
+  }
 
   // 1. Verify JWT
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -510,8 +520,8 @@ async function handleTestSend(
     return fail(403, `Role '${role}' is not allowed to send test digests`);
   }
 
-  const userEmail = user.email;
-  if (!userEmail) return fail(400, "Your account has no email on file; cannot send test");
+  const recipient = body.test_to_email?.trim() || user.email;
+  if (!recipient) return fail(400, "No recipient email available (your account has no email and no test_to_email was provided)");
 
   // 3. Fetch campaign + today's data
   const { data: campaign, error: campErr } = await supabase
@@ -523,13 +533,13 @@ async function handleTestSend(
 
   const camp = campaign as Campaign;
   const tz = camp.eod_digest_timezone || "America/Denver";
-  const todayInTz = getTodayInTz(tz);
+  const targetDate = body.date || getTodayInTz(tz);
 
   const [kpiRes, agentRes, eodRes, tlNoteRes] = await Promise.all([
     supabase.from("campaign_kpi_config").select("field_name, field_label, field_type, min_target").eq("campaign_id", campaignId).eq("is_active", true).order("display_order"),
     supabase.from("employees").select("id, full_name, work_name").eq("campaign_id", campaignId).eq("is_active", true).order("full_name"),
-    supabase.from("eod_logs").select("employee_id, metrics, notes, created_at, last_edited_at").eq("campaign_id", campaignId).eq("date", todayInTz),
-    supabase.from("campaign_eod_tl_notes").select("note").eq("campaign_id", campaignId).eq("date", todayInTz).maybeSingle(),
+    supabase.from("eod_logs").select("employee_id, metrics, notes, created_at, last_edited_at").eq("campaign_id", campaignId).eq("date", targetDate),
+    supabase.from("campaign_eod_tl_notes").select("note").eq("campaign_id", campaignId).eq("date", targetDate).maybeSingle(),
   ]);
   const fetchErr = [kpiRes, agentRes, eodRes].find((r) => r.error)?.error;
   if (fetchErr) return fail(500, `Failed to load campaign data: ${fetchErr.message}`);
@@ -540,12 +550,12 @@ async function handleTestSend(
   const tlNote = (tlNoteRes.data as { note: string | null } | null)?.note ?? null;
 
   // 4. Render + send (always real, regardless of DRY_RUN). Do NOT log.
-  const html = buildDailyHtml(camp.name, todayInTz, kpiFields, agents, eodLogs, tlNote);
-  const subject = `[TEST \u2014 EOD Digest] ${camp.name} \u2014 ${todayInTz}`;
+  const html = buildDailyHtml(camp.name, targetDate, kpiFields, agents, eodLogs, tlNote);
+  const subject = `[TEST \u2014 EOD Digest] ${camp.name} \u2014 ${targetDate}`;
   try {
-    const messageId = await sendViaGmail({ to: [userEmail], subject, html });
+    const messageId = await sendViaGmail({ to: [recipient], subject, html });
     return new Response(
-      JSON.stringify({ mode: "test", sent_to: userEmail, message_id: messageId }),
+      JSON.stringify({ mode: "test", sent_to: recipient, date: targetDate, message_id: messageId, eod_count: eodLogs.length, agent_count: agents.length }),
       { status: 200, headers: jsonHeaders },
     );
   } catch (err) {
@@ -620,7 +630,7 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: CORS_HEADERS });
   }
 
-  const body = await req.json().catch(() => ({})) as { type?: string; mode?: string; campaign_id?: string };
+  const body = await req.json().catch(() => ({})) as { type?: string; mode?: string; campaign_id?: string; test_to_email?: string; date?: string };
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // Test-send mode: JWT-authenticated, bypasses cron secret.

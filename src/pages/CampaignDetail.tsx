@@ -173,6 +173,8 @@ export default function CampaignDetail() {
   const [digestReplyToError, setDigestReplyToError] = useState('');
   const [digestDirty, setDigestDirty] = useState(false);
   const [sendingTestDigest, setSendingTestDigest] = useState(false);
+  const [testDigestEmail, setTestDigestEmail] = useState('');
+  const [testDigestDate, setTestDigestDate] = useState('');
   const [sendingManualDigest, setSendingManualDigest] = useState(false);
 
   // Early Release state (manager+ only feature)
@@ -1251,19 +1253,45 @@ export default function CampaignDetail() {
             </Button>
           )}
           {(isLeadership || isTeamLead) && (
-            <div className="space-y-1 pt-2 border-t">
+            <div className="space-y-2 pt-2 border-t">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="test-digest-email" className="text-xs">Send to (optional)</Label>
+                  <Input
+                    id="test-digest-email"
+                    type="email"
+                    placeholder="defaults to your login email"
+                    value={testDigestEmail}
+                    onChange={(e) => setTestDigestEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="test-digest-date" className="text-xs">Date (optional)</Label>
+                  <Input
+                    id="test-digest-date"
+                    type="date"
+                    value={testDigestDate}
+                    onChange={(e) => setTestDigestDate(e.target.value)}
+                  />
+                </div>
+              </div>
               <Button
                 variant="outline"
                 disabled={sendingTestDigest}
                 onClick={async () => {
                   setSendingTestDigest(true);
                   try {
+                    const reqBody: Record<string, unknown> = { mode: 'test', campaign_id: id };
+                    if (testDigestEmail.trim()) reqBody.test_to_email = testDigestEmail.trim();
+                    if (testDigestDate) reqBody.date = testDigestDate;
                     const { data, error } = await supabase.functions.invoke('send-eod-digest', {
-                      body: { mode: 'test', campaign_id: id },
+                      body: reqBody,
                     });
                     if (error) throw error;
                     if (data?.error) throw new Error(data.error);
-                    toast.success(`Test digest sent to ${data.sent_to}`);
+                    toast.success(
+                      `Test digest sent to ${data.sent_to} for ${data.date} (${data.eod_count}/${data.agent_count} agents submitted)`,
+                    );
                   } catch (err: unknown) {
                     const msg = err instanceof Error ? err.message : 'Failed to send test digest';
                     toast.error(msg);
@@ -1275,7 +1303,7 @@ export default function CampaignDetail() {
                 {sendingTestDigest ? 'Sending...' : 'Send Test Digest'}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Sends a preview to your own email using today's data. Real recipients are not contacted. Ignores DRY_RUN.
+                Sends a preview to the address above (or your login if blank) using the chosen date's data (or today's if blank). Real recipients are not contacted. Ignores DRY_RUN. Does not log to <code>eod_digest_log</code>, so fire it as often as you want.
               </p>
             </div>
           )}
