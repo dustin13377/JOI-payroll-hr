@@ -563,6 +563,25 @@ export default function CampaignDetail() {
     onSuccess: invalidateRecipients,
   });
 
+  // Auto-saves the include-agents flag on toggle. Matches the recipients UX
+  // pattern (no separate Save button — flip it and it persists).
+  const toggleIncludeAgentsMutation = useMutation({
+    mutationFn: async (val: boolean) => {
+      const { error } = await supabase
+        .from('campaigns')
+        .update({ include_agents_in_eod_digest: val })
+        .eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateCampaign();
+      toast.success('Saved');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update');
+    },
+  });
+
   const deleteRecipientMutation = useMutation({
     mutationFn: async (recipientId: string) => {
       const { error } = await supabase
@@ -648,7 +667,6 @@ export default function CampaignDetail() {
           eod_morning_bundle_time: digestMorningBundle || null,
           eod_digest_timezone: digestTimezone,
           eod_reply_to_email: digestReplyTo.trim() || null,
-          include_agents_in_eod_digest: includeAgentsInDigest,
         })
         .eq('id', id!);
       if (error) throw error;
@@ -1088,7 +1106,26 @@ export default function CampaignDetail() {
             Add Recipient
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 px-4 py-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="include-agents-toggle" className="cursor-pointer">
+                Include campaign agents automatically
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                When on, every active employee on this campaign (excluding system users) is added to the digest To: line on top of the manual recipients below. Lets clients use Reply All to reach the whole team.
+              </p>
+            </div>
+            <Switch
+              id="include-agents-toggle"
+              checked={includeAgentsInDigest}
+              disabled={toggleIncludeAgentsMutation.isPending}
+              onCheckedChange={(v) => {
+                setIncludeAgentsInDigest(v);
+                toggleIncludeAgentsMutation.mutate(v);
+              }}
+            />
+          </div>
           {recipients.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
               No recipients configured — digest will not send until at least one active recipient is added.
@@ -1249,26 +1286,6 @@ export default function CampaignDetail() {
             {digestReplyToError && (
               <p className="text-sm text-destructive">{digestReplyToError}</p>
             )}
-          </div>
-          <div className="space-y-1 pt-2 border-t">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="include-agents-toggle" className="cursor-pointer">
-                  Include campaign agents in digest recipients
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When on, every active employee on this campaign (excluding system users) is added to the digest To: line on top of the manual recipients below. Lets clients like Cameron use Reply All to reach the whole team.
-                </p>
-              </div>
-              <Switch
-                id="include-agents-toggle"
-                checked={includeAgentsInDigest}
-                onCheckedChange={(v) => {
-                  setIncludeAgentsInDigest(v);
-                  setDigestDirty(true);
-                }}
-              />
-            </div>
           </div>
           {digestDirty && (
             <Button onClick={handleSaveDigest} disabled={saveDigestMutation.isPending}>
