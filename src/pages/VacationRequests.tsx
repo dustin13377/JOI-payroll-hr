@@ -64,7 +64,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function VacationRequests() {
-  const { employeeId } = useAuth();
+  const { employeeId, isLeadership } = useAuth();
   const [requestType, setRequestType] = useState<TimeOffRequestType>("vacation");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -150,7 +150,26 @@ export default function VacationRequests() {
         </p>
       </div>
 
-      {/* Balance card — only meaningful for tenured employees */}
+      {/* Balance card — hidden for non-leadership until historical used_days
+          is backfilled. Agents/TLs would see inflated "available" numbers
+          because pre-system vacation isn't tracked in vacation_requests yet.
+          They can still submit; the balance just isn't displayed.
+          Toggle: when historical data is in, remove the isLeadership gate. */}
+      {!isLeadership && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">
+              Vacation balances are being reconciled with historical records.
+              <br />
+              <span className="text-foreground">
+                Confirm your available days with HR before submitting a Vacation request.
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLeadership && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -201,6 +220,7 @@ export default function VacationRequests() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Request form */}
       <Card>
