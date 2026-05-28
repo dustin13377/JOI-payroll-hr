@@ -48,12 +48,25 @@ const APP_DOMAIN = Deno.env.get("APP_DOMAIN") ?? (() => { throw new Error("APP_D
 // supabase.functions.invoke) require these headers. pg_cron never does
 // a preflight so CORS is a no-op for the cron path.
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it";
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Parse ALLOWED_ORIGIN as a comma-separated allow-list. The browser only
+// accepts ONE value in the Access-Control-Allow-Origin response header, so
+// we echo back whichever origin in the list matches the request — falling
+// back to the first entry if the caller's origin isn't recognized.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") ?? "https://app.justoutsource.it")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const reqOrigin = req.headers.get("Origin") ?? "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -471,7 +484,7 @@ async function handleTestSend(
   req: Request,
   body: { campaign_id?: string; test_to_email?: string; date?: string },
 ): Promise<Response> {
-  const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS };
+  const jsonHeaders = { "Content-Type": "application/json", ...buildCorsHeaders(req) };
   const fail = (status: number, error: string) =>
     new Response(JSON.stringify({ error }), { status, headers: jsonHeaders });
 
@@ -575,7 +588,7 @@ async function handleManualFire(
   req: Request,
   body: { campaign_id?: string },
 ): Promise<Response> {
-  const jsonHeaders = { "Content-Type": "application/json", ...CORS_HEADERS };
+  const jsonHeaders = { "Content-Type": "application/json", ...buildCorsHeaders(req) };
   const fail = (status: number, error: string) =>
     new Response(JSON.stringify({ error }), { status, headers: jsonHeaders });
 
@@ -625,9 +638,11 @@ async function handleManualFire(
 // Main handler
 // ---------------------------------------------------------------------------
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+
   // CORS preflight — browsers send OPTIONS before the real POST.
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS_HEADERS });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   const body = await req.json().catch(() => ({})) as { type?: string; mode?: string; campaign_id?: string; test_to_email?: string; date?: string };
@@ -646,7 +661,7 @@ Deno.serve(async (req) => {
   // Cron mode: authenticated via x-cron-secret header.
   if (CRON_SECRET) {
     if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
   }
   const digestType = body.type === "morning_bundle" ? "morning_bundle" : "daily";
@@ -654,10 +669,10 @@ Deno.serve(async (req) => {
     const results = digestType === "morning_bundle"
       ? await handleMorningBundle(supabase)
       : await handleDailyDigest(supabase);
-    return new Response(JSON.stringify({ digestType, dryRun: DRY_RUN, results }), { status: 200, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+    return new Response(JSON.stringify({ digestType, dryRun: DRY_RUN, results }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Fatal error:", msg);
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 });
