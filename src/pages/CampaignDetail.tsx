@@ -214,11 +214,11 @@ export default function CampaignDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('campaigns')
-        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, early_release_enabled, early_release_criteria, clients(id, name, prefix)')
+        .select('id, name, client_id, team_lead_id, eod_digest_cutoff_time, eod_morning_bundle_time, eod_digest_timezone, eod_reply_to_email, requires_holiday_coverage, early_release_enabled, early_release_criteria, include_agents_in_eod_digest, clients(id, name, prefix)')
         .eq('id', id!)
         .single();
       if (error) throw error;
-      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; early_release_enabled: boolean; early_release_criteria: string | null; clients: { id: string; name: string; prefix: string } | null };
+      return data as { id: string; name: string; client_id: string; team_lead_id: string | null; eod_digest_cutoff_time: string | null; eod_morning_bundle_time: string | null; eod_digest_timezone: string; eod_reply_to_email: string | null; requires_holiday_coverage: boolean; early_release_enabled: boolean; early_release_criteria: string | null; include_agents_in_eod_digest: boolean; clients: { id: string; name: string; prefix: string } | null };
     },
     enabled: !!id,
   });
