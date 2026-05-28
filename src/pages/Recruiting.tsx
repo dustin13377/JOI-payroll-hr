@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useCandidates } from "@/hooks/useRecruiting";
 import { CandidateTable } from "@/components/recruiting/CandidateTable";
+import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
 
 export default function Recruiting() {
   const { data: candidates = [], isLoading, error } = useCandidates();
@@ -23,12 +24,7 @@ export default function Recruiting() {
 
       <CandidateTable candidates={candidates} onRowClick={setSelectedId} />
 
-      {/* Drawer renders here in Task 12 — placeholder for now */}
-      {selectedId && (
-        <div className="text-sm text-muted-foreground">
-          (Drawer for {selectedId} — added in next task)
-        </div>
-      )}
+      <CandidateDrawer candidateId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
   );
 }
