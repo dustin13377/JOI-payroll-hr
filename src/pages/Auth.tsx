@@ -4,6 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 // Note: Self-service signup is intentionally disabled. JOI is invite-only —
@@ -12,30 +22,72 @@ import { toast } from "sonner";
 // (defense-in-depth: even if Supabase Auth signups are accidentally re-enabled
 // at the project level, the UI no longer exposes a way to use them).
 
+// Personal email domains we soft-warn on during password reset. The reset link
+// only works for the email on file in JOI (the user's work email), so sending
+// to a personal address is almost always a user mistake. Added 2026-05-29
+// after Osbaldo tried resetting via his gmail.
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.com.mx",
+  "ymail.com",
+  "icloud.com",
+  "me.com",
+  "aol.com",
+  "protonmail.com",
+  "proton.me",
+]);
+
+function looksPersonal(email: string): boolean {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  return PERSONAL_EMAIL_DOMAINS.has(email.slice(at + 1).trim().toLowerCase());
+}
+
 export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [showPersonalEmailWarning, setShowPersonalEmailWarning] = useState(false);
+
+  // Actually fires the reset request. Pulled out so the AlertDialog confirm
+  // can call it after the user acknowledges the warning.
+  const sendReset = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Check your email to reset your password");
+      setShowReset(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
     if (showReset) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      setLoading(false);
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Check your email to reset your password");
-        setShowReset(false);
+      // Soft-warn before sending to a personal-looking domain. User can still
+      // proceed (some legacy accounts use personal addresses), but most of the
+      // time this catches the wrong-email mistake.
+      if (looksPersonal(email)) {
+        setShowPersonalEmailWarning(true);
+        return;
       }
+      await sendReset();
       return;
     }
 
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) toast.error("Invalid credentials");
     setLoading(false);
@@ -53,7 +105,7 @@ export default function Auth() {
           </CardTitle>
           <CardDescription>
             {showReset
-              ? "Enter your email to receive a reset link"
+              ? "Enter your work email to receive a reset link"
               : "Payroll & HR Management System"}
           </CardDescription>
         </CardHeader>
@@ -64,12 +116,19 @@ export default function Auth() {
               <Input
                 id="email"
                 type="email"
-                placeholder="email@example.com"
+                placeholder={showReset ? "you@company.com" : "email@example.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="username"
               />
+              {showReset && (
+                <p className="text-xs text-muted-foreground">
+                  Use your <strong>work email</strong> — the one you sign in with.
+                  Reset links can't be sent to Gmail, Hotmail, Yahoo, or other
+                  personal addresses.
+                </p>
+              )}
             </div>
             {!showReset && (
               <div className="space-y-2">
@@ -116,6 +175,39 @@ export default function Auth() {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={showPersonalEmailWarning}
+        onOpenChange={setShowPersonalEmailWarning}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Looks like a personal email</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{email}</strong> looks like a personal email address.
+              The reset link will only work if you enter the <strong>work email</strong> you
+              use to sign in to JOI (usually ending in your company's domain,
+              like <code>@hfbtech.com</code>, <code>@torro.com</code>, or
+              <code> @justoutsource.it</code>).
+              <br />
+              <br />
+              If you're not sure what your work email is, ask your team lead
+              or HR.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Let me change it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setShowPersonalEmailWarning(false);
+                await sendReset();
+              }}
+            >
+              Send it anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

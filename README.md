@@ -34,3 +34,4 @@ cp .env.example .env
 ## Further reading
 
 See [HANDOFF.md](./HANDOFF.md) for architecture details, database migrations, and deployment notes.
+- **Recruiting** — see [`docs/recruiting-mvp-handoff.md`](docs/recruiting-mvp-handoff.md)
