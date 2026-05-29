@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Clock, AlertTriangle, UserCheck, UserX, Pencil } from "lucide-react";
+import { Clock, AlertTriangle, UserCheck, UserX, Pencil, CalendarOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditPunchDialog } from "@/components/EditPunchDialog";
 import { useQuery } from "@tanstack/react-query";
@@ -33,13 +33,19 @@ interface AttendanceRecord {
   created_at: string;
 }
 
+type DayOffReason = "scheduled_off" | "vacation" | "sick" | "personal" | "time_off";
+
 interface EmployeeWithAttendance {
   id: string;
   employee_id: string;
   name: string;
   campaign_id: string;
   campaign_name: string;
-  status: "presente" | "ausente" | "completado";
+  // "day_off" = scheduled off today (campaign's shift days don't include today)
+  // OR on an approved vacation/sick/personal/time-off request covering today.
+  // Distinct from "ausente" which is "scheduled to work and didn't punch."
+  status: "presente" | "ausente" | "completado" | "day_off";
+  day_off_reason: DayOffReason | null;
   clock_in: string | null;
   clock_out: string | null;
   is_late: boolean;
@@ -50,6 +56,7 @@ interface EmployeeWithAttendance {
 interface OverviewStats {
   presentes: number;
   ausentes: number;
+  day_off: number;
   tardanzas_hoy: number;
   tardanzas_repetidas: number;
 }
@@ -130,29 +137,86 @@ export default function Attendance() {
 
       if (timeClockError) throw timeClockError;
 
-      // Fetch employees scoped by role
-      // TLs use the employees_no_pay view (no sensitive columns, row-scoped internally)
-      const table = (isTeamLead && !isLeadership) ? "employees_no_pay" : "employees";
-      let employeesQuery = supabase
-        .from(table)
-        .select("id, employee_id, full_name, work_name, campaign_id")
-        .eq("is_active", true);
+      // Fetch employees scoped by role.
+      //
+      // - Leadership view: query `employees` directly and explicitly
+      //   exclude owners + system users (they never punch a clock; counting
+      //   them as Absent is pure noise). Half-onboarded hires with no
+      //   campaign DO still appear so they surface as a problem.
+      // - TL view: query the `employees_no_pay` view (no sensitive cols)
+      //   and scope via my_team_member_ids() — that helper already returns
+      //   only agents the TL is responsible for, so no owner/system-user
+      //   pollution is possible.
+      //
+      // The two branches are separate query builders because the view
+      // doesn't expose `title` or `is_system_user`, so Supabase's generated
+      // types reject those filters on the view.
+      let employees: any[] | null = null;
+      let employeesError: any = null;
 
-      // For TLs, scope to the union helper my_team_member_ids() — covers
-      // both direct reports and agents in campaigns the TL leads via
-      // team_lead_campaigns. The old `.eq("reports_to", employeeId)`
-      // returned 0 rows for cross-campaign TLs like Adrian.
       if (isTeamLead && !isLeadership && employeeId) {
         const { data: ids, error: idsErr } = await supabase.rpc("my_team_member_ids");
         if (idsErr) throw idsErr;
         const list = (ids ?? []) as string[];
         if (list.length === 0) return [];
-        employeesQuery = employeesQuery.in("id", list);
+        const res = await supabase
+          .from("employees_no_pay")
+          .select("id, employee_id, full_name, work_name, campaign_id")
+          .eq("is_active", true)
+          .in("id", list);
+        employees = res.data;
+        employeesError = res.error;
+      } else {
+        const res = await supabase
+          .from("employees")
+          .select("id, employee_id, full_name, work_name, campaign_id, title, is_system_user")
+          .eq("is_active", true)
+          .neq("title", "owner")
+          .eq("is_system_user", false);
+        employees = res.data;
+        employeesError = res.error;
       }
 
-      const { data: employees, error: employeesError } = await employeesQuery;
-
       if (employeesError) throw employeesError;
+      if (!employees) employees = [];
+
+      // Pull each campaign's shift definition so we can tell who's
+      // *scheduled* to work today vs. on a scheduled-off day. days_of_week
+      // is a Postgres int[] where 0=Sunday … 6=Saturday — same convention
+      // JS Date.getDay() uses, so we can compare directly.
+      const { data: shiftSettings, error: shiftErr } = await supabase
+        .from("shift_settings")
+        .select("campaign_id, days_of_week");
+      if (shiftErr) throw shiftErr;
+      const shiftByCampaign = new Map<string, number[]>();
+      (shiftSettings ?? []).forEach((s: { campaign_id: string; days_of_week: number[] | null }) => {
+        if (s.days_of_week && s.days_of_week.length > 0) {
+          shiftByCampaign.set(s.campaign_id, s.days_of_week);
+        }
+      });
+      const todayDow = new Date().getDay();
+
+      // Pull approved time off covering today. If an employee is on
+      // approved leave today, they belong in the Day Off bucket no matter
+      // what their shift says (e.g., they took PTO on a regular workday).
+      const { data: timeOffToday, error: toErr } = await supabase
+        .from("vacation_requests")
+        .select("employee_id, request_type")
+        .eq("status", "approved")
+        .lte("start_date", todayStr)
+        .gte("end_date", todayStr);
+      if (toErr) throw toErr;
+      const onLeaveToday = new Map<string, DayOffReason>();
+      (timeOffToday ?? []).forEach((r: { employee_id: string; request_type: string | null }) => {
+        // Normalize whatever request_type the row carries (vacation, sick,
+        // personal, time_off, etc.) into our DayOffReason union; unknown
+        // values fall back to generic "time_off".
+        const known: DayOffReason[] = ["vacation", "sick", "personal", "time_off"];
+        const reason = (known as string[]).includes(r.request_type ?? "")
+          ? (r.request_type as DayOffReason)
+          : "time_off";
+        onLeaveToday.set(r.employee_id, reason);
+      });
 
       // Fetch clients for campaign names
       const { data: campaignsList, error: campaignsError } = await supabase
@@ -192,19 +256,50 @@ export default function Attendance() {
         attendanceMap.set(record.employee_id, record);
       });
 
-      // Build employee list with attendance status
+      // Build employee list with attendance status.
+      //
+      // Status precedence (highest wins):
+      //   completado   — clocked in AND out (already worked today)
+      //   presente     — clocked in but not out (currently working)
+      //   day_off      — approved time off, OR campaign shift doesn't
+      //                  include today's day-of-week
+      //   ausente      — scheduled to work today, no clock-in yet
+      //
+      // Day-off reason: vacation/sick/personal/time_off come from the
+      // approved request. scheduled_off is the "today isn't your day"
+      // case (e.g., MCA's 3x12 weekend rotation, or a Mon–Fri agent
+      // showing up here on Saturday).
       const employeeList: EmployeeWithAttendance[] = employees.map(
         (emp: any) => {
           const attendance = attendanceMap.get(emp.id);
           const campaignName = campaignMap.get(emp.campaign_id) || "Unknown";
           const isRepeatLate = (lateCountMap.get(emp.id) || 0) > 1;
 
-          let status: "presente" | "ausente" | "completado" = "ausente";
-          if (attendance) {
-            if (attendance.clock_out) {
-              status = "completado";
-            } else if (attendance.clock_in) {
-              status = "presente";
+          let status: "presente" | "ausente" | "completado" | "day_off" = "ausente";
+          let day_off_reason: DayOffReason | null = null;
+
+          if (attendance?.clock_out) {
+            status = "completado";
+          } else if (attendance?.clock_in) {
+            status = "presente";
+          } else {
+            // Not clocked in — could be Day Off or actually Absent.
+            const leaveReason = onLeaveToday.get(emp.id);
+            if (leaveReason) {
+              status = "day_off";
+              day_off_reason = leaveReason;
+            } else {
+              // Check campaign shift. If no shift_settings row exists
+              // we fall back to "scheduled today" (matches the TL roster
+              // default) so half-configured campaigns surface as Absent
+              // rather than silently hiding.
+              const shiftDays = emp.campaign_id ? shiftByCampaign.get(emp.campaign_id) : undefined;
+              const scheduledToday = !shiftDays || shiftDays.includes(todayDow);
+              if (!scheduledToday) {
+                status = "day_off";
+                day_off_reason = "scheduled_off";
+              }
+              // else status stays "ausente"
             }
           }
 
@@ -215,6 +310,7 @@ export default function Attendance() {
             campaign_id: emp.campaign_id,
             campaign_name: campaignName,
             status,
+            day_off_reason,
             clock_in: attendance?.clock_in || null,
             clock_out: attendance?.clock_out || null,
             is_late: attendance?.is_late || false,
@@ -233,6 +329,7 @@ export default function Attendance() {
   const stats: OverviewStats = {
     presentes: attendanceData?.filter((e) => e.status === "presente").length || 0,
     ausentes: attendanceData?.filter((e) => e.status === "ausente").length || 0,
+    day_off: attendanceData?.filter((e) => e.status === "day_off").length || 0,
     tardanzas_hoy: attendanceData?.filter((e) => e.is_late).length || 0,
     tardanzas_repetidas: attendanceData?.filter((e) => e.is_repeat_late).length || 0,
   };
@@ -243,11 +340,25 @@ export default function Attendance() {
     return emp.campaign_id === selectedCampaign;
   });
 
-  // Sort: clocked in first, then absent, then completed
+  // Sort: Absent first (action needed) → Present → Completed → Day Off
+  // (informational, drops to the bottom so it doesn't clutter the top
+  // of the list).
   const sortedData = filteredData?.sort((a, b) => {
-    const statusOrder = { presente: 0, ausente: 1, completado: 2 };
+    const statusOrder = { ausente: 0, presente: 1, completado: 2, day_off: 3 };
     return statusOrder[a.status] - statusOrder[b.status];
   });
+
+  // Friendly label for the day-off badge in the table.
+  const dayOffLabel = (reason: DayOffReason | null): string => {
+    switch (reason) {
+      case "vacation":   return "Vacation";
+      case "sick":       return "Sick";
+      case "personal":   return "Personal";
+      case "time_off":   return "Time off";
+      case "scheduled_off": return "Day off";
+      default:           return "Day off";
+    }
+  };
 
   const formatTime = (isoString: string | null) => {
     if (!isoString) return "-";
@@ -276,7 +387,7 @@ export default function Attendance() {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* Presentes */}
         <Card className="border-green-200 bg-green-50">
           <CardHeader className="pb-3">
@@ -290,7 +401,7 @@ export default function Attendance() {
           </CardContent>
         </Card>
 
-        {/* Ausentes */}
+        {/* Ausentes — true no-shows: scheduled today, no clock-in */}
         <Card className="border-red-200 bg-red-50">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base text-red-900">
@@ -300,6 +411,19 @@ export default function Attendance() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-red-700">{stats.ausentes}</p>
+          </CardContent>
+        </Card>
+
+        {/* Day Off — scheduled-off or approved time off; informational */}
+        <Card className="border-slate-200 bg-slate-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-slate-700">
+              <CalendarOff className="h-4 w-4" />
+              Day Off
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-slate-600">{stats.day_off}</p>
           </CardContent>
         </Card>
 
@@ -395,11 +519,19 @@ export default function Attendance() {
                           </Badge>
                         )}
                         {employee.status === "ausente" && (
-                          <Badge variant="secondary">Absent</Badge>
+                          // Bumped from secondary (gray) → destructive (red)
+                          // since Absent now means "scheduled and didn't
+                          // punch" — that's action-needed, not just a state.
+                          <Badge variant="destructive">Absent</Badge>
                         )}
                         {employee.status === "completado" && (
                           <Badge className="bg-blue-600 hover:bg-blue-700">
                             Completed
+                          </Badge>
+                        )}
+                        {employee.status === "day_off" && (
+                          <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                            {dayOffLabel(employee.day_off_reason)}
                           </Badge>
                         )}
                       </TableCell>
