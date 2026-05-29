@@ -1,0 +1,167 @@
+<html>
+	<head>
+		<title>New Application - Job Application - JOI</title>
+	</head>
+	<body>
+		<table width="99%" border="0" cellpadding="1" cellspacing="0" bgcolor="#EAEAEA"><tr><td>
+                            <table width="100%" border="0" cellpadding="5" cellspacing="0" bgcolor="#FFFFFF">
+                            <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>FIRST NAME</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">Jose Guadalupe</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>LAST NAME</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">Tejeda Palacios</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>CURP</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">TEPG910127HJCJLD04</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>CURRICULUM VITAE</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;"><ul><li><a href='https://justoutsource.it/index.php?gf-download=2026%2F05%2Finbound8675775207381710501.pdf&amp;form-id=4&amp;field-id=4&amp;entry-id=47&amp;hash=df6102993b09e4752e28f692073f013f0d3fc464d1fd284871c6bd9443fc08db' target='_blank' aria-label='Click to view'>inbound8675775207381710501.pdf</a></li></ul></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>POSITION YOU ARE APPLYING FOR</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">Open</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>WHATSAPP NUMBER</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">6674241679</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>LAST COMPANY YOU WORKED FOR</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">XO LATEM</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>LENGTH OF EMPLOYMENT</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">1 month</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>REASON FOR LEAVING</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">My kids mom passed away.</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>COMMUTE TIME</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">45 mins</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>SALARY EXPECTATION</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">18 plus</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>AVAILABLE START DATE</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">05/30/2026</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>ENGLISH LEVEL</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;">Native</font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#EAF2FA">
+		                                    <td colspan="2">
+		                                        <font style="font-family: sans-serif; font-size:12px;"><strong>PRESENTATION</strong></font>
+		                                    </td>
+		                               </tr>
+		                               <tr bgcolor="#FFFFFF">
+		                                    <td width="20">&nbsp;</td>
+		                                    <td>
+		                                        <font style="font-family: sans-serif; font-size:12px;"><ul><li><a href='https://justoutsource.it/index.php?gf-download=2026%2F05%2Finbound4890886575758467428.mp3&amp;form-id=4&amp;field-id=16&amp;entry-id=47&amp;hash=b13676b42185ffee1549724d4f4a61919cba3336bf19c24186129ec78ab0dc00' target='_blank' aria-label='Click to view'>inbound4890886575758467428.mp3</a></li></ul></font>
+		                                    </td>
+		                               </tr>
+		                               </table>
+                        </td>
+                   </tr>
+               </table>
+	</body>
+</html>
