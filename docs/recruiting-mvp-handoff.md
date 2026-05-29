@@ -1,7 +1,7 @@
 # Recruiting Module — MVP Handoff
 
-**Shipped:** 2026-05-28
-**Branch:** `feature/recruiting-mvp`
+**Shipped:** 2026-05-29 (end-to-end verified with a live form submission)
+**Branch:** merged from `feature/recruiting-mvp` to `main`
 **Sidebar entry:** Recruiting (Leadership only) → `/recruiting`
 
 ## What it does
@@ -50,10 +50,12 @@ This is actually closer to what the form contract promises (applicant filled in 
 | Item | Where | Notes |
 |---|---|---|
 | Supabase project | `jpaihltkrohdqkqlbqkf` | Shared with the rest of the JOI HR app |
-| Postmark inbound address | `<hash>@inbound.postmarkapp.com` | Set during pre-flight; stored in macOS Keychain |
-| Postmark inbound webhook URL | `https://jpaihltkrohdqkqlbqkf.supabase.co/functions/v1/inbound-application?secret=<POSTMARK_INBOUND_SECRET>` | Configure in Postmark server's Inbound Stream settings |
-| Gmail filter | In `humanresources@justoutsource.it` Gmail | "From: mail@justoutsource.it" → Forward to Postmark inbound address |
-| Edge Function secret | `POSTMARK_INBOUND_SECRET` in Supabase secrets | Set via Supabase dashboard or `supabase secrets set` |
+| Postmark account | `JOIHR` username, login at account.postmarkapp.com | One server, free tier (1k/mo) |
+| Postmark inbound address | `6b3f24694de13aca5152d4a02e5657a9@inbound.postmarkapp.com` | Stable for this server |
+| Postmark inbound webhook URL | `https://jpaihltkrohdqkqlbqkf.supabase.co/functions/v1/inbound-application?secret=<POSTMARK_INBOUND_SECRET>` | Configured in Postmark server's Inbound Stream settings |
+| Gmail filter | In `humanresources@justoutsource.it` Gmail | "From: mail@justoutsource.it" → Apply label "Applicants" + Forward to Postmark inbound address |
+| Edge Function secret | `POSTMARK_INBOUND_SECRET` in Supabase secrets | 64-char hex value, also mirrored in macOS Keychain (`security find-generic-password -a apex -s POSTMARK_INBOUND_SECRET -w`) |
+| Backlog | 13 historical applications in HR's inbox labeled "Applicants" but NOT forwarded to Postmark | Gmail does not replay forwarding retroactively. Use `scripts/backfill-recruiting-candidates.ts` if you want them in the pipeline. |
 
 ### Secrets
 
