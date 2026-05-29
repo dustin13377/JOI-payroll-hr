@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, AlertTriangle, UserCheck, UserX, Pencil, CalendarOff } from "lucide-react";
+import { Clock, AlertTriangle, UserCheck, UserX, Pencil, CalendarOff, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditPunchDialog } from "@/components/EditPunchDialog";
 import { useQuery } from "@tanstack/react-query";
@@ -73,6 +73,41 @@ export default function Attendance() {
     clock_in: string | null;
     clock_out: string | null;
   } | null>(null);
+
+  // Sortable column state. null column = default sort (present → absent → completed).
+  // Clicking a header cycles: asc → desc → back to default.
+  type SortKey = "name" | "campaign_name" | "status" | "clock_in" | "clock_out" | "hours" | "late_minutes";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      setSortKey(null);
+      setSortDir("asc");
+    }
+  };
+
+  const SortHeader = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => {
+    const active = sortKey === k;
+    const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <TableHead className={className}>
+        <button
+          type="button"
+          onClick={() => toggleSort(k)}
+          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        >
+          {label}
+          <Icon className={`h-3.5 w-3.5 ${active ? "opacity-100" : "opacity-40"}`} />
+        </button>
+      </TableHead>
+    );
+  };
 
   // Check authorization
   if (role === "agent") {
@@ -340,13 +375,36 @@ export default function Attendance() {
     return emp.campaign_id === selectedCampaign;
   });
 
-  // Sort: Absent first (action needed) → Present → Completed → Day Off
-  // (informational, drops to the bottom so it doesn't clutter the top
-  // of the list).
-  const sortedData = filteredData?.sort((a, b) => {
-    const statusOrder = { ausente: 0, presente: 1, completado: 2, day_off: 3 };
-    return statusOrder[a.status] - statusOrder[b.status];
-  });
+  // Default sort (no column selected): Absent first (action needed) → Present
+  // → Completed → Day Off (informational, bottom of list).
+  // When a header is clicked: that column drives the order; nulls sort last.
+  const statusOrder = { ausente: 0, presente: 1, completado: 2, day_off: 3 } as const;
+  const hoursValue = (e: EmployeeWithAttendance) => {
+    if (!e.clock_in || !e.clock_out) return null;
+    return new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime();
+  };
+  const sortedData = filteredData ? [...filteredData].sort((a, b) => {
+    if (!sortKey) return statusOrder[a.status] - statusOrder[b.status];
+    const dir = sortDir === "asc" ? 1 : -1;
+    let av: string | number | null;
+    let bv: string | number | null;
+    switch (sortKey) {
+      case "name":          av = a.name.toLowerCase();           bv = b.name.toLowerCase(); break;
+      case "campaign_name": av = a.campaign_name.toLowerCase();  bv = b.campaign_name.toLowerCase(); break;
+      case "status":        av = statusOrder[a.status];          bv = statusOrder[b.status]; break;
+      case "clock_in":      av = a.clock_in  ? new Date(a.clock_in).getTime()  : null; bv = b.clock_in  ? new Date(b.clock_in).getTime()  : null; break;
+      case "clock_out":     av = a.clock_out ? new Date(a.clock_out).getTime() : null; bv = b.clock_out ? new Date(b.clock_out).getTime() : null; break;
+      case "hours":         av = hoursValue(a);                  bv = hoursValue(b); break;
+      case "late_minutes":  av = a.is_late ? (a.late_minutes ?? 0) : null; bv = b.is_late ? (b.late_minutes ?? 0) : null; break;
+    }
+    // Nulls always sort last, regardless of direction
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
+  }) : undefined;
 
   // Friendly label for the day-off badge in the table.
   const dayOffLabel = (reason: DayOffReason | null): string => {
@@ -485,13 +543,13 @@ export default function Attendance() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Clock In</TableHead>
-                  <TableHead>Clock Out</TableHead>
-                  <TableHead>Hours</TableHead>
-                  <TableHead>Late By</TableHead>
+                  <SortHeader k="name"          label="Name" />
+                  <SortHeader k="campaign_name" label="Campaign" />
+                  <SortHeader k="status"        label="Status" />
+                  <SortHeader k="clock_in"      label="Clock In" />
+                  <SortHeader k="clock_out"     label="Clock Out" />
+                  <SortHeader k="hours"         label="Hours" />
+                  <SortHeader k="late_minutes"  label="Late By" />
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
