@@ -24,6 +24,7 @@ import Attendance from "@/pages/Attendance";
 import Performance from "@/pages/Performance";
 import ShiftSettings from "@/pages/ShiftSettings";
 import Campaigns from "@/pages/Campaigns";
+import Recruiting from "@/pages/Recruiting";
 import CampaignDetail from "@/pages/CampaignDetail";
 import PayrollRun from "@/pages/PayrollRun";
 import TeamLeadHome from "@/pages/TeamLeadHome";
@@ -157,6 +158,7 @@ const App = () => (
                     <Route path="/reviews" element={<RequireTeamLeadOrAbove><AgentReviews /></RequireTeamLeadOrAbove>} />
                     <Route path="/settings/shifts" element={<RequireTeamLeadOrAbove><ShiftSettings /></RequireTeamLeadOrAbove>} />
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
+                    <Route path="/recruiting" element={<RequireLeadership><Recruiting /></RequireLeadership>} />
                     <Route path="/campaigns/:id" element={<RequireLeadership><CampaignDetail /></RequireLeadership>} />
                     <Route path="/payroll-run" element={<RequireLeadership><PayrollRun /></RequireLeadership>} />
                     <Route path="/settings/document-types" element={<RequireLeadership><DocumentTypes /></RequireLeadership>} />

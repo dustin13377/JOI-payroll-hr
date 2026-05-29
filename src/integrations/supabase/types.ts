@@ -14,6 +14,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      _legacy_time_off_requests: {
+        Row: {
+          created_at: string | null
+          employee_id: string
+          end_date: string
+          id: string
+          notes: string | null
+          reason: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          employee_id: string
+          end_date: string
+          id?: string
+          notes?: string | null
+          reason: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          employee_id?: string
+          end_date?: string
+          id?: string
+          notes?: string | null
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_off_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_off_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_off_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       actas_administrativas: {
         Row: {
           company_legal_address_snapshot: string | null
@@ -531,6 +592,258 @@ export type Database = {
           },
         ]
       }
+      bulletin_acks: {
+        Row: {
+          acked_at: string
+          employee_id: string
+          id: string
+          post_id: string
+        }
+        Insert: {
+          acked_at?: string
+          employee_id: string
+          id?: string
+          post_id: string
+        }
+        Update: {
+          acked_at?: string
+          employee_id?: string
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulletin_acks_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_acks_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_acks_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_acks_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "bulletin_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulletin_posts: {
+        Row: {
+          author_id: string | null
+          body: string
+          campaign_id: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_published: boolean
+          published_at: string | null
+          recognized_employee_id: string | null
+          requires_ack: boolean
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body?: string
+          campaign_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          recognized_employee_id?: string | null
+          requires_ack?: boolean
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          campaign_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          recognized_employee_id?: string | null
+          requires_ack?: boolean
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulletin_posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_recognized_employee_id_fkey"
+            columns: ["recognized_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_recognized_employee_id_fkey"
+            columns: ["recognized_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_recognized_employee_id_fkey"
+            columns: ["recognized_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulletin_questions: {
+        Row: {
+          created_at: string
+          id: string
+          options: Json | null
+          post_id: string
+          question_text: string
+          sort_order: number
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          options?: Json | null
+          post_id: string
+          question_text: string
+          sort_order?: number
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          options?: Json | null
+          post_id?: string
+          question_text?: string
+          sort_order?: number
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulletin_questions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "bulletin_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulletin_responses: {
+        Row: {
+          answer_option: string | null
+          answer_text: string | null
+          created_at: string
+          id: string
+          post_id: string
+          question_id: string
+          respondent_id: string
+        }
+        Insert: {
+          answer_option?: string | null
+          answer_text?: string | null
+          created_at?: string
+          id?: string
+          post_id: string
+          question_id: string
+          respondent_id: string
+        }
+        Update: {
+          answer_option?: string | null
+          answer_text?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string
+          question_id?: string
+          respondent_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulletin_responses_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "bulletin_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "bulletin_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_responses_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_responses_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_responses_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_eod_recipients: {
         Row: {
           active: boolean
@@ -682,6 +995,8 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string | null
+          early_release_criteria: string | null
+          early_release_enabled: boolean
           eod_digest_cutoff_time: string | null
           eod_digest_timezone: string
           eod_morning_bundle_time: string | null
@@ -697,6 +1012,8 @@ export type Database = {
         Insert: {
           client_id: string
           created_at?: string | null
+          early_release_criteria?: string | null
+          early_release_enabled?: boolean
           eod_digest_cutoff_time?: string | null
           eod_digest_timezone?: string
           eod_morning_bundle_time?: string | null
@@ -705,13 +1022,15 @@ export type Database = {
           include_agents_in_eod_digest?: boolean
           is_active?: boolean
           name: string
-          organization_id: string
+          organization_id?: string
           requires_holiday_coverage?: boolean
           team_lead_id?: string | null
         }
         Update: {
           client_id?: string
           created_at?: string | null
+          early_release_criteria?: string | null
+          early_release_enabled?: boolean
           eod_digest_cutoff_time?: string | null
           eod_digest_timezone?: string
           eod_morning_bundle_time?: string | null
@@ -898,7 +1217,7 @@ export type Database = {
           date: string
           id?: string
           name: string
-          organization_id: string
+          organization_id?: string
         }
         Update: {
           client_id?: string
@@ -921,33 +1240,39 @@ export type Database = {
       }
       clients: {
         Row: {
+          aliases: string[]
           bill_to_address: string | null
           bill_to_name: string | null
           created_at: string | null
           id: string
           is_active: boolean
+          is_billable: boolean
           name: string
           organization_id: string
           prefix: string
           subtitle: string | null
         }
         Insert: {
+          aliases?: string[]
           bill_to_address?: string | null
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean
+          is_billable?: boolean
           name: string
-          organization_id: string
+          organization_id?: string
           prefix: string
           subtitle?: string | null
         }
         Update: {
+          aliases?: string[]
           bill_to_address?: string | null
           bill_to_name?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean
+          is_billable?: boolean
           name?: string
           organization_id?: string
           prefix?: string
@@ -981,7 +1306,7 @@ export type Database = {
           id?: string
           is_statutory?: boolean
           name: string
-          organization_id: string
+          organization_id?: string
           requires_request?: boolean
         }
         Update: {
@@ -1072,7 +1397,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
-          organization_id: string
+          organization_id?: string
           sort_order?: number
           updated_at?: string
         }
@@ -1114,7 +1439,7 @@ export type Database = {
           employee_id: string
           end_date?: string | null
           id?: string
-          organization_id: string
+          organization_id?: string
           reason?: string | null
           start_date: string
         }
@@ -1142,6 +1467,20 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_campaign_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_campaign_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
             referencedColumns: ["id"]
           },
         ]
@@ -1235,16 +1574,24 @@ export type Database = {
           compliance_grace_until: string | null
           created_at: string | null
           curp: string | null
+          daily_bill_rate: number | null
           daily_discount_rate: number | null
+          daily_salary: number | null
           date_of_birth: string | null
           department_id: string | null
           email: string | null
           emergency_contact: string | null
           employee_id: string
           employment_status: Database["public"]["Enums"]["employment_status"]
+          flat_bill_client_id: string | null
+          flat_weekly_bill_amount: number | null
           full_name: string
+          goal_prompt_dismissed: boolean
+          goal_set_at: string | null
+          goal_visible_to_tl: boolean
           hire_date: string | null
           id: string
+          invited_at: string | null
           is_active: boolean | null
           is_system_user: boolean
           kpi_bonus_amount: number | null
@@ -1253,17 +1600,23 @@ export type Database = {
           monthly_base_salary: number | null
           nss: string | null
           organization_id: string
+          overtime_day_pay: number | null
           personal_email: string | null
+          personal_goal: string | null
           phone: string | null
           rehire_eligible: boolean | null
           reports_to: string | null
           rfc: string | null
           shift_type: string | null
+          sunday_bonus_amount: number | null
           terminated_at: string | null
           terminated_by: string | null
           termination_notes: string | null
           termination_reason: string | null
           title: string
+          vacation_days_entitled: number | null
+          vacation_premium_pct: number | null
+          weekly_base_salary: number | null
           work_name: string | null
         }
         Insert: {
@@ -1274,16 +1627,24 @@ export type Database = {
           compliance_grace_until?: string | null
           created_at?: string | null
           curp?: string | null
+          daily_bill_rate?: number | null
           daily_discount_rate?: number | null
+          daily_salary?: number | null
           date_of_birth?: string | null
           department_id?: string | null
           email?: string | null
           emergency_contact?: string | null
           employee_id: string
           employment_status?: Database["public"]["Enums"]["employment_status"]
+          flat_bill_client_id?: string | null
+          flat_weekly_bill_amount?: number | null
           full_name: string
+          goal_prompt_dismissed?: boolean
+          goal_set_at?: string | null
+          goal_visible_to_tl?: boolean
           hire_date?: string | null
           id?: string
+          invited_at?: string | null
           is_active?: boolean | null
           is_system_user?: boolean
           kpi_bonus_amount?: number | null
@@ -1291,18 +1652,24 @@ export type Database = {
           marital_status?: string | null
           monthly_base_salary?: number | null
           nss?: string | null
-          organization_id: string
+          organization_id?: string
+          overtime_day_pay?: number | null
           personal_email?: string | null
+          personal_goal?: string | null
           phone?: string | null
           rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
           shift_type?: string | null
+          sunday_bonus_amount?: number | null
           terminated_at?: string | null
           terminated_by?: string | null
           termination_notes?: string | null
           termination_reason?: string | null
           title?: string
+          vacation_days_entitled?: number | null
+          vacation_premium_pct?: number | null
+          weekly_base_salary?: number | null
           work_name?: string | null
         }
         Update: {
@@ -1313,16 +1680,24 @@ export type Database = {
           compliance_grace_until?: string | null
           created_at?: string | null
           curp?: string | null
+          daily_bill_rate?: number | null
           daily_discount_rate?: number | null
+          daily_salary?: number | null
           date_of_birth?: string | null
           department_id?: string | null
           email?: string | null
           emergency_contact?: string | null
           employee_id?: string
           employment_status?: Database["public"]["Enums"]["employment_status"]
+          flat_bill_client_id?: string | null
+          flat_weekly_bill_amount?: number | null
           full_name?: string
+          goal_prompt_dismissed?: boolean
+          goal_set_at?: string | null
+          goal_visible_to_tl?: boolean
           hire_date?: string | null
           id?: string
+          invited_at?: string | null
           is_active?: boolean | null
           is_system_user?: boolean
           kpi_bonus_amount?: number | null
@@ -1331,17 +1706,23 @@ export type Database = {
           monthly_base_salary?: number | null
           nss?: string | null
           organization_id?: string
+          overtime_day_pay?: number | null
           personal_email?: string | null
+          personal_goal?: string | null
           phone?: string | null
           rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
           shift_type?: string | null
+          sunday_bonus_amount?: number | null
           terminated_at?: string | null
           terminated_by?: string | null
           termination_notes?: string | null
           termination_reason?: string | null
           title?: string
+          vacation_days_entitled?: number | null
+          vacation_premium_pct?: number | null
+          weekly_base_salary?: number | null
           work_name?: string | null
         }
         Relationships: [
@@ -1357,6 +1738,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_flat_bill_client_id_fkey"
+            columns: ["flat_bill_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
@@ -1514,6 +1902,8 @@ export type Database = {
           last_edited_at: string | null
           metrics: Json
           notes: string | null
+          released_at: string | null
+          submitted_by_user_id: string | null
         }
         Insert: {
           campaign_id: string
@@ -1525,6 +1915,8 @@ export type Database = {
           last_edited_at?: string | null
           metrics: Json
           notes?: string | null
+          released_at?: string | null
+          submitted_by_user_id?: string | null
         }
         Update: {
           campaign_id?: string
@@ -1536,6 +1928,8 @@ export type Database = {
           last_edited_at?: string | null
           metrics?: Json
           notes?: string | null
+          released_at?: string | null
+          submitted_by_user_id?: string | null
         }
         Relationships: [
           {
@@ -1564,6 +1958,91 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eod_logs_audit: {
+        Row: {
+          action: string
+          after_state: Json
+          before_state: Json | null
+          date: string
+          edited_at: string
+          edited_by: string
+          employee_id: string
+          eod_log_id: string | null
+          id: string
+          organization_id: string
+          reason: string
+        }
+        Insert: {
+          action: string
+          after_state: Json
+          before_state?: Json | null
+          date: string
+          edited_at?: string
+          edited_by: string
+          employee_id: string
+          eod_log_id?: string | null
+          id?: string
+          organization_id?: string
+          reason: string
+        }
+        Update: {
+          action?: string
+          after_state?: Json
+          before_state?: Json | null
+          date?: string
+          edited_at?: string
+          edited_by?: string
+          employee_id?: string
+          eod_log_id?: string | null
+          id?: string
+          organization_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eod_logs_audit_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eod_logs_audit_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eod_logs_audit_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eod_logs_audit_eod_log_id_fkey"
+            columns: ["eod_log_id"]
+            isOneToOne: false
+            referencedRelation: "eod_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eod_logs_audit_eod_log_id_fkey"
+            columns: ["eod_log_id"]
+            isOneToOne: false
+            referencedRelation: "eod_logs_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eod_logs_audit_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1786,9 +2265,13 @@ export type Database = {
       invoice_lines: {
         Row: {
           agent_name: string
+          campaign_name: string | null
           days_worked: number | null
+          employee_id: string | null
+          holiday_days: number | null
           id: string
           invoice_id: string
+          is_flat_total: boolean | null
           spiffs: number | null
           total: number | null
           total_price: number | null
@@ -1796,9 +2279,13 @@ export type Database = {
         }
         Insert: {
           agent_name: string
+          campaign_name?: string | null
           days_worked?: number | null
+          employee_id?: string | null
+          holiday_days?: number | null
           id?: string
           invoice_id: string
+          is_flat_total?: boolean | null
           spiffs?: number | null
           total?: number | null
           total_price?: number | null
@@ -1806,15 +2293,40 @@ export type Database = {
         }
         Update: {
           agent_name?: string
+          campaign_name?: string | null
           days_worked?: number | null
+          employee_id?: string | null
+          holiday_days?: number | null
           id?: string
           invoice_id?: string
+          is_flat_total?: boolean | null
           spiffs?: number | null
           total?: number | null
           total_price?: number | null
           unit_price?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "invoice_lines_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoice_lines_invoice_id_fkey"
             columns: ["invoice_id"]
@@ -1831,7 +2343,10 @@ export type Database = {
           due_date: string
           id: string
           invoice_number: string
+          notes: string | null
+          project_name: string | null
           status: string
+          submitted_on: string | null
           week_end: string
           week_number: number
           week_start: string
@@ -1842,7 +2357,10 @@ export type Database = {
           due_date: string
           id?: string
           invoice_number: string
+          notes?: string | null
+          project_name?: string | null
           status?: string
+          submitted_on?: string | null
           week_end: string
           week_number: number
           week_start: string
@@ -1853,7 +2371,10 @@ export type Database = {
           due_date?: string
           id?: string
           invoice_number?: string
+          notes?: string | null
+          project_name?: string | null
           status?: string
+          submitted_on?: string | null
           week_end?: string
           week_number?: number
           week_start?: string
@@ -1872,14 +2393,26 @@ export type Database = {
         Row: {
           date: string
           name: string
+          name_en: string | null
+          name_es: string | null
+          pays_premium: boolean
+          type: string | null
         }
         Insert: {
           date: string
           name: string
+          name_en?: string | null
+          name_es?: string | null
+          pays_premium?: boolean
+          type?: string | null
         }
         Update: {
           date?: string
           name?: string
+          name_en?: string | null
+          name_es?: string | null
+          pays_premium?: boolean
+          type?: string | null
         }
         Relationships: []
       }
@@ -1907,33 +2440,235 @@ export type Database = {
         }
         Relationships: []
       }
-      payroll_periods: {
+      payroll_archive: {
         Row: {
-          created_at: string | null
-          end_date: string
+          agent_name: string | null
+          commission: number | null
+          employee_id: string | null
+          extra_bonus: number
+          holiday_days: number
+          holiday_pay: number | null
           id: string
+          imported_at: string
+          include_in_payroll: boolean
+          joe_period_code: string | null
+          joe_status: string | null
+          kpi_achieved: boolean
+          kpi_bonus: number | null
+          legacy_agent_id: number | null
+          missed_days: number
+          missed_deduction: number | null
           organization_id: string
-          period_type: string
-          start_date: string
-          status: string | null
+          overtime_days: number
+          overtime_pay: number | null
+          paid_at: string | null
+          partial_week_days: number | null
+          period_code: string
+          rule_key: string | null
+          source: string
+          status: string
+          sunday_pay: number | null
+          sundays_worked: number
+          total_pay: number | null
+          vacation_days: number
+          vacation_pay: number | null
+          week_end: string | null
+          week_label: string | null
+          week_month: string | null
+          week_start: string | null
+          weekly_base: number | null
         }
         Insert: {
-          created_at?: string | null
-          end_date: string
+          agent_name?: string | null
+          commission?: number | null
+          employee_id?: string | null
+          extra_bonus?: number
+          holiday_days?: number
+          holiday_pay?: number | null
           id?: string
-          organization_id: string
-          period_type: string
-          start_date: string
-          status?: string | null
+          imported_at?: string
+          include_in_payroll?: boolean
+          joe_period_code?: string | null
+          joe_status?: string | null
+          kpi_achieved?: boolean
+          kpi_bonus?: number | null
+          legacy_agent_id?: number | null
+          missed_days?: number
+          missed_deduction?: number | null
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number | null
+          paid_at?: string | null
+          partial_week_days?: number | null
+          period_code: string
+          rule_key?: string | null
+          source?: string
+          status?: string
+          sunday_pay?: number | null
+          sundays_worked?: number
+          total_pay?: number | null
+          vacation_days?: number
+          vacation_pay?: number | null
+          week_end?: string | null
+          week_label?: string | null
+          week_month?: string | null
+          week_start?: string | null
+          weekly_base?: number | null
         }
         Update: {
-          created_at?: string | null
-          end_date?: string
+          agent_name?: string | null
+          commission?: number | null
+          employee_id?: string | null
+          extra_bonus?: number
+          holiday_days?: number
+          holiday_pay?: number | null
+          id?: string
+          imported_at?: string
+          include_in_payroll?: boolean
+          joe_period_code?: string | null
+          joe_status?: string | null
+          kpi_achieved?: boolean
+          kpi_bonus?: number | null
+          legacy_agent_id?: number | null
+          missed_days?: number
+          missed_deduction?: number | null
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number | null
+          paid_at?: string | null
+          partial_week_days?: number | null
+          period_code?: string
+          rule_key?: string | null
+          source?: string
+          status?: string
+          sunday_pay?: number | null
+          sundays_worked?: number
+          total_pay?: number | null
+          vacation_days?: number
+          vacation_pay?: number | null
+          week_end?: string | null
+          week_label?: string | null
+          week_month?: string | null
+          week_start?: string | null
+          weekly_base?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_archive_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_archive_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_archive_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_archive_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_audit_log: {
+        Row: {
+          action: string
+          actor: string | null
+          after: Json | null
+          at: string
+          before: Json | null
+          id: string
+          organization_id: string
+          record_id: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          after?: Json | null
+          at?: string
+          before?: Json | null
           id?: string
           organization_id?: string
+          record_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          after?: Json | null
+          at?: string
+          before?: Json | null
+          id?: string
+          organization_id?: string
+          record_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_periods: {
+        Row: {
+          created_at: string
+          end_date: string
+          half: string
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          month: number
+          organization_id: string
+          period_code: string
+          period_type: string
+          start_date: string
+          status: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          half: string
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          month: number
+          organization_id?: string
+          period_code: string
+          period_type?: string
+          start_date: string
+          status?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          half?: string
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          month?: number
+          organization_id?: string
+          period_code?: string
           period_type?: string
           start_date?: string
-          status?: string | null
+          status?: string
+          year?: number
         }
         Relationships: [
           {
@@ -1947,48 +2682,109 @@ export type Database = {
       }
       payroll_records: {
         Row: {
-          additional_bonuses: number | null
-          calculated_net_pay: number | null
-          days_absent: number | null
+          auto_derived: Json | null
+          campaign_id: string | null
+          commission: number
+          commission_flag: string | null
+          created_at: string
+          custom_deduction: number | null
           employee_id: string
-          extra_days_count: number | null
-          holiday_worked: boolean | null
+          extra_bonus: number
+          holiday_days: number
+          holiday_pay: number | null
           id: string
-          kpi_achieved: boolean | null
-          overrides_json: Json | null
-          period_id: string
-          sunday_premium_applied: boolean | null
-          updated_at: string | null
+          include_in_payroll: boolean
+          kpi_achieved: boolean
+          kpi_bonus: number | null
+          memo: string | null
+          missed_days: number
+          missed_deduction: number | null
+          organization_id: string
+          overtime_days: number
+          overtime_pay: number | null
+          partial_week_days: number | null
+          status: string
+          sunday_pay: number | null
+          sundays_worked: number
+          total_pay: number | null
+          updated_at: string
+          vacation_days: number
+          vacation_pay: number | null
+          week_id: string
+          weekly_base: number | null
         }
         Insert: {
-          additional_bonuses?: number | null
-          calculated_net_pay?: number | null
-          days_absent?: number | null
+          auto_derived?: Json | null
+          campaign_id?: string | null
+          commission?: number
+          commission_flag?: string | null
+          created_at?: string
+          custom_deduction?: number | null
           employee_id: string
-          extra_days_count?: number | null
-          holiday_worked?: boolean | null
+          extra_bonus?: number
+          holiday_days?: number
+          holiday_pay?: number | null
           id?: string
-          kpi_achieved?: boolean | null
-          overrides_json?: Json | null
-          period_id: string
-          sunday_premium_applied?: boolean | null
-          updated_at?: string | null
+          include_in_payroll?: boolean
+          kpi_achieved?: boolean
+          kpi_bonus?: number | null
+          memo?: string | null
+          missed_days?: number
+          missed_deduction?: number | null
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number | null
+          partial_week_days?: number | null
+          status?: string
+          sunday_pay?: number | null
+          sundays_worked?: number
+          total_pay?: number | null
+          updated_at?: string
+          vacation_days?: number
+          vacation_pay?: number | null
+          week_id: string
+          weekly_base?: number | null
         }
         Update: {
-          additional_bonuses?: number | null
-          calculated_net_pay?: number | null
-          days_absent?: number | null
+          auto_derived?: Json | null
+          campaign_id?: string | null
+          commission?: number
+          commission_flag?: string | null
+          created_at?: string
+          custom_deduction?: number | null
           employee_id?: string
-          extra_days_count?: number | null
-          holiday_worked?: boolean | null
+          extra_bonus?: number
+          holiday_days?: number
+          holiday_pay?: number | null
           id?: string
-          kpi_achieved?: boolean | null
-          overrides_json?: Json | null
-          period_id?: string
-          sunday_premium_applied?: boolean | null
-          updated_at?: string | null
+          include_in_payroll?: boolean
+          kpi_achieved?: boolean
+          kpi_bonus?: number | null
+          memo?: string | null
+          missed_days?: number
+          missed_deduction?: number | null
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number | null
+          partial_week_days?: number | null
+          status?: string
+          sunday_pay?: number | null
+          sundays_worked?: number
+          total_pay?: number | null
+          updated_at?: string
+          vacation_days?: number
+          vacation_pay?: number | null
+          week_id?: string
+          weekly_base?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payroll_records_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payroll_records_employee_id_fkey"
             columns: ["employee_id"]
@@ -2011,7 +2807,113 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payroll_records_period_id_fkey"
+            foreignKeyName: "payroll_records_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_records_week_id_fkey"
+            columns: ["week_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_weeks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_validation_runs: {
+        Row: {
+          diverge_count: number
+          diverge_detail: Json | null
+          gate_passed: boolean
+          id: string
+          match_count: number
+          match_rate_pct: number
+          notes: string | null
+          replay_eligible: number
+          run_at: string
+          run_by: string | null
+          skip_count: number
+          total_archive_rows: number
+        }
+        Insert: {
+          diverge_count: number
+          diverge_detail?: Json | null
+          gate_passed: boolean
+          id?: string
+          match_count: number
+          match_rate_pct: number
+          notes?: string | null
+          replay_eligible: number
+          run_at?: string
+          run_by?: string | null
+          skip_count: number
+          total_archive_rows: number
+        }
+        Update: {
+          diverge_count?: number
+          diverge_detail?: Json | null
+          gate_passed?: boolean
+          id?: string
+          match_count?: number
+          match_rate_pct?: number
+          notes?: string | null
+          replay_eligible?: number
+          run_at?: string
+          run_by?: string | null
+          skip_count?: number
+          total_archive_rows?: number
+        }
+        Relationships: []
+      }
+      payroll_weeks: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          period_id: string
+          status: string
+          status_changed_at: string | null
+          status_changed_by: string | null
+          week_end: string
+          week_number: number
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          period_id: string
+          status?: string
+          status_changed_at?: string | null
+          status_changed_by?: string | null
+          week_end: string
+          week_number: number
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          period_id?: string
+          status?: string
+          status_changed_at?: string | null
+          status_changed_by?: string | null
+          week_end?: string
+          week_number?: number
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_weeks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_weeks_period_id_fkey"
             columns: ["period_id"]
             isOneToOne: false
             referencedRelation: "payroll_periods"
@@ -2161,7 +3063,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_global?: boolean
-          organization_id: string
+          organization_id?: string
           scoped_campaign_ids?: string[] | null
           sort_order?: number
           title: string
@@ -2186,6 +3088,196 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruiting_candidates: {
+        Row: {
+          applicant_notes: string | null
+          assigned_to: string | null
+          city: string | null
+          created_at: string
+          curp: string | null
+          email: string | null
+          english_level_assessed: string | null
+          english_level_self: string
+          final_status: string | null
+          full_name: string | null
+          geo_qualified: boolean | null
+          hired_at: string | null
+          hired_for_role: string | null
+          id: string
+          last_contacted_at: string | null
+          needs_manual_review: boolean
+          next_followup_at: string | null
+          pass_reason: string | null
+          phone: string | null
+          qualified_for_roles: string[]
+          raw_email_body: string | null
+          raw_email_received_at: string | null
+          referral_source: string | null
+          role_interest: string | null
+          source: string
+          stage: string
+          stage_changed_at: string
+          updated_at: string
+        }
+        Insert: {
+          applicant_notes?: string | null
+          assigned_to?: string | null
+          city?: string | null
+          created_at?: string
+          curp?: string | null
+          email?: string | null
+          english_level_assessed?: string | null
+          english_level_self?: string
+          final_status?: string | null
+          full_name?: string | null
+          geo_qualified?: boolean | null
+          hired_at?: string | null
+          hired_for_role?: string | null
+          id?: string
+          last_contacted_at?: string | null
+          needs_manual_review?: boolean
+          next_followup_at?: string | null
+          pass_reason?: string | null
+          phone?: string | null
+          qualified_for_roles?: string[]
+          raw_email_body?: string | null
+          raw_email_received_at?: string | null
+          referral_source?: string | null
+          role_interest?: string | null
+          source?: string
+          stage?: string
+          stage_changed_at?: string
+          updated_at?: string
+        }
+        Update: {
+          applicant_notes?: string | null
+          assigned_to?: string | null
+          city?: string | null
+          created_at?: string
+          curp?: string | null
+          email?: string | null
+          english_level_assessed?: string | null
+          english_level_self?: string
+          final_status?: string | null
+          full_name?: string | null
+          geo_qualified?: boolean | null
+          hired_at?: string | null
+          hired_for_role?: string | null
+          id?: string
+          last_contacted_at?: string | null
+          needs_manual_review?: boolean
+          next_followup_at?: string | null
+          pass_reason?: string | null
+          phone?: string | null
+          qualified_for_roles?: string[]
+          raw_email_body?: string | null
+          raw_email_received_at?: string | null
+          referral_source?: string | null
+          role_interest?: string | null
+          source?: string
+          stage?: string
+          stage_changed_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      recruiting_interviews: {
+        Row: {
+          candidate_id: string
+          coachability_score: number | null
+          communication_score: number | null
+          conducted_at: string
+          conducted_by: string | null
+          english_score: number | null
+          id: string
+          interview_type: string
+          notes: string | null
+          overall_score: number | null
+          recommendation: string | null
+        }
+        Insert: {
+          candidate_id: string
+          coachability_score?: number | null
+          communication_score?: number | null
+          conducted_at?: string
+          conducted_by?: string | null
+          english_score?: number | null
+          id?: string
+          interview_type?: string
+          notes?: string | null
+          overall_score?: number | null
+          recommendation?: string | null
+        }
+        Update: {
+          candidate_id?: string
+          coachability_score?: number | null
+          communication_score?: number | null
+          conducted_at?: string
+          conducted_by?: string | null
+          english_score?: number | null
+          id?: string
+          interview_type?: string
+          notes?: string | null
+          overall_score?: number | null
+          recommendation?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_interviews_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruiting_messages: {
+        Row: {
+          body: string
+          candidate_id: string
+          channel: string
+          created_at: string
+          direction: string
+          id: string
+          sent_by: string | null
+          status: string
+          subject: string | null
+          template_key: string | null
+        }
+        Insert: {
+          body: string
+          candidate_id: string
+          channel: string
+          created_at?: string
+          direction: string
+          id?: string
+          sent_by?: string | null
+          status?: string
+          subject?: string | null
+          template_key?: string | null
+        }
+        Update: {
+          body?: string
+          candidate_id?: string
+          channel?: string
+          created_at?: string
+          direction?: string
+          id?: string
+          sent_by?: string | null
+          status?: string
+          subject?: string | null
+          template_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiting_messages_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_candidates"
             referencedColumns: ["id"]
           },
         ]
@@ -2445,6 +3537,56 @@ export type Database = {
           },
         ]
       }
+      team_lead_campaigns: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          created_by: string | null
+          team_lead_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          created_by?: string | null
+          team_lead_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          created_by?: string | null
+          team_lead_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_lead_campaigns_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_lead_campaigns_team_lead_id_fkey"
+            columns: ["team_lead_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_lead_campaigns_team_lead_id_fkey"
+            columns: ["team_lead_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_lead_campaigns_team_lead_id_fkey"
+            columns: ["team_lead_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_clock: {
         Row: {
           auto_clocked_out: boolean
@@ -2456,6 +3598,7 @@ export type Database = {
           clock_out: string | null
           created_at: string | null
           date: string
+          early_release: boolean
           employee_id: string
           eod_completed: boolean
           id: string
@@ -2476,6 +3619,7 @@ export type Database = {
           clock_out?: string | null
           created_at?: string | null
           date: string
+          early_release?: boolean
           employee_id: string
           eod_completed?: boolean
           id?: string
@@ -2496,6 +3640,7 @@ export type Database = {
           clock_out?: string | null
           created_at?: string | null
           date?: string
+          early_release?: boolean
           employee_id?: string
           eod_completed?: boolean
           id?: string
@@ -2530,63 +3675,73 @@ export type Database = {
           },
         ]
       }
-      time_off_requests: {
+      time_clock_audit: {
         Row: {
-          created_at: string | null
+          action: string
+          after_state: Json
+          before_state: Json | null
+          date: string
+          edited_at: string
+          edited_by: string
           employee_id: string
-          end_date: string
           id: string
-          notes: string | null
+          organization_id: string
           reason: string
-          reviewed_at: string | null
-          reviewed_by: string | null
-          start_date: string
-          status: string
+          time_clock_id: string | null
         }
         Insert: {
-          created_at?: string | null
+          action: string
+          after_state: Json
+          before_state?: Json | null
+          date: string
+          edited_at?: string
+          edited_by: string
           employee_id: string
-          end_date: string
           id?: string
-          notes?: string | null
+          organization_id?: string
           reason: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          start_date: string
-          status?: string
+          time_clock_id?: string | null
         }
         Update: {
-          created_at?: string | null
+          action?: string
+          after_state?: Json
+          before_state?: Json | null
+          date?: string
+          edited_at?: string
+          edited_by?: string
           employee_id?: string
-          end_date?: string
           id?: string
-          notes?: string | null
+          organization_id?: string
           reason?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          start_date?: string
-          status?: string
+          time_clock_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "time_off_requests_employee_id_fkey"
+            foreignKeyName: "time_clock_audit_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "time_off_requests_employee_id_fkey"
+            foreignKeyName: "time_clock_audit_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees_client_view"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "time_off_requests_employee_id_fkey"
+            foreignKeyName: "time_clock_audit_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_clock_audit_time_clock_id_fkey"
+            columns: ["time_clock_id"]
+            isOneToOne: false
+            referencedRelation: "time_clock"
             referencedColumns: ["id"]
           },
         ]
@@ -2639,6 +3794,20 @@ export type Database = {
             referencedRelation: "employees"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tl_nudges_nudged_by_fkey"
+            columns: ["nudged_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tl_nudges_nudged_by_fkey"
+            columns: ["nudged_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_profiles: {
@@ -2655,7 +3824,7 @@ export type Database = {
           created_at?: string | null
           employee_id?: string | null
           id: string
-          organization_id: string
+          organization_id?: string
           role: string
         }
         Update: {
@@ -2715,7 +3884,9 @@ export type Database = {
           hr_reviewed_at: string | null
           hr_reviewed_by: string | null
           id: string
+          is_paid: boolean
           notes: string | null
+          request_type: string
           start_date: string
           status: string
           tl_reviewed_at: string | null
@@ -2731,7 +3902,9 @@ export type Database = {
           hr_reviewed_at?: string | null
           hr_reviewed_by?: string | null
           id?: string
+          is_paid?: boolean
           notes?: string | null
+          request_type?: string
           start_date: string
           status?: string
           tl_reviewed_at?: string | null
@@ -2747,7 +3920,9 @@ export type Database = {
           hr_reviewed_at?: string | null
           hr_reviewed_by?: string | null
           id?: string
+          is_paid?: boolean
           notes?: string | null
+          request_type?: string
           start_date?: string
           status?: string
           tl_reviewed_at?: string | null
@@ -2939,8 +4114,48 @@ export type Database = {
           },
         ]
       }
+      v_latest_validation_run: {
+        Row: {
+          diverge_count: number | null
+          gate_passed: boolean | null
+          id: string | null
+          match_count: number | null
+          match_rate_pct: number | null
+          notes: string | null
+          replay_eligible: number | null
+          run_at: string | null
+          skip_count: number | null
+          total_archive_rows: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      _calc_pay_components: {
+        Args: {
+          e: Database["public"]["Tables"]["employees"]["Row"]
+          r: Database["public"]["Tables"]["payroll_records"]["Row"]
+        }
+        Returns: Database["public"]["CompositeTypes"]["pay_components"]
+        SetofOptions: {
+          from: "*"
+          to: "pay_components"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      _derive_inputs_for_employee_week: {
+        Args: {
+          p_employee_id: string
+          p_week_end: string
+          p_week_start: string
+        }
+        Returns: Json
+      }
+      _scheduled_days_for_shift: {
+        Args: { p_shift_type: string }
+        Returns: number[]
+      }
       amend_eod_log: {
         Args: { p_log_id: string; p_metrics: Json; p_notes: string }
         Returns: undefined
@@ -2963,6 +4178,14 @@ export type Database = {
           eod_digest_timezone: string
           eod_morning_bundle_time: string
         }[]
+      }
+      change_employee_role: {
+        Args: { p_employee_id: string; p_new_title: string }
+        Returns: Json
+      }
+      check_commission_flag: {
+        Args: { p_amount: number; p_employee_id: string; p_exclude_id?: string }
+        Returns: string
       }
       check_rehire: {
         Args: {
@@ -3002,6 +4225,12 @@ export type Database = {
         Returns: undefined
       }
       detect_holiday_no_shows: { Args: { p_date: string }; Returns: number }
+      employees_without_login: {
+        Args: { p_campaign_id: string }
+        Returns: {
+          employee_id: string
+        }[]
+      }
       eod_before_cutoff: {
         Args: { p_campaign_id: string; p_date: string }
         Returns: boolean
@@ -3046,6 +4275,16 @@ export type Database = {
           tl_id: string
           tl_name: string
           week_number: number
+        }[]
+      }
+      generate_weekly_invoices: {
+        Args: { p_monday: string; p_sunday: string }
+        Returns: {
+          client_id: string
+          invoice_id: string
+          invoice_number: string
+          line_count: number
+          total_amount: number
         }[]
       }
       get_campaign_holiday_capacities: {
@@ -3120,6 +4359,7 @@ export type Database = {
       }
       is_client: { Args: never; Returns: boolean }
       is_leadership: { Args: never; Returns: boolean }
+      is_owner: { Args: never; Returns: boolean }
       is_team_lead: { Args: never; Returns: boolean }
       mark_review_notification_sent: {
         Args: {
@@ -3134,9 +4374,22 @@ export type Database = {
       my_client_campaign_ids: { Args: never; Returns: string[] }
       my_client_id: { Args: never; Returns: string }
       my_employee_id: { Args: never; Returns: string }
+      my_manager_info: { Args: never; Returns: Json }
       my_org_id: { Args: never; Returns: string }
       my_team_member_ids: { Args: never; Returns: string[] }
       my_tl_campaign_ids: { Args: never; Returns: string[] }
+      next_invoice_number: { Args: { p_client_id: string }; Returns: string }
+      pay_calc_record: { Args: { p_record_id: string }; Returns: undefined }
+      pay_derive_week: { Args: { p_week_id: string }; Returns: Json }
+      pay_redrive_week: {
+        Args: { p_confirm: boolean; p_week_id: string }
+        Returns: Json
+      }
+      pay_unlock_period: {
+        Args: { p_period_id: string; p_reason: string }
+        Returns: Json
+      }
+      pay_validate_archive_all: { Args: { p_notes?: string }; Returns: string }
       request_holiday_off: {
         Args: {
           p_campaign_id: string
@@ -3145,40 +4398,115 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["holiday_request_status"]
       }
-      request_vacation_off: {
-        Args: {
-          p_campaign_id: string
-          p_employee_id: string
-          p_end_date: string
-          p_notes?: string
-          p_start_date: string
-        }
-        Returns: {
-          campaign_id: string
-          created_at: string
-          days_requested: number
-          denial_reason: string | null
-          employee_id: string
-          end_date: string
-          hr_reviewed_at: string | null
-          hr_reviewed_by: string | null
-          id: string
-          notes: string | null
-          start_date: string
-          status: string
-          tl_reviewed_at: string | null
-          tl_reviewed_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "vacation_requests"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      request_vacation_off:
+        | {
+            Args: {
+              p_campaign_id: string
+              p_employee_id: string
+              p_end_date: string
+              p_notes?: string
+              p_start_date: string
+            }
+            Returns: {
+              campaign_id: string
+              created_at: string
+              days_requested: number
+              denial_reason: string | null
+              employee_id: string
+              end_date: string
+              hr_reviewed_at: string | null
+              hr_reviewed_by: string | null
+              id: string
+              is_paid: boolean
+              notes: string | null
+              request_type: string
+              start_date: string
+              status: string
+              tl_reviewed_at: string | null
+              tl_reviewed_by: string | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "vacation_requests"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              p_campaign_id: string
+              p_employee_id: string
+              p_end_date: string
+              p_notes?: string
+              p_request_type?: string
+              p_start_date: string
+            }
+            Returns: {
+              campaign_id: string
+              created_at: string
+              days_requested: number
+              denial_reason: string | null
+              employee_id: string
+              end_date: string
+              hr_reviewed_at: string | null
+              hr_reviewed_by: string | null
+              id: string
+              is_paid: boolean
+              notes: string | null
+              request_type: string
+              start_date: string
+              status: string
+              tl_reviewed_at: string | null
+              tl_reviewed_by: string | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "vacation_requests"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       tl_employee_on_my_team: {
         Args: { p_employee_id: string }
         Returns: boolean
+      }
+      update_employee_personal_info: {
+        Args: {
+          p_address?: string
+          p_emergency_contact?: string
+          p_employee_uuid: string
+          p_personal_email?: string
+          p_phone?: string
+          p_work_name?: string
+        }
+        Returns: undefined
+      }
+      update_my_goal: {
+        Args: {
+          p_clear_goal?: boolean
+          p_dismiss?: boolean
+          p_goal_visible_to_tl?: boolean
+          p_personal_goal?: string
+        }
+        Returns: undefined
+      }
+      weekly_invoice_preview: {
+        Args: { p_monday: string; p_sunday: string }
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          client_id: string
+          client_name: string
+          client_prefix: string
+          daily_bill_rate: number
+          days_worked: number
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          existing_invoice_id: string
+          flat_amount: number
+          is_flat_bill: boolean
+        }[]
       }
     }
     Enums: {
@@ -3189,7 +4517,17 @@ export type Database = {
       review_termination_status: "pending" | "confirmed" | "denied"
     }
     CompositeTypes: {
-      [_ in never]: never
+      pay_components: {
+        weekly_base: number | null
+        kpi_bonus: number | null
+        missed_deduction: number | null
+        overtime_pay: number | null
+        sunday_pay: number | null
+        vacation_pay: number | null
+        holiday_pay: number | null
+        total_pay: number | null
+        commission: number | null
+      }
     }
   }
 }
