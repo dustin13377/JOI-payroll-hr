@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ShieldCheck, Trash2, UserPlus, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Trash2, UserPlus, AlertTriangle, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateMX } from "@/lib/localDate";
 
@@ -84,6 +84,45 @@ export default function SystemUsers() {
     },
   });
 
+  // Resend the JOI invite email. Calls the existing resend-invite edge fn,
+  // which knows how to handle: no auth user yet → invite; stale auth user
+  // (never signed in) → wipe + re-invite; already onboarded → skip with
+  // guidance to use forgot-password instead.
+  const resendMut = useMutation({
+    mutationFn: async (user: SystemUser) => {
+      const { data, error } = await supabase.functions.invoke("resend-invite", {
+        body: { employee_ids: [user.id] },
+      });
+      if (error) throw error;
+      const result = (data as { results?: Array<{ status: string; message?: string; email?: string | null }> })?.results?.[0];
+      if (!result) throw new Error("No result returned from resend-invite");
+      return result;
+    },
+    onSuccess: (result, user) => {
+      if (result.status === "sent") {
+        toast({
+          title: "Invite resent",
+          description: `New invite email sent to ${result.email ?? user.email ?? "their work email"}.`,
+        });
+      } else if (result.status === "skipped") {
+        toast({
+          title: "Already signed in",
+          description: result.message ?? "Ask them to use 'Forgot password' on the sign-in page instead.",
+        });
+      } else {
+        toast({
+          title: "Resend failed",
+          description: result.message ?? "Unknown error",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Resend failed";
+      toast({ title: "Couldn't resend", description: msg, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -120,7 +159,7 @@ export default function SystemUsers() {
                   <TableHead>Role</TableHead>
                   <TableHead>Added</TableHead>
                   <TableHead>Notes</TableHead>
-                  {isOwner && <TableHead className="text-right">Action</TableHead>}
+                  {isOwner && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -137,9 +176,21 @@ export default function SystemUsers() {
                     <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{u.notes ?? "—"}</TableCell>
                     {isOwner && (
                       <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setRemoveUser(u)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => resendMut.mutate(u)}
+                            disabled={resendMut.isPending && resendMut.variables?.id === u.id}
+                            title="Resend invite email"
+                          >
+                            <Send className="h-4 w-4 mr-1" />
+                            {resendMut.isPending && resendMut.variables?.id === u.id ? "Sending…" : "Resend invite"}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRemoveUser(u)} title="Remove access">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
