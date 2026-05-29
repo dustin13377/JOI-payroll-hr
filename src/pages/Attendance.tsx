@@ -378,7 +378,7 @@ export default function Attendance() {
   // Default sort (no column selected): Absent first (action needed) → Present
   // → Completed → Day Off (informational, bottom of list).
   // When a header is clicked: that column drives the order; nulls sort last.
-  const statusOrder = { ausente: 0, presente: 1, completado: 2, day_off: 3 } as const;
+  const statusOrder = { presente: 0, completado: 1, ausente: 2, day_off: 3 } as const;
   const hoursValue = (e: EmployeeWithAttendance) => {
     if (!e.clock_in || !e.clock_out) return null;
     return new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime();
