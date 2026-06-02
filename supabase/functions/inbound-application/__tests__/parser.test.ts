@@ -50,13 +50,25 @@ Deno.test(
   },
 );
 
-Deno.test("applicant_notes includes CV and Presentation URLs", () => {
-  const notes = parseApplicationEmail(sample).applicant_notes ?? "";
-  if (!notes.includes("inbound8675775207381710501.pdf")) {
-    throw new Error("notes missing CV URL");
+Deno.test("cv_url and presentation_url are populated as separate fields", () => {
+  const result = parseApplicationEmail(sample);
+  if (!result.cv_url || !result.cv_url.includes("inbound8675775207381710501.pdf")) {
+    throw new Error(`cv_url missing or wrong: ${result.cv_url}`);
   }
-  if (!notes.includes("inbound4890886575758467428.mp3")) {
-    throw new Error("notes missing Presentation URL");
+  if (
+    !result.presentation_url ||
+    !result.presentation_url.includes("inbound4890886575758467428.mp3")
+  ) {
+    throw new Error(
+      `presentation_url missing or wrong: ${result.presentation_url}`,
+    );
+  }
+});
+
+Deno.test("applicant_notes does NOT contain CV/Presentation URLs", () => {
+  const notes = parseApplicationEmail(sample).applicant_notes ?? "";
+  if (notes.includes("CV:") || notes.includes("Presentation:")) {
+    throw new Error(`notes should not include CV/Presentation lines: ${notes}`);
   }
 });
 

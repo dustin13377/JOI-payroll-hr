@@ -3099,6 +3099,7 @@ export type Database = {
           city: string | null
           created_at: string
           curp: string | null
+          cv_url: string | null
           email: string | null
           english_level_assessed: string | null
           english_level_self: string
@@ -3113,6 +3114,7 @@ export type Database = {
           next_followup_at: string | null
           pass_reason: string | null
           phone: string | null
+          presentation_url: string | null
           qualified_for_roles: string[]
           raw_email_body: string | null
           raw_email_received_at: string | null
@@ -3129,6 +3131,7 @@ export type Database = {
           city?: string | null
           created_at?: string
           curp?: string | null
+          cv_url?: string | null
           email?: string | null
           english_level_assessed?: string | null
           english_level_self?: string
@@ -3143,6 +3146,7 @@ export type Database = {
           next_followup_at?: string | null
           pass_reason?: string | null
           phone?: string | null
+          presentation_url?: string | null
           qualified_for_roles?: string[]
           raw_email_body?: string | null
           raw_email_received_at?: string | null
@@ -3159,6 +3163,7 @@ export type Database = {
           city?: string | null
           created_at?: string
           curp?: string | null
+          cv_url?: string | null
           email?: string | null
           english_level_assessed?: string | null
           english_level_self?: string
@@ -3173,6 +3178,7 @@ export type Database = {
           next_followup_at?: string | null
           pass_reason?: string | null
           phone?: string | null
+          presentation_url?: string | null
           qualified_for_roles?: string[]
           raw_email_body?: string | null
           raw_email_received_at?: string | null
