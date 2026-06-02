@@ -6,6 +6,7 @@ import type {
   HrDocumentRequestStatus,
   CartaKpiRow,
   ActaWitness,
+  RescisionKpiRow,
 } from "@/types/hr-docs";
 
 const QUERY_KEY = "hr_document_requests";
@@ -23,6 +24,7 @@ export interface HrDocumentRequestRow {
   fulfilled_carta_id: string | null;
   fulfilled_acta_id: string | null;
   fulfilled_renuncia_id: string | null;
+  fulfilled_rescision_id: string | null;
   canceled_reason: string | null;
   created_at: string;
   updated_at: string;
@@ -45,6 +47,7 @@ function mapRow(row: HrDocumentRequestRow): HrDocumentRequest & {
     fulfilledCartaId: row.fulfilled_carta_id,
     fulfilledActaId: row.fulfilled_acta_id,
     fulfilledRenunciaId: row.fulfilled_renuncia_id,
+    fulfilledRescisionId: row.fulfilled_rescision_id,
     canceledReason: row.canceled_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -319,13 +322,13 @@ export interface FinalizationDraft {
   signedScanPath: string | null;
   createdAt: string;
   updatedAt: string;
-  type: "carta" | "acta" | "renuncia";
+  type: "carta" | "acta" | "renuncia" | "rescision_prueba";
   // Carta-specific
   kpiTable: CartaKpiRow[];
   // Acta-specific
   witnesses: ActaWitness[];
   reincidenciaPriorCartaId: string | null;
-  // Renuncia-specific
+  // Renuncia-specific (also reused by rescision_prueba for finiquito)
   effectiveDate: string | null;
   renunciaNarrative: string | null;
   hireDateSnapshot: string | null;
@@ -338,18 +341,28 @@ export interface FinalizationDraft {
   curpSnapshot: string | null;
   rfcSnapshot: string | null;
   claveElector: string | null;
+  // Rescision_prueba-specific
+  rescisionKpiTable: RescisionKpiRow[];
+  contractSigningDate: string | null;
+  terminationEffectiveDate: string | null;
 }
 
 function mapFinalizationRow(
   row: Record<string, unknown>,
-  type: "carta" | "acta" | "renuncia",
+  type: "carta" | "acta" | "renuncia" | "rescision_prueba",
 ): FinalizationDraft {
+  // rescision_prueba doesn't have an incident_date col — falls back to termination_effective_date
+  // so the existing UI cards (incident date) keep working.
+  const incidentDate =
+    (row.incident_date as string) ??
+    (row.termination_effective_date as string) ??
+    "";
   return {
     id: row.id as string,
     employeeId: row.employee_id as string,
     requestId: (row.request_id as string) ?? null,
     docRef: (row.doc_ref as string) ?? null,
-    incidentDate: row.incident_date as string,
+    incidentDate,
     narrative: (row.narrative as string) ?? null,
     trabajadorNameSnapshot: (row.trabajador_name_snapshot as string) ?? null,
     puestoSnapshot: (row.puesto_snapshot as string) ?? null,
@@ -384,6 +397,13 @@ function mapFinalizationRow(
     curpSnapshot: (row.curp_snapshot as string) ?? null,
     rfcSnapshot: (row.rfc_snapshot as string) ?? null,
     claveElector: (row.clave_elector as string) ?? null,
+    // Rescision_prueba-specific
+    rescisionKpiTable: type === "rescision_prueba"
+      ? ((row.kpi_table as RescisionKpiRow[]) ?? [])
+      : [],
+    contractSigningDate: (row.contract_signing_date as string) ?? null,
+    terminationEffectiveDate:
+      (row.termination_effective_date as string) ?? null,
   };
 }
 
@@ -398,11 +418,13 @@ export function useHrFinalization(
     queryKey: [FINALIZATION_KEY, requestId],
     queryFn: async (): Promise<FinalizationDraft | null> => {
       const table =
-        requestType === "renuncia"
-          ? "resignation_packets"
-          : requestType === "acta"
-            ? "actas_administrativas"
-            : "cartas_compromiso";
+        requestType === "rescision_prueba"
+          ? "rescision_prueba_documents"
+          : requestType === "renuncia"
+            ? "resignation_packets"
+            : requestType === "acta"
+              ? "actas_administrativas"
+              : "cartas_compromiso";
 
       const { data, error } = await supabase
         .from(table)
@@ -464,11 +486,10 @@ export interface DraftUpdateFields {
   company_legal_name_snapshot?: string | null;
   company_legal_address_snapshot?: string | null;
   incident_date_long_snapshot?: string | null;
-  kpi_table?: CartaKpiRow[];
+  kpi_table?: CartaKpiRow[] | RescisionKpiRow[];
   witnesses?: ActaWitness[];
   reincidencia_prior_carta_id?: string | null;
-  // Renuncia-specific (note: narrative is already declared above and is shared
-  // across carta/acta/renuncia — same column on all three finalization tables)
+  // Renuncia + rescision_prueba shared (finiquito)
   effective_date?: string | null;
   hire_date_snapshot?: string | null;
   salario_diario_snapshot?: number | null;
@@ -480,6 +501,9 @@ export interface DraftUpdateFields {
   curp_snapshot?: string | null;
   rfc_snapshot?: string | null;
   clave_elector?: string | null;
+  // Rescision_prueba-specific
+  contract_signing_date?: string | null;
+  termination_effective_date?: string | null;
 }
 
 /**
@@ -495,20 +519,25 @@ export function useSaveFinalizationDraft() {
       fields,
     }: {
       draftId: string;
-      type: "carta" | "acta" | "renuncia";
+      type: "carta" | "acta" | "renuncia" | "rescision_prueba";
       fields: DraftUpdateFields;
       requestId: string; // for cache invalidation
     }) => {
       const table =
-        type === "renuncia"
-          ? "resignation_packets"
-          : type === "acta"
-            ? "actas_administrativas"
-            : "cartas_compromiso";
+        type === "rescision_prueba"
+          ? "rescision_prueba_documents"
+          : type === "renuncia"
+            ? "resignation_packets"
+            : type === "acta"
+              ? "actas_administrativas"
+              : "cartas_compromiso";
 
+      // Cast: union of 4 finalization tables makes Supabase's typed update
+      // unhappy — the column shapes differ across tables. We trust the caller
+      // to send only fields that exist on the chosen table.
       const { error } = await supabase
         .from(table)
-        .update(fields)
+        .update(fields as never)
         .eq("id", draftId);
 
       if (error) throw error;
@@ -586,14 +615,26 @@ export function useUploadFinalizedPdf() {
       pdfBlob,
     }: {
       draftId: string;
-      type: "carta" | "acta" | "renuncia";
+      type: "carta" | "acta" | "renuncia" | "rescision_prueba";
       employeeId: string;
       docRef: string;
       pdfBlob: Blob;
       requestId: string;
     }) => {
-      const year = docRef.startsWith("CC") ? docRef.slice(2, 6) : docRef.startsWith("RN") ? docRef.slice(2, 6) : docRef.slice(0, 4);
-      const folder = type === "carta" ? "cartas" : type === "renuncia" ? "renuncias" : "actas";
+      // doc_ref prefixes: CC (carta), RN (renuncia), RP (rescision_prueba); acta has no prefix
+      const hasPrefix =
+        docRef.startsWith("CC") ||
+        docRef.startsWith("RN") ||
+        docRef.startsWith("RP");
+      const year = hasPrefix ? docRef.slice(2, 6) : docRef.slice(0, 4);
+      const folder =
+        type === "carta"
+          ? "cartas"
+          : type === "renuncia"
+            ? "renuncias"
+            : type === "rescision_prueba"
+              ? "rescisiones"
+              : "actas";
       const path = `${folder}/${year}/${employeeId}/${docRef}.pdf`;
 
       const { error: upErr } = await supabase.storage
@@ -605,7 +646,13 @@ export function useUploadFinalizedPdf() {
       if (upErr) throw upErr;
 
       const table =
-        type === "renuncia" ? "resignation_packets" : type === "acta" ? "actas_administrativas" : "cartas_compromiso";
+        type === "rescision_prueba"
+          ? "rescision_prueba_documents"
+          : type === "renuncia"
+            ? "resignation_packets"
+            : type === "acta"
+              ? "actas_administrativas"
+              : "cartas_compromiso";
       const { error: dbErr } = await supabase
         .from(table)
         .update({ pdf_path: path })
@@ -645,16 +692,25 @@ export function useUploadSignedScan() {
       scanBlob,
     }: {
       draftId: string;
-      type: "carta" | "acta" | "renuncia";
+      type: "carta" | "acta" | "renuncia" | "rescision_prueba";
       employeeId: string;
       docRef: string;
       scanBlob: Blob;
       requestId: string;
     }) => {
-      const year = docRef.startsWith("CC") || docRef.startsWith("RN")
-        ? docRef.slice(2, 6)
-        : docRef.slice(0, 4);
-      const folder = type === "carta" ? "cartas" : type === "renuncia" ? "renuncias" : "actas";
+      const hasPrefix =
+        docRef.startsWith("CC") ||
+        docRef.startsWith("RN") ||
+        docRef.startsWith("RP");
+      const year = hasPrefix ? docRef.slice(2, 6) : docRef.slice(0, 4);
+      const folder =
+        type === "carta"
+          ? "cartas"
+          : type === "renuncia"
+            ? "renuncias"
+            : type === "rescision_prueba"
+              ? "rescisiones"
+              : "actas";
       const path = `${folder}/${year}/${employeeId}/${docRef}.signed.pdf`;
 
       const { error: upErr } = await supabase.storage
@@ -702,7 +758,7 @@ export function useUploadSignedScan() {
  */
 export async function issueHrDocumentSignedUrl(
   finalizationId: string,
-  type: "carta" | "acta" | "renuncia",
+  type: "carta" | "acta" | "renuncia" | "rescision_prueba",
   fileType: "pdf" | "signed_scan",
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke(
@@ -716,7 +772,7 @@ export async function issueHrDocumentSignedUrl(
 
 export interface SignedHrDocument {
   id: string;
-  type: "carta" | "acta" | "renuncia";
+  type: "carta" | "acta" | "renuncia" | "rescision_prueba";
   docRef: string | null;
   incidentDate: string;
   signedAt: string;
@@ -732,7 +788,7 @@ export function useMySignedHrDocuments(employeeId: string | null) {
   return useQuery({
     queryKey: ["my_signed_hr_documents", employeeId],
     queryFn: async (): Promise<SignedHrDocument[]> => {
-      const [cartasRes, actasRes, renunciasRes] = await Promise.all([
+      const [cartasRes, actasRes, renunciasRes, rescisionesRes] = await Promise.all([
         supabase
           .from("cartas_compromiso")
           .select("id, doc_ref, incident_date, signed_at, pdf_path, signed_scan_path")
@@ -751,11 +807,18 @@ export function useMySignedHrDocuments(employeeId: string | null) {
           .eq("employee_id", employeeId!)
           .not("signed_at", "is", null)
           .order("signed_at", { ascending: false }),
+        supabase
+          .from("rescision_prueba_documents")
+          .select("id, doc_ref, termination_effective_date, signed_at, pdf_path, signed_scan_path")
+          .eq("employee_id", employeeId!)
+          .not("signed_at", "is", null)
+          .order("signed_at", { ascending: false }),
       ]);
 
       if (cartasRes.error) throw cartasRes.error;
       if (actasRes.error) throw actasRes.error;
       if (renunciasRes.error) throw renunciasRes.error;
+      if (rescisionesRes.error) throw rescisionesRes.error;
 
       const cartas: SignedHrDocument[] = (cartasRes.data ?? []).map((r) => ({
         id: r.id,
@@ -787,7 +850,17 @@ export function useMySignedHrDocuments(employeeId: string | null) {
         signedScanPath: r.signed_scan_path,
       }));
 
-      return [...cartas, ...actas, ...renuncias].sort(
+      const rescisiones: SignedHrDocument[] = (rescisionesRes.data ?? []).map((r) => ({
+        id: r.id,
+        type: "rescision_prueba" as const,
+        docRef: r.doc_ref,
+        incidentDate: r.termination_effective_date,
+        signedAt: r.signed_at!,
+        pdfPath: r.pdf_path,
+        signedScanPath: r.signed_scan_path,
+      }));
+
+      return [...cartas, ...actas, ...renuncias, ...rescisiones].sort(
         (a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime(),
       );
     },
