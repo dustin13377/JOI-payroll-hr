@@ -207,18 +207,18 @@ export default function HrDocumentDraft() {
         }
       }
 
-      // Fetch TL display name
+      // Fetch TL legal name (PDFs need the full legal name, not work_name)
       let supervisorName = "";
       const tlId = (emp?.campaigns as { team_lead_id?: string } | null)
         ?.team_lead_id;
       if (tlId) {
         const { data: tl } = await supabase
           .from("employees")
-          .select("full_name, work_name")
+          .select("full_name")
           .eq("id", tlId)
           .single();
         if (tl) {
-          supervisorName = tl.work_name?.trim() || tl.full_name;
+          supervisorName = tl.full_name;
         }
       }
 
@@ -913,7 +913,7 @@ export default function HrDocumentDraft() {
                       horarioSnapshot: e.target.value,
                     }))
                   }
-                  placeholder="Ej: Lun-Vie 9:00 AM – 6:00 PM"
+                  placeholder="Ej: Lun-Vie 9:00 AM – 6:00 PM · Lunch hour: 1:00 PM – 2:00 PM"
                 />
               </div>
             </section>

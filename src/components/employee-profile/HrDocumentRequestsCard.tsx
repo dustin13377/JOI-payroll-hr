@@ -305,7 +305,7 @@ export default function HrDocumentRequestsCard({
                 autoFocus
                 value={narrative}
                 onChange={(e) => setNarrative(e.target.value)}
-                placeholder="Describe qué pasó en tus propias palabras. HR usará esto para redactar la versión formal."
+                placeholder="Where, When and Why — Ej: Agent is aware that the minimum CP is 6 a day, but only got 1 on Friday May 30. HR usará esto para redactar la versión formal."
                 rows={5}
               />
             </div>
