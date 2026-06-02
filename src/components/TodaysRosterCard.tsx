@@ -33,7 +33,6 @@ import {
   useTodayNudges,
   useCreateNudge,
   type TimeclockStatus,
-  type MissingYesterdayAgent,
 } from "@/hooks/useTeamLead";
 import {
   SubmitEODForAgentDialog,
@@ -85,8 +84,16 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
   const nudges = useTodayNudges(tlEmployeeId);
   const createNudge = useCreateNudge();
 
-  // Which agent is currently in the SubmitEODForAgentDialog (if any)
-  const [submitTarget, setSubmitTarget] = useState<MissingYesterdayAgent | null>(null);
+  // Which agent is currently in the SubmitEODForAgentDialog (if any).
+  // Shared between the "missing yesterday" strip (defaultDate = yesterday) and
+  // the per-row "Submit EOD" button on no-login agents (defaultDate = today).
+  const [submitTarget, setSubmitTarget] = useState<{
+    employeeId: string;
+    fullName: string;
+    workName: string | null;
+    campaignId: string | null;
+    defaultDate: string;
+  } | null>(null);
 
   // Which agent is currently in the EditPunchDialog (for clocking in/out on
   // behalf of a no-email agent or fixing a missed punch). null = closed.
@@ -105,14 +112,15 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
 
   // Lazy-fetch KPI fields for the target agent's campaign when the dialog opens.
   // Different campaigns have different KPIs so we can't preload them all.
+  const submitCampaignId = submitTarget?.campaignId ?? null;
   const { data: dialogKpiFields = [] } = useQuery({
-    queryKey: ["roster-submit-eod-kpis", submitTarget?.campaignId],
+    queryKey: ["roster-submit-eod-kpis", submitCampaignId],
     queryFn: async () => {
-      if (!submitTarget?.campaignId) return [];
+      if (!submitCampaignId) return [];
       const { data, error } = await supabase
         .from("campaign_kpi_config")
         .select("field_name, field_label, field_type, is_required, dropdown_options, display_order")
-        .eq("campaign_id", submitTarget.campaignId)
+        .eq("campaign_id", submitCampaignId)
         .eq("is_active", true)
         .order("display_order");
       if (error) throw error;
@@ -124,7 +132,7 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
         dropdown_options: k.dropdown_options,
       }));
     },
-    enabled: !!submitTarget?.campaignId,
+    enabled: !!submitCampaignId,
   });
 
   function handleNudge(employeeId: string, name: string) {
@@ -173,7 +181,15 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
                       variant="outline"
                       className="h-7 text-xs border-amber-300 hover:bg-amber-100"
                       disabled={!agent.campaignId}
-                      onClick={() => setSubmitTarget(agent)}
+                      onClick={() =>
+                        setSubmitTarget({
+                          employeeId: agent.employeeId,
+                          fullName: agent.fullName,
+                          workName: agent.workName,
+                          campaignId: agent.campaignId,
+                          defaultDate: yesterday,
+                        })
+                      }
                     >
                       <Send className="mr-1 h-3 w-3" />
                       Submit for {displayName.split(" ")[0]}
@@ -241,6 +257,34 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                   )}
+                  {/* Same-day "Submit EOD" — only for agents without a login.
+                      The submit-eod-for-agent edge fn refuses logged-in agents,
+                      so hide the button rather than let them click and fail. */}
+                  {!entry.hasLogin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={!entry.campaignId}
+                      title={
+                        entry.campaignId
+                          ? "Submit today's EOD for this agent"
+                          : "Agent needs a campaign assigned first"
+                      }
+                      onClick={() =>
+                        setSubmitTarget({
+                          employeeId: entry.employeeId,
+                          fullName: entry.fullName,
+                          workName: entry.workName,
+                          campaignId: entry.campaignId,
+                          defaultDate: todayLocal(),
+                        })
+                      }
+                    >
+                      <Send className="mr-1 h-3 w-3" />
+                      EOD
+                    </Button>
+                  )}
                   {showNudgeButton && (
                     nudge ? (
                       <Badge
@@ -269,8 +313,9 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
         </CardContent>
       </Card>
 
-      {/* Submit EOD on behalf of a missing-EOD agent.
-          Defaults the dialog's date to yesterday since that's the missing day. */}
+      {/* Submit EOD on behalf of an agent. Opened from two places:
+          - "Missing yesterday's EOD" amber strip (defaultDate = yesterday)
+          - Per-row button on no-login agents (defaultDate = today) */}
       <SubmitEODForAgentDialog
         open={!!submitTarget}
         onOpenChange={(o) => { if (!o) setSubmitTarget(null); }}
@@ -287,7 +332,7 @@ export function TodaysRosterCard({ tlEmployeeId }: Props) {
         }
         campaignId={submitTarget?.campaignId ?? null}
         kpiFields={dialogKpiFields}
-        defaultDate={yesterday}
+        defaultDate={submitTarget?.defaultDate ?? yesterday}
         onSubmitted={() => {
           setSubmitTarget(null);
           missingYesterday.refetch();

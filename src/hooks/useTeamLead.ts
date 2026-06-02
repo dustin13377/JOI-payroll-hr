@@ -153,6 +153,10 @@ export interface TimeclockStatusRow {
   status: TimeclockStatus;
   clockInTime: string | null;
   scheduledStart: string | null;
+  /** Agent's current campaign — needed for same-day TL-submitted EOD */
+  campaignId: string | null;
+  /** false → TL can file EOD/punches on their behalf via the agent-submit edge fns */
+  hasLogin: boolean;
 }
 
 export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
@@ -199,6 +203,24 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
         }
       }
 
+      // 3b. No-login set — TLs can submit EOD/punches for these agents.
+      //     user_profiles RLS blocks TLs from reading other users' rows, so we
+      //     go through the SECURITY DEFINER RPC, batched per campaign in parallel.
+      const noLoginIds = new Set<string>();
+      if (campaignIds.length > 0) {
+        const results = await Promise.all(
+          campaignIds.map((cid) =>
+            supabase.rpc("employees_without_login", { p_campaign_id: cid })
+          )
+        );
+        for (const r of results) {
+          if (r.error) throw r.error;
+          for (const row of (r.data || []) as { employee_id: string }[]) {
+            noLoginIds.add(row.employee_id);
+          }
+        }
+      }
+
       // 4. Compute status for each member
       const now = new Date();
       const todayDow = new Date(today + "T00:00:00").getDay(); // 0=Sun
@@ -211,6 +233,8 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
         // Determine if today is a workday
         const isWorkday = shift ? shift.days_of_week.includes(todayDow) : true; // default to workday if no shift
 
+        const hasLogin = !noLoginIds.has(m.id);
+
         if (!isWorkday) {
           return {
             employeeId: m.id,
@@ -219,6 +243,8 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
             status: "day_off" as TimeclockStatus,
             clockInTime: clockRow?.clock_in ?? null,
             scheduledStart: startTime,
+            campaignId: m.campaign_id,
+            hasLogin,
           };
         }
 
@@ -245,6 +271,8 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
             status: "completed" as TimeclockStatus,
             clockInTime: clockRow.clock_in,
             scheduledStart: startTime,
+            campaignId: m.campaign_id,
+            hasLogin,
           };
         }
 
@@ -259,6 +287,8 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
             status: isLate ? ("late" as TimeclockStatus) : ("present" as TimeclockStatus),
             clockInTime: clockRow.clock_in,
             scheduledStart: startTime,
+            campaignId: m.campaign_id,
+            hasLogin,
           };
         }
 
@@ -271,6 +301,8 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
             status: "absent" as TimeclockStatus,
             clockInTime: null,
             scheduledStart: startTime,
+            campaignId: m.campaign_id,
+            hasLogin,
           };
         }
         if (graceDeadline && now > graceDeadline) {
@@ -281,14 +313,19 @@ export function useTodayTimeclockStatus(tlEmployeeId: string | null) {
             status: "late" as TimeclockStatus,
             clockInTime: null,
             scheduledStart: startTime,
+            campaignId: m.campaign_id,
+            hasLogin,
           };
         }
         return {
           employeeId: m.id,
           fullName: m.full_name,
+          workName: m.work_name,
           status: "expected" as TimeclockStatus,
           clockInTime: null,
           scheduledStart: startTime,
+          campaignId: m.campaign_id,
+          hasLogin,
         };
       });
     },
