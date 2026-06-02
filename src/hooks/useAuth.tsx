@@ -58,6 +58,12 @@ interface AuthContextValue {
   isTeamLead: boolean;
   isAgent: boolean;
   isLeadership: boolean;
+  /**
+   * True for owner + admin (HR) only. Managers do NOT get this — they can see
+   * the HR doc workflow but salary, finiquito amounts, and total-en-letras
+   * render as asterisks for them.
+   */
+  canViewSalary: boolean;
   isEmployee: boolean;
   isClient: boolean;
   clientId: string | null;
@@ -163,8 +169,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isClient = profile?.role === "client";
   const title: UserTitle | null = profile ? normalizeTitle(profile.role) : null;
 
-  // Leadership = owner + admin + manager. They see everything (including pay).
+  // Leadership = owner + admin + manager. They see the HR doc workflow.
   const isLeadership = title === "owner" || title === "admin" || title === "manager";
+  // Salary visibility is narrower than leadership — only owner + admin (HR).
+  // Managers see asterisks where amounts would appear.
+  const canViewSalary = title === "owner" || title === "admin";
 
   const value: AuthContextValue = {
     session,
@@ -183,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAgent: title === "agent",
     // Permission tiers (use these for gates)
     isLeadership,
+    canViewSalary,
     // Back-compat alias — old code reads isEmployee to mean "regular worker"
     isEmployee: title === "agent",
     // Client portal

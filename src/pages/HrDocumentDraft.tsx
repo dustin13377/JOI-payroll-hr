@@ -173,7 +173,8 @@ function seedToFormState(seed: SnapshotSeed): DraftFormState {
 export default function HrDocumentDraft() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { employeeId: authEmployeeId } = useAuth();
+  const { employeeId: authEmployeeId, canViewSalary } = useAuth();
+  const MASKED = "* * * * *";
 
   // Request + existing draft
   const { data: request, isLoading: reqLoading } = useHrDocumentRequest(id);
@@ -487,10 +488,10 @@ export default function HrDocumentDraft() {
       return generateCartaPdf(liveDraft, request);
     }
     if (request.requestType === "renuncia") {
-      return generateRenunciaPacketPdf(liveDraft, request);
+      return generateRenunciaPacketPdf(liveDraft, request, { maskSalary: !canViewSalary });
     }
     if (request.requestType === "rescision_prueba") {
-      return generateRescisionPdf(liveDraft, request);
+      return generateRescisionPdf(liveDraft, request, { maskSalary: !canViewSalary });
     }
     return generateActaPdf(
       liveDraft,
@@ -516,6 +517,10 @@ export default function HrDocumentDraft() {
 
   async function handleFinalizePdf() {
     if (!draft || !request) return;
+    if (!canFinalize) {
+      toast.error("Finalize requires Owner / HR — they verify the real finiquito amounts.");
+      return;
+    }
     // Auto-save before PDF generation
     if (formDirty.current) {
       await handleSave();
@@ -559,6 +564,10 @@ export default function HrDocumentDraft() {
     if (scanInputRef.current) scanInputRef.current.value = "";
     if (!file) return;
 
+    if (!canFinalize) {
+      toast.error("Uploading the signed scan is Owner / HR only.");
+      return;
+    }
     if (file.type !== "application/pdf") {
       toast.error("File must be PDF");
       return;
@@ -627,6 +636,14 @@ export default function HrDocumentDraft() {
   const isTerminal =
     request.status === "canceled" || request.status === "downgraded";
 
+  // Docs that contain salary information. Managers can fill these in but
+  // cannot finalize or upload the signed scan — those produce the legally-
+  // binding document and require real amounts visible to the actor.
+  const isSalaryDoc =
+    request.requestType === "renuncia" ||
+    request.requestType === "rescision_prueba";
+  const canFinalize = canViewSalary || !isSalaryDoc;
+
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
@@ -680,15 +697,24 @@ export default function HrDocumentDraft() {
               >
                 <Eye className="mr-1 h-4 w-4" /> Preview PDF
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleFinalizePdf}
-                disabled={!draft || uploadPdf.isPending}
-              >
-                <Upload className="mr-1 h-4 w-4" />
-                {uploadPdf.isPending ? "Uploading..." : "Finalize & Save PDF"}
-              </Button>
+              {canFinalize ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleFinalizePdf}
+                  disabled={!draft || uploadPdf.isPending}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {uploadPdf.isPending ? "Uploading..." : "Finalize & Save PDF"}
+                </Button>
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground italic"
+                  title="Finalizing requires the actual finiquito amounts. Only Owner / HR can produce the signed PDF."
+                >
+                  Finalize is Owner / HR only
+                </span>
+              )}
             </>
           )}
           {draft?.pdfPath && (
@@ -737,13 +763,20 @@ export default function HrDocumentDraft() {
             onChange={handleScanFileSelect}
           />
 
-          {!draft.pdfPath && (
+          {!canFinalize && !draft.signedAt && (
+            <p className="text-xs text-muted-foreground italic">
+              Uploading the signed scan is Owner / HR only — they verify the
+              real finiquito amounts on the printed document before locking it.
+            </p>
+          )}
+
+          {canFinalize && !draft.pdfPath && (
             <p className="text-xs text-muted-foreground">
               Generate and save the PDF first before uploading the signed scan.
             </p>
           )}
 
-          {draft.pdfPath && !draft.signedAt && (
+          {canFinalize && draft.pdfPath && !draft.signedAt && (
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -778,17 +811,19 @@ export default function HrDocumentDraft() {
                   <ExternalLink className="mr-1 h-3 w-3" /> View Signed
                   Scan
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => scanInputRef.current?.click()}
-                  disabled={uploadScan.isPending}
-                >
-                  <RefreshCw className="mr-1 h-3 w-3" />
-                  {uploadScan.isPending
-                    ? "Uploading..."
-                    : "Replace scan"}
-                </Button>
+                {canFinalize && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => scanInputRef.current?.click()}
+                    disabled={uploadScan.isPending}
+                  >
+                    <RefreshCw className="mr-1 h-3 w-3" />
+                    {uploadScan.isPending
+                      ? "Uploading..."
+                      : "Replace scan"}
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -1309,35 +1344,43 @@ export default function HrDocumentDraft() {
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
                     </Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const sd = parseFloat(form.salarioDiarioSnapshot);
-                        const hd = form.hireDateSnapshot;
-                        const rd = form.effectiveDate;
-                        if (!sd || !hd || !rd) {
-                          toast.error("Enter hire date, daily wage, and effective date first");
-                          return;
-                        }
-                        const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
-                        const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
-                        const prima = calcPrimaVacacional(vac.amount);
-                        const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
-                        setFormDirty((f) => ({
-                          ...f,
-                          aguinaldoMonto: String(aguinaldo),
-                          vacacionesMonto: String(vac.amount),
-                          primaVacacionalMonto: String(prima),
-                          totalMonto: String(total),
-                          totalEnLetras: numberToSpanishWords(total),
-                        }));
-                      }}
-                    >
-                      Auto-calculate
-                    </Button>
+                    {canViewSalary && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const sd = parseFloat(form.salarioDiarioSnapshot);
+                          const hd = form.hireDateSnapshot;
+                          const rd = form.effectiveDate;
+                          if (!sd || !hd || !rd) {
+                            toast.error("Enter hire date, daily wage, and effective date first");
+                            return;
+                          }
+                          const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                          const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                          const prima = calcPrimaVacacional(vac.amount);
+                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
+                          setFormDirty((f) => ({
+                            ...f,
+                            aguinaldoMonto: String(aguinaldo),
+                            vacacionesMonto: String(vac.amount),
+                            primaVacacionalMonto: String(prima),
+                            totalMonto: String(total),
+                            totalEnLetras: numberToSpanishWords(total),
+                          }));
+                        }}
+                      >
+                        Auto-calculate
+                      </Button>
+                    )}
                   </div>
+
+                  {!canViewSalary && (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Salary information is hidden. Visible to Owner and HR only.
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -1360,10 +1403,13 @@ export default function HrDocumentDraft() {
                         Daily wage ($ MXN)
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.salarioDiarioSnapshot}
+                        value={canViewSalary ? form.salarioDiarioSnapshot : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             salarioDiarioSnapshot: e.target.value,
@@ -1379,10 +1425,13 @@ export default function HrDocumentDraft() {
                         Prorated Christmas bonus
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.aguinaldoMonto}
+                        value={canViewSalary ? form.aguinaldoMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: e.target.value,
@@ -1395,10 +1444,13 @@ export default function HrDocumentDraft() {
                         Accrued vacation
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.vacacionesMonto}
+                        value={canViewSalary ? form.vacacionesMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             vacacionesMonto: e.target.value,
@@ -1411,10 +1463,13 @@ export default function HrDocumentDraft() {
                         Vacation premium (25%)
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.primaVacacionalMonto}
+                        value={canViewSalary ? form.primaVacacionalMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             primaVacacionalMonto: e.target.value,
@@ -1427,10 +1482,13 @@ export default function HrDocumentDraft() {
                         Total
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.totalMonto}
+                        value={canViewSalary ? form.totalMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             totalMonto: e.target.value,
@@ -1446,8 +1504,11 @@ export default function HrDocumentDraft() {
                     </Label>
                     <Textarea
                       rows={2}
-                      value={form.totalEnLetras}
+                      value={canViewSalary ? form.totalEnLetras : MASKED}
+                      readOnly={!canViewSalary}
+                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
+                        canViewSalary &&
                         setFormDirty((f) => ({
                           ...f,
                           totalEnLetras: e.target.value,
@@ -1703,45 +1764,56 @@ export default function HrDocumentDraft() {
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
                     </Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const sd = parseFloat(form.salarioDiarioSnapshot);
-                        const hd = form.hireDateSnapshot;
-                        const rd = form.terminationEffectiveDate;
-                        if (!sd || !hd || !rd) {
-                          toast.error("Enter hire date, daily wage, and termination date first");
-                          return;
-                        }
-                        const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
-                        const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
-                        const prima = calcPrimaVacacional(vac.amount);
-                        const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
-                        setFormDirty((f) => ({
-                          ...f,
-                          aguinaldoMonto: String(aguinaldo),
-                          vacacionesMonto: String(vac.amount),
-                          primaVacacionalMonto: String(prima),
-                          totalMonto: String(total),
-                          totalEnLetras: numberToSpanishWords(total),
-                        }));
-                      }}
-                    >
-                      Auto-calculate
-                    </Button>
+                    {canViewSalary && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const sd = parseFloat(form.salarioDiarioSnapshot);
+                          const hd = form.hireDateSnapshot;
+                          const rd = form.terminationEffectiveDate;
+                          if (!sd || !hd || !rd) {
+                            toast.error("Enter hire date, daily wage, and termination date first");
+                            return;
+                          }
+                          const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                          const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                          const prima = calcPrimaVacacional(vac.amount);
+                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
+                          setFormDirty((f) => ({
+                            ...f,
+                            aguinaldoMonto: String(aguinaldo),
+                            vacacionesMonto: String(vac.amount),
+                            primaVacacionalMonto: String(prima),
+                            totalMonto: String(total),
+                            totalEnLetras: numberToSpanishWords(total),
+                          }));
+                        }}
+                      >
+                        Auto-calculate
+                      </Button>
+                    )}
                   </div>
+
+                  {!canViewSalary && (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Salary information is hidden. Visible to Owner and HR only.
+                    </p>
+                  )}
 
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">
                       Daily wage ($ MXN)
                     </Label>
                     <Input
-                      type="number"
+                      type={canViewSalary ? "number" : "text"}
                       step="0.01"
-                      value={form.salarioDiarioSnapshot}
+                      value={canViewSalary ? form.salarioDiarioSnapshot : MASKED}
+                      readOnly={!canViewSalary}
+                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
+                        canViewSalary &&
                         setFormDirty((f) => ({
                           ...f,
                           salarioDiarioSnapshot: e.target.value,
@@ -1756,10 +1828,13 @@ export default function HrDocumentDraft() {
                         Prorated Christmas bonus
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.aguinaldoMonto}
+                        value={canViewSalary ? form.aguinaldoMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: e.target.value,
@@ -1772,10 +1847,13 @@ export default function HrDocumentDraft() {
                         Accrued vacation
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.vacacionesMonto}
+                        value={canViewSalary ? form.vacacionesMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             vacacionesMonto: e.target.value,
@@ -1788,10 +1866,13 @@ export default function HrDocumentDraft() {
                         Vacation premium (25%)
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.primaVacacionalMonto}
+                        value={canViewSalary ? form.primaVacacionalMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             primaVacacionalMonto: e.target.value,
@@ -1804,10 +1885,13 @@ export default function HrDocumentDraft() {
                         Total
                       </Label>
                       <Input
-                        type="number"
+                        type={canViewSalary ? "number" : "text"}
                         step="0.01"
-                        value={form.totalMonto}
+                        value={canViewSalary ? form.totalMonto : MASKED}
+                        readOnly={!canViewSalary}
+                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
+                          canViewSalary &&
                           setFormDirty((f) => ({
                             ...f,
                             totalMonto: e.target.value,
@@ -1823,8 +1907,11 @@ export default function HrDocumentDraft() {
                     </Label>
                     <Textarea
                       rows={2}
-                      value={form.totalEnLetras}
+                      value={canViewSalary ? form.totalEnLetras : MASKED}
+                      readOnly={!canViewSalary}
+                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
+                        canViewSalary &&
                         setFormDirty((f) => ({
                           ...f,
                           totalEnLetras: e.target.value,

@@ -47,10 +47,19 @@ function fmtMoney(n: number | null | undefined): string {
   return `$ ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const MASKED_MONEY = "$ * * * *";
+const MASKED_TEXT = "* * * * * * * * * *";
+
 export function generateRescisionPdf(
   draft: FinalizationDraft,
   _request: HrDocumentRequestQueueItem,
+  opts?: { maskSalary?: boolean },
 ): Blob {
+  const mask = opts?.maskSalary === true;
+  const money = (n: number | null | undefined): string =>
+    mask ? MASKED_MONEY : fmtMoney(n);
+  const letras = (s: string | null | undefined): string =>
+    mask ? MASKED_TEXT : (s ?? "");
   const doc = createDoc();
   let y = MARGIN_TOP;
 
@@ -407,9 +416,9 @@ export function generateRescisionPdf(
     y += 0.2;
 
     const finRows = [
-      { label: "Aguinaldo proporcional", value: fmtMoney(draft.aguinaldoMonto) },
-      { label: "Vacaciones correspondientes", value: fmtMoney(draft.vacacionesMonto) },
-      { label: "Prima vacacional (25%)", value: fmtMoney(draft.primaVacacionalMonto) },
+      { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
+      { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
+      { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },
     ];
     const labelColW = 2.8;
     const valueColW = CONTENT_WIDTH - labelColW;
@@ -433,10 +442,10 @@ export function generateRescisionPdf(
     doc.setFont("Helvetica", "bold");
     doc.text("Total", MARGIN_LEFT + 0.1, y + 0.2);
     doc.rect(MARGIN_LEFT + labelColW, y, valueColW, totalH);
-    doc.text(fmtMoney(draft.totalMonto), MARGIN_LEFT + labelColW + 0.1, y + 0.2);
+    doc.text(money(draft.totalMonto), MARGIN_LEFT + labelColW + 0.1, y + 0.2);
     y += totalH;
 
-    if (draft.totalEnLetras) {
+    if (draft.totalEnLetras || mask) {
       const letraH = 0.28;
       y = ensureSpace(doc, y, letraH);
       doc.rect(MARGIN_LEFT, y, labelColW, letraH);
@@ -445,7 +454,7 @@ export function generateRescisionPdf(
       doc.text("Importe con letra", MARGIN_LEFT + 0.1, y + 0.18);
       doc.rect(MARGIN_LEFT + labelColW, y, valueColW, letraH);
       const letraLines = doc.splitTextToSize(
-        draft.totalEnLetras,
+        letras(draft.totalEnLetras),
         valueColW - 0.2,
       );
       doc.text(letraLines[0] ?? "", MARGIN_LEFT + labelColW + 0.1, y + 0.18);
