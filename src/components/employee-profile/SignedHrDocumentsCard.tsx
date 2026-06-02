@@ -21,7 +21,7 @@ export default function SignedHrDocumentsCard({
 
   async function handleView(
     finalizationId: string,
-    type: "carta" | "acta",
+    type: "carta" | "acta" | "renuncia" | "rescision_prueba",
     fileType: "pdf" | "signed_scan",
   ) {
     setLoadingId(`${finalizationId}-${fileType}`);
@@ -63,14 +63,16 @@ export default function SignedHrDocumentsCard({
           >
             <div className="flex items-center gap-2 flex-wrap">
               <Badge
-                variant={doc.type === "acta" ? "destructive" : doc.type === "renuncia" ? "secondary" : "outline"}
+                variant={doc.type === "acta" || doc.type === "rescision_prueba" ? "destructive" : doc.type === "renuncia" ? "secondary" : "outline"}
                 className="text-xs"
               >
                 {doc.type === "acta"
                   ? "Disciplinary Act"
                   : doc.type === "renuncia"
                     ? "Resignation"
-                    : "Commitment Letter"}
+                    : doc.type === "rescision_prueba"
+                      ? "Probation Termination"
+                      : "Commitment Letter"}
               </Badge>
               {doc.docRef && (
                 <span className="text-xs font-mono text-muted-foreground">

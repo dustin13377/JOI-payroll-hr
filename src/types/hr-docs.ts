@@ -1,7 +1,7 @@
 // B2/B3 domain types — cartas de compromiso + actas administrativas
 // Hand-curated shapes for UI/hook use. Snake_case in DB → camelCase here.
 
-export type HrDocumentRequestType = 'carta' | 'acta' | 'renuncia';
+export type HrDocumentRequestType = 'carta' | 'acta' | 'renuncia' | 'rescision_prueba';
 
 export type HrDocumentRequestStatus =
   | 'pending'
@@ -23,6 +23,7 @@ export interface HrDocumentRequest {
   fulfilledCartaId: string | null;
   fulfilledActaId: string | null;
   fulfilledRenunciaId: string | null;
+  fulfilledRescisionId: string | null;
   canceledReason: string | null;
   createdAt: string;
   updatedAt: string;
@@ -60,6 +61,48 @@ export interface CartaCompromiso {
 export interface ActaWitness {
   name: string;
   role: string;
+}
+
+// ── Rescisión de Periodo de Prueba ──────────────────────────────────
+
+export interface RescisionKpiRow {
+  kpi: string;       // Métrica / KPI (e.g. "Llamadas diarias")
+  required: string;  // Requerido (e.g. "350 llamadas")
+  recorded: string;  // Registrado — what the agent actually did
+  met: string;       // Cumplimiento — "Sí" / "No" / "Parcial" / blank
+}
+
+export interface RescisionPruebaDocument {
+  id: string;
+  employeeId: string;
+  requestId: string | null;
+  docRef: string | null;
+  trabajadorNameSnapshot: string | null;
+  puestoSnapshot: string | null;
+  horarioSnapshot: string | null;
+  supervisorNameSnapshot: string | null;
+  companyLegalNameSnapshot: string | null;
+  companyLegalAddressSnapshot: string | null;
+  incidentDateLongSnapshot: string | null;
+  hireDateSnapshot: string | null;
+  contractSigningDate: string | null;
+  terminationEffectiveDate: string;
+  kpiTable: RescisionKpiRow[];
+  salarioDiarioSnapshot: number | null;
+  aguinaldoMonto: number | null;
+  vacacionesMonto: number | null;
+  primaVacacionalMonto: number | null;
+  totalMonto: number | null;
+  totalEnLetras: string | null;
+  curpSnapshot: string | null;
+  rfcSnapshot: string | null;
+  narrative: string | null;
+  pdfPath: string | null;
+  signedAt: string | null;
+  signedScanPath: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ActaAdministrativa {

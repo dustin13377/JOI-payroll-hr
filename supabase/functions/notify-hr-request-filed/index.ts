@@ -55,6 +55,7 @@ const TYPE_LABELS: Record<string, string> = {
   carta: "Carta de Compromiso",
   acta: "Acta Administrativa",
   renuncia: "Renuncia Voluntaria",
+  rescision_prueba: "Rescisión Periodo de Prueba",
 };
 
 function emailShell(heading: string, bodyHtml: string): string {

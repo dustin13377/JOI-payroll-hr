@@ -156,6 +156,70 @@ export const ENCUESTA_CAUSA_OPTIONS: string[] = [
   "Otro: ______________",
 ];
 
+// ── Rescisión Periodo de Prueba ─────────────────────────────────────
+
+export const RESCISION_TITLE = "AVISO DE RESCISIÓN DE CONTRATO INDIVIDUAL DE TRABAJO";
+
+export const RESCISION_SUBTITLE =
+  "Contrato de Periodo de Prueba — Incumplimiento de Indicadores de Desempeño";
+
+export const RESCISION_ANTECEDENTES_TEMPLATE =
+  "Con fecha {contract_signing_date_long}, se celebró entre las partes un Contrato Individual de Trabajo por Tiempo Determinado — Periodo de Prueba con vigencia de treinta (30) días naturales, en términos del artículo 39-A de la Ley Federal del Trabajo, con la finalidad de verificar si el trabajador cumple con los requisitos y conocimientos necesarios para el puesto de {puesto}.";
+
+export const RESCISION_ANTECEDENTES_2 =
+  "Dicho contrato estableció, en su Cláusula Sexta, los indicadores clave de desempeño (KPIs) que el trabajador debía cumplir como condición para la continuación de la relación laboral, los cuales se detallan en el apartado siguiente.";
+
+export const RESCISION_KPI_INTRO =
+  "A continuación se presenta el comparativo entre las métricas contractualmente requeridas y el desempeño registrado durante el periodo de prueba:";
+
+export const RESCISION_KPI_FOOTNOTE =
+  "* Los valores de la columna «Registrado» corresponden al promedio semanal documentado en BLB CRM, RingCentral y Origination Tracker durante el periodo comprendido entre el primer y trigésimo día natural de prueba.";
+
+export const RESCISION_FUNDAMENTO_INTRO =
+  "La presente rescisión se fundamenta en los siguientes preceptos de la Ley Federal del Trabajo:";
+
+export const RESCISION_FUNDAMENTO_ROWS: { article: string; text: string }[] = [
+  {
+    article: "Art. 39-A LFT",
+    text: "El contrato de prueba podrá celebrarse por un período no mayor de 30 días. Si el trabajador no satisface los requisitos y conocimientos necesarios para desarrollar el trabajo, el patrón podrá rescindir la relación laboral sin responsabilidad.",
+  },
+  {
+    article: "Art. 39-B LFT",
+    text: "Los trabajos de capacitación inicial y prueba se regirán por las normas de la Ley Federal del Trabajo. El trabajador gozará de todos los derechos establecidos, incluyendo la seguridad social.",
+  },
+  {
+    article: "Art. 47 LFT Frac. XIV",
+    text: "Son causas de rescisión de la relación de trabajo, sin responsabilidad para el patrón, el incumplimiento de las obligaciones a que se refiere el artículo 134 de esta Ley, en especial las fracciones I, X y XI.",
+  },
+];
+
+export const RESCISION_DECLARACION_TEMPLATE =
+  "En virtud de los hechos y fundamentos señalados, OUTSOURCE CONSULTING GROUP S.A.S., por conducto de su representante legal, notifica formalmente al(a la) trabajador(a) la RESCISIÓN DEL CONTRATO INDIVIDUAL DE TRABAJO DE PERIODO DE PRUEBA a partir del día {termination_date_long}, sin responsabilidad para la empresa, de conformidad con los artículos 39-A y 47 de la Ley Federal del Trabajo.";
+
+export const RESCISION_DECLARACION_2 =
+  "La presente rescisión obedece exclusivamente al incumplimiento de los indicadores de desempeño pactados contractualmente, sin que medie causal alguna de discriminación, represalia o violación a derechos laborales.";
+
+export const RESCISION_LIQUIDACION_INTRO =
+  "La empresa se compromete a cubrir al trabajador(a), dentro del plazo legal, los conceptos que correspondan conforme a ley:";
+
+export const RESCISION_LIQUIDACION_BULLETS: string[] = [
+  "Salario devengado hasta la fecha efectiva de rescisión (proporcional).",
+  "Parte proporcional de días de descanso obligatorio (art. 74 LFT).",
+  "Parte proporcional de vacaciones y prima vacacional (arts. 76–80 LFT).",
+  "Parte proporcional de aguinaldo (art. 87 LFT).",
+  "Devolución de documentos originales y constancia de trabajo (art. 132, frac. XIII LFT).",
+  "Entrega de comprobantes de afiliación al IMSS y baja correspondiente.",
+];
+
+export const RESCISION_NO_INDEMNIZACION =
+  "El trabajador no generará derecho a indemnización constitucional (art. 50 LFT) ni a prima de antigüedad (art. 162 LFT) en virtud de la naturaleza del contrato rescindido (período de prueba — art. 39-A LFT).";
+
+export const RESCISION_CONSTANCIA_INTRO =
+  "El(La) trabajador(a) abajo firmante declara haber recibido copia de la presente notificación y estar en conocimiento de su contenido:";
+
+export const RESCISION_LEGAL_REP_NAME = "DIOMEDES SANDOVAL ROJAS";
+export const RESCISION_LEGAL_REP_TITLE = "Representante Legal · Outsource Consulting Group";
+
 // ── Template rendering helper ───────────────────────────────────────
 
 export function renderTemplate(

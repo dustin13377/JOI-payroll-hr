@@ -28,10 +28,11 @@ import {
   useUploadSignedScan,
   type FinalizationDraft,
 } from "@/hooks/useHrDocumentRequests";
-import type { CartaKpiRow, ActaWitness } from "@/types/hr-docs";
+import type { CartaKpiRow, ActaWitness, RescisionKpiRow } from "@/types/hr-docs";
 import { generateCartaPdf } from "@/lib/pdf/generateCartaPdf";
 import { generateActaPdf } from "@/lib/pdf/generateActaPdf";
 import { generateRenunciaPacketPdf } from "@/lib/pdf/generateRenunciaPacketPdf";
+import { generateRescisionPdf } from "@/lib/pdf/generateRescisionPdf";
 import {
   calcAguinaldoProporcional,
   calcVacaciones,
@@ -105,6 +106,10 @@ interface DraftFormState {
   curpSnapshot: string;
   rfcSnapshot: string;
   claveElector: string;
+  // Rescision_prueba-specific
+  rescisionKpiTable: RescisionKpiRow[];
+  contractSigningDate: string;
+  terminationEffectiveDate: string;
 }
 
 function draftToFormState(draft: FinalizationDraft): DraftFormState {
@@ -132,6 +137,9 @@ function draftToFormState(draft: FinalizationDraft): DraftFormState {
     curpSnapshot: draft.curpSnapshot ?? "",
     rfcSnapshot: draft.rfcSnapshot ?? "",
     claveElector: draft.claveElector ?? "",
+    rescisionKpiTable: draft.rescisionKpiTable ?? [],
+    contractSigningDate: draft.contractSigningDate ?? "",
+    terminationEffectiveDate: draft.terminationEffectiveDate ?? "",
   };
 }
 
@@ -153,6 +161,9 @@ function seedToFormState(seed: SnapshotSeed): DraftFormState {
     curpSnapshot: "",
     rfcSnapshot: "",
     claveElector: "",
+    rescisionKpiTable: [],
+    contractSigningDate: "",
+    terminationEffectiveDate: "",
     ...seed,
   };
 }
@@ -273,6 +284,9 @@ export default function HrDocumentDraft() {
     curpSnapshot: "",
     rfcSnapshot: "",
     claveElector: "",
+    rescisionKpiTable: [],
+    contractSigningDate: "",
+    terminationEffectiveDate: "",
   });
   const formDirty = useRef(false);
 
@@ -311,6 +325,15 @@ export default function HrDocumentDraft() {
           if (!state.hireDateSnapshot) state.hireDateSnapshot = snapshotSeed.hireDateSnapshot ?? "";
           if (!state.salarioDiarioSnapshot) state.salarioDiarioSnapshot = snapshotSeed.salarioDiarioSnapshot ?? "";
           if (!state.effectiveDate) state.effectiveDate = snapshotSeed.effectiveDate ?? "";
+        }
+        if (draft.type === "rescision_prueba") {
+          if (!state.curpSnapshot) state.curpSnapshot = snapshotSeed.curpSnapshot ?? "";
+          if (!state.rfcSnapshot) state.rfcSnapshot = snapshotSeed.rfcSnapshot ?? "";
+          if (!state.hireDateSnapshot) state.hireDateSnapshot = snapshotSeed.hireDateSnapshot ?? "";
+          if (!state.salarioDiarioSnapshot) state.salarioDiarioSnapshot = snapshotSeed.salarioDiarioSnapshot ?? "";
+          if (!state.terminationEffectiveDate) state.terminationEffectiveDate = snapshotSeed.effectiveDate ?? "";
+          // contract date defaults to hire date when blank — usually same day for probation
+          if (!state.contractSigningDate) state.contractSigningDate = snapshotSeed.hireDateSnapshot ?? "";
         }
       }
       setForm(state);
@@ -364,6 +387,24 @@ export default function HrDocumentDraft() {
       fields.curp_snapshot = form.curpSnapshot || null;
       fields.rfc_snapshot = form.rfcSnapshot || null;
       fields.clave_elector = form.claveElector || null;
+    } else if (request.requestType === "rescision_prueba") {
+      fields.supervisor_name_snapshot = form.supervisorNameSnapshot || null;
+      fields.incident_date_long_snapshot = form.incidentDateLongSnapshot || null;
+      fields.kpi_table = form.rescisionKpiTable;
+      fields.contract_signing_date = form.contractSigningDate || null;
+      // termination_effective_date is NOT NULL — leave it unset if blank
+      if (form.terminationEffectiveDate) {
+        fields.termination_effective_date = form.terminationEffectiveDate;
+      }
+      fields.hire_date_snapshot = form.hireDateSnapshot || null;
+      fields.salario_diario_snapshot = form.salarioDiarioSnapshot ? parseFloat(form.salarioDiarioSnapshot) : null;
+      fields.aguinaldo_monto = form.aguinaldoMonto ? parseFloat(form.aguinaldoMonto) : null;
+      fields.vacaciones_monto = form.vacacionesMonto ? parseFloat(form.vacacionesMonto) : null;
+      fields.prima_vacacional_monto = form.primaVacacionalMonto ? parseFloat(form.primaVacacionalMonto) : null;
+      fields.total_monto = form.totalMonto ? parseFloat(form.totalMonto) : null;
+      fields.total_en_letras = form.totalEnLetras || null;
+      fields.curp_snapshot = form.curpSnapshot || null;
+      fields.rfc_snapshot = form.rfcSnapshot || null;
     }
 
     try {
@@ -377,7 +418,7 @@ export default function HrDocumentDraft() {
         // Now update the freshly-created row with the form fields
         await saveDraft.mutateAsync({
           draftId: result.id,
-          type: result.type as "carta" | "acta" | "renuncia",
+          type: result.type as "carta" | "acta" | "renuncia" | "rescision_prueba",
           fields,
           requestId: request.id,
         });
@@ -429,6 +470,13 @@ export default function HrDocumentDraft() {
       curpSnapshot: form.curpSnapshot || draft.curpSnapshot,
       rfcSnapshot: form.rfcSnapshot || draft.rfcSnapshot,
       claveElector: form.claveElector || draft.claveElector,
+      rescisionKpiTable:
+        form.rescisionKpiTable.length > 0
+          ? form.rescisionKpiTable
+          : draft.rescisionKpiTable,
+      contractSigningDate: form.contractSigningDate || draft.contractSigningDate,
+      terminationEffectiveDate:
+        form.terminationEffectiveDate || draft.terminationEffectiveDate,
     };
   }
 
@@ -440,6 +488,9 @@ export default function HrDocumentDraft() {
     }
     if (request.requestType === "renuncia") {
       return generateRenunciaPacketPdf(liveDraft, request);
+    }
+    if (request.requestType === "rescision_prueba") {
+      return generateRescisionPdf(liveDraft, request);
     }
     return generateActaPdf(
       liveDraft,
@@ -596,7 +647,9 @@ export default function HrDocumentDraft() {
               ? "Disciplinary Act"
               : request.requestType === "renuncia"
                 ? "Resignation Packet"
-                : "Commitment Letter"}
+                : request.requestType === "rescision_prueba"
+                  ? "Probation Termination"
+                  : "Commitment Letter"}
           </h1>
           <Badge variant="outline" className="text-xs">
             {draft?.docRef ?? "— (generated on save)"}
@@ -618,7 +671,12 @@ export default function HrDocumentDraft() {
                 variant="outline"
                 size="sm"
                 onClick={handlePreviewPdf}
-                disabled={!draft || !form.narrative.trim()}
+                disabled={
+                  !draft ||
+                  (request.requestType === "rescision_prueba"
+                    ? !form.terminationEffectiveDate
+                    : !form.narrative.trim())
+                }
               >
                 <Eye className="mr-1 h-4 w-4" /> Preview PDF
               </Button>
@@ -764,7 +822,7 @@ export default function HrDocumentDraft() {
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge
                   variant={
-                    request.requestType === "acta"
+                    request.requestType === "acta" || request.requestType === "rescision_prueba"
                       ? "destructive"
                       : request.requestType === "renuncia"
                         ? "secondary"
@@ -775,7 +833,9 @@ export default function HrDocumentDraft() {
                     ? "Disciplinary Act"
                     : request.requestType === "renuncia"
                       ? "Voluntary Resignation"
-                      : "Commitment Letter"}
+                      : request.requestType === "rescision_prueba"
+                        ? "Probation Termination"
+                        : "Commitment Letter"}
                 </Badge>
                 <Badge variant="secondary" className="text-xs">
                   {request.status === "pending"
@@ -1448,6 +1508,329 @@ export default function HrDocumentDraft() {
                         placeholder="Enter voter ID key"
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Rescisión Periodo de Prueba ─────────────────── */}
+            {request.requestType === "rescision_prueba" && (
+              <div className="space-y-4 pt-2 border-t">
+                {/* Contract + termination dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="rp-hire-date" className="text-xs font-medium">
+                      Hire date
+                    </Label>
+                    <Input
+                      id="rp-hire-date"
+                      type="date"
+                      value={form.hireDateSnapshot}
+                      onChange={(e) =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          hireDateSnapshot: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rp-contract-date" className="text-xs font-medium">
+                      Contract signing date
+                    </Label>
+                    <Input
+                      id="rp-contract-date"
+                      type="date"
+                      value={form.contractSigningDate}
+                      onChange={(e) =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          contractSigningDate: e.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Defaults to hire date if blank.
+                    </p>
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <Label htmlFor="rp-termination-date" className="text-xs font-medium">
+                      Termination effective date
+                    </Label>
+                    <Input
+                      id="rp-termination-date"
+                      type="date"
+                      value={form.terminationEffectiveDate}
+                      onChange={(e) =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          terminationEffectiveDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* KPI editor — 4 cols (kpi/required/recorded/met) */}
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium uppercase tracking-wider">
+                      KPIs — Required vs Recorded
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          rescisionKpiTable: [
+                            ...f.rescisionKpiTable,
+                            { kpi: "", required: "", recorded: "", met: "" },
+                          ],
+                        }))
+                      }
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Add row
+                    </Button>
+                  </div>
+                  {form.rescisionKpiTable.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No KPI rows. Default rows are seeded on first save —
+                      reload if you don't see them.
+                    </p>
+                  )}
+                  {form.rescisionKpiTable.map((row, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end rounded-md border p-2"
+                    >
+                      <div className="space-y-1">
+                        {idx === 0 && (
+                          <Label className="text-[10px] text-muted-foreground">
+                            Métrica / KPI
+                          </Label>
+                        )}
+                        <Input
+                          value={row.kpi}
+                          placeholder="e.g. Llamadas diarias"
+                          onChange={(e) =>
+                            setFormDirty((f) => {
+                              const t = [...f.rescisionKpiTable];
+                              t[idx] = { ...t[idx], kpi: e.target.value };
+                              return { ...f, rescisionKpiTable: t };
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && (
+                          <Label className="text-[10px] text-muted-foreground">
+                            Requerido
+                          </Label>
+                        )}
+                        <Input
+                          value={row.required}
+                          placeholder="e.g. 350"
+                          onChange={(e) =>
+                            setFormDirty((f) => {
+                              const t = [...f.rescisionKpiTable];
+                              t[idx] = { ...t[idx], required: e.target.value };
+                              return { ...f, rescisionKpiTable: t };
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && (
+                          <Label className="text-[10px] text-muted-foreground">
+                            Registrado
+                          </Label>
+                        )}
+                        <Input
+                          value={row.recorded}
+                          placeholder="actual"
+                          onChange={(e) =>
+                            setFormDirty((f) => {
+                              const t = [...f.rescisionKpiTable];
+                              t[idx] = { ...t[idx], recorded: e.target.value };
+                              return { ...f, rescisionKpiTable: t };
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && (
+                          <Label className="text-[10px] text-muted-foreground">
+                            Cumplimiento
+                          </Label>
+                        )}
+                        <Input
+                          value={row.met}
+                          placeholder="Sí / No / Parcial"
+                          onChange={(e) =>
+                            setFormDirty((f) => {
+                              const t = [...f.rescisionKpiTable];
+                              t[idx] = { ...t[idx], met: e.target.value };
+                              return { ...f, rescisionKpiTable: t };
+                            })
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() =>
+                          setFormDirty((f) => ({
+                            ...f,
+                            rescisionKpiTable: f.rescisionKpiTable.filter(
+                              (_, i) => i !== idx,
+                            ),
+                          }))
+                        }
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Finiquito calculator — identical to renuncia */}
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium uppercase tracking-wider">
+                      Severance — LFT Calculation
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const sd = parseFloat(form.salarioDiarioSnapshot);
+                        const hd = form.hireDateSnapshot;
+                        const rd = form.terminationEffectiveDate;
+                        if (!sd || !hd || !rd) {
+                          toast.error("Enter hire date, daily wage, and termination date first");
+                          return;
+                        }
+                        const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                        const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
+                        const prima = calcPrimaVacacional(vac.amount);
+                        const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
+                        setFormDirty((f) => ({
+                          ...f,
+                          aguinaldoMonto: String(aguinaldo),
+                          vacacionesMonto: String(vac.amount),
+                          primaVacacionalMonto: String(prima),
+                          totalMonto: String(total),
+                          totalEnLetras: numberToSpanishWords(total),
+                        }));
+                      }}
+                    >
+                      Auto-calculate
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">
+                      Daily wage ($ MXN)
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.salarioDiarioSnapshot}
+                      onChange={(e) =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          salarioDiarioSnapshot: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Prorated Christmas bonus
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={form.aguinaldoMonto}
+                        onChange={(e) =>
+                          setFormDirty((f) => ({
+                            ...f,
+                            aguinaldoMonto: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Accrued vacation
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={form.vacacionesMonto}
+                        onChange={(e) =>
+                          setFormDirty((f) => ({
+                            ...f,
+                            vacacionesMonto: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Vacation premium (25%)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={form.primaVacacionalMonto}
+                        onChange={(e) =>
+                          setFormDirty((f) => ({
+                            ...f,
+                            primaVacacionalMonto: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground font-medium">
+                        Total
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={form.totalMonto}
+                        onChange={(e) =>
+                          setFormDirty((f) => ({
+                            ...f,
+                            totalMonto: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">
+                      Total in words
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      value={form.totalEnLetras}
+                      onChange={(e) =>
+                        setFormDirty((f) => ({
+                          ...f,
+                          totalEnLetras: e.target.value,
+                        }))
+                      }
+                    />
                   </div>
                 </div>
               </div>

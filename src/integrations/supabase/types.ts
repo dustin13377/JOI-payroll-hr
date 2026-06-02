@@ -1574,6 +1574,7 @@ export type Database = {
           compliance_grace_until: string | null
           created_at: string | null
           curp: string | null
+          cv_url: string | null
           daily_bill_rate: number | null
           daily_discount_rate: number | null
           daily_salary: number | null
@@ -1586,6 +1587,8 @@ export type Database = {
           flat_bill_client_id: string | null
           flat_weekly_bill_amount: number | null
           full_name: string
+          intro_recording_url: string | null
+          recruited_from_candidate_id: string | null
           goal_prompt_dismissed: boolean
           goal_set_at: string | null
           goal_visible_to_tl: boolean
@@ -1627,6 +1630,7 @@ export type Database = {
           compliance_grace_until?: string | null
           created_at?: string | null
           curp?: string | null
+          cv_url?: string | null
           daily_bill_rate?: number | null
           daily_discount_rate?: number | null
           daily_salary?: number | null
@@ -1634,7 +1638,7 @@ export type Database = {
           department_id?: string | null
           email?: string | null
           emergency_contact?: string | null
-          employee_id: string
+          employee_id?: string
           employment_status?: Database["public"]["Enums"]["employment_status"]
           flat_bill_client_id?: string | null
           flat_weekly_bill_amount?: number | null
@@ -1644,6 +1648,7 @@ export type Database = {
           goal_visible_to_tl?: boolean
           hire_date?: string | null
           id?: string
+          intro_recording_url?: string | null
           invited_at?: string | null
           is_active?: boolean | null
           is_system_user?: boolean
@@ -1657,6 +1662,7 @@ export type Database = {
           personal_email?: string | null
           personal_goal?: string | null
           phone?: string | null
+          recruited_from_candidate_id?: string | null
           rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
@@ -1680,6 +1686,7 @@ export type Database = {
           compliance_grace_until?: string | null
           created_at?: string | null
           curp?: string | null
+          cv_url?: string | null
           daily_bill_rate?: number | null
           daily_discount_rate?: number | null
           daily_salary?: number | null
@@ -1697,6 +1704,7 @@ export type Database = {
           goal_visible_to_tl?: boolean
           hire_date?: string | null
           id?: string
+          intro_recording_url?: string | null
           invited_at?: string | null
           is_active?: boolean | null
           is_system_user?: boolean
@@ -1710,6 +1718,7 @@ export type Database = {
           personal_email?: string | null
           personal_goal?: string | null
           phone?: string | null
+          recruited_from_candidate_id?: string | null
           rehire_eligible?: boolean | null
           reports_to?: string | null
           rfc?: string | null
@@ -2154,6 +2163,7 @@ export type Database = {
           fulfilled_acta_id: string | null
           fulfilled_carta_id: string | null
           fulfilled_renuncia_id: string | null
+          fulfilled_rescision_id: string | null
           id: string
           incident_date: string
           reason: string | null
@@ -2171,6 +2181,7 @@ export type Database = {
           fulfilled_acta_id?: string | null
           fulfilled_carta_id?: string | null
           fulfilled_renuncia_id?: string | null
+          fulfilled_rescision_id?: string | null
           id?: string
           incident_date: string
           reason?: string | null
@@ -2188,6 +2199,7 @@ export type Database = {
           fulfilled_acta_id?: string | null
           fulfilled_carta_id?: string | null
           fulfilled_renuncia_id?: string | null
+          fulfilled_rescision_id?: string | null
           id?: string
           incident_date?: string
           reason?: string | null
@@ -3315,6 +3327,105 @@ export type Database = {
           name?: string
           sort_order?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      rescision_prueba_documents: {
+        Row: {
+          aguinaldo_monto: number | null
+          company_legal_address_snapshot: string | null
+          company_legal_name_snapshot: string | null
+          contract_signing_date: string | null
+          created_at: string
+          created_by: string
+          curp_snapshot: string | null
+          doc_ref: string | null
+          employee_id: string
+          hire_date_snapshot: string | null
+          horario_snapshot: string | null
+          id: string
+          incident_date_long_snapshot: string | null
+          kpi_table: Json
+          narrative: string | null
+          pdf_path: string | null
+          prima_vacacional_monto: number | null
+          puesto_snapshot: string | null
+          request_id: string | null
+          rfc_snapshot: string | null
+          salario_diario_snapshot: number | null
+          signed_at: string | null
+          signed_scan_path: string | null
+          supervisor_name_snapshot: string | null
+          termination_effective_date: string
+          total_en_letras: string | null
+          total_monto: number | null
+          trabajador_name_snapshot: string | null
+          updated_at: string
+          vacaciones_monto: number | null
+        }
+        Insert: {
+          aguinaldo_monto?: number | null
+          company_legal_address_snapshot?: string | null
+          company_legal_name_snapshot?: string | null
+          contract_signing_date?: string | null
+          created_at?: string
+          created_by: string
+          curp_snapshot?: string | null
+          doc_ref?: string | null
+          employee_id: string
+          hire_date_snapshot?: string | null
+          horario_snapshot?: string | null
+          id?: string
+          incident_date_long_snapshot?: string | null
+          kpi_table?: Json
+          narrative?: string | null
+          pdf_path?: string | null
+          prima_vacacional_monto?: number | null
+          puesto_snapshot?: string | null
+          request_id?: string | null
+          rfc_snapshot?: string | null
+          salario_diario_snapshot?: number | null
+          signed_at?: string | null
+          signed_scan_path?: string | null
+          supervisor_name_snapshot?: string | null
+          termination_effective_date: string
+          total_en_letras?: string | null
+          total_monto?: number | null
+          trabajador_name_snapshot?: string | null
+          updated_at?: string
+          vacaciones_monto?: number | null
+        }
+        Update: {
+          aguinaldo_monto?: number | null
+          company_legal_address_snapshot?: string | null
+          company_legal_name_snapshot?: string | null
+          contract_signing_date?: string | null
+          created_at?: string
+          created_by?: string
+          curp_snapshot?: string | null
+          doc_ref?: string | null
+          employee_id?: string
+          hire_date_snapshot?: string | null
+          horario_snapshot?: string | null
+          id?: string
+          incident_date_long_snapshot?: string | null
+          kpi_table?: Json
+          narrative?: string | null
+          pdf_path?: string | null
+          prima_vacacional_monto?: number | null
+          puesto_snapshot?: string | null
+          request_id?: string | null
+          rfc_snapshot?: string | null
+          salario_diario_snapshot?: number | null
+          signed_at?: string | null
+          signed_scan_path?: string | null
+          supervisor_name_snapshot?: string | null
+          termination_effective_date?: string
+          total_en_letras?: string | null
+          total_monto?: number | null
+          trabajador_name_snapshot?: string | null
+          updated_at?: string
+          vacaciones_monto?: number | null
         }
         Relationships: []
       }
