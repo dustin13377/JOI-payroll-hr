@@ -9,6 +9,8 @@ export interface ParsedApplication {
     | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   applicant_notes: string | null;
+  cv_url: string | null; // Gravity Forms field-id=4 (PDF/DOCX)
+  presentation_url: string | null; // Gravity Forms field-id=16 (audio or video)
   needs_manual_review: boolean; // true if no name or no phone
   parse_warnings: string[];
 }
@@ -175,11 +177,9 @@ function normalizePhone(
 // applicant_notes builder
 // ---------------------------------------------------------------------------
 
-function buildNotes(
-  map: Map<string, string>,
-  cvUrl: string | null,
-  presentationUrl: string | null,
-): string | null {
+function buildNotes(map: Map<string, string>): string | null {
+  // Note: CV and Presentation URLs are stored in their own columns
+  // (cv_url, presentation_url), not stuffed into the notes blob.
   const lines: string[] = [];
 
   const add = (label: string, key: string) => {
@@ -193,9 +193,6 @@ function buildNotes(
   add("Commute time", "COMMUTE TIME");
   add("Salary expectation", "SALARY EXPECTATION");
   add("Available start date", "AVAILABLE START DATE");
-
-  if (cvUrl) lines.push(`CV: ${cvUrl}`);
-  if (presentationUrl) lines.push(`Presentation: ${presentationUrl}`);
 
   return lines.length > 0 ? lines.join("\n") : null;
 }
@@ -229,11 +226,11 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
   const english_level_self = mapEnglishLevel(englishRaw);
 
   // --- Link fields ---
-  const cvUrl = getHref(map, "CURRICULUM VITAE");
-  const presentationUrl = getHref(map, "PRESENTATION");
+  const cv_url = getHref(map, "CURRICULUM VITAE");
+  const presentation_url = getHref(map, "PRESENTATION");
 
   // --- Notes ---
-  const applicant_notes = buildNotes(map, cvUrl, presentationUrl);
+  const applicant_notes = buildNotes(map);
 
   // --- Manual review flag ---
   if (!full_name) warnings.push("Could not extract applicant name.");
@@ -247,6 +244,8 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
     role_interest,
     english_level_self,
     applicant_notes,
+    cv_url,
+    presentation_url,
     needs_manual_review,
     parse_warnings: warnings,
   };
