@@ -147,14 +147,31 @@ export function generateRescisionPdf(
     MARGIN_LEFT + 0.1,
     partyBoxTop + 0.52,
   );
+
+  // Worker labels — measure label width so values never collide with the label.
+  const workerLabelX = MARGIN_LEFT + halfW + 0.1;
+  const labelGap = 0.04;
+  doc.setFontSize(9);
+
   doc.setFont("Helvetica", "bold");
-  doc.text("Puesto: ", MARGIN_LEFT + halfW + 0.1, partyBoxTop + 0.52);
+  const puestoLabel = "Puesto: ";
+  doc.text(puestoLabel, workerLabelX, partyBoxTop + 0.52);
   doc.setFont("Helvetica", "normal");
-  doc.text(puesto, MARGIN_LEFT + halfW + 0.55, partyBoxTop + 0.52);
+  doc.text(
+    puesto,
+    workerLabelX + doc.getTextWidth(puestoLabel) + labelGap,
+    partyBoxTop + 0.52,
+  );
+
   doc.setFont("Helvetica", "bold");
-  doc.text("Fecha de ingreso: ", MARGIN_LEFT + halfW + 0.1, partyBoxTop + 0.7);
+  const hireLabel = "Fecha de ingreso: ";
+  doc.text(hireLabel, workerLabelX, partyBoxTop + 0.7);
   doc.setFont("Helvetica", "normal");
-  doc.text(hireDate, MARGIN_LEFT + halfW + 0.9, partyBoxTop + 0.7);
+  doc.text(
+    hireDate,
+    workerLabelX + doc.getTextWidth(hireLabel) + labelGap,
+    partyBoxTop + 0.7,
+  );
 
   y = partyBoxTop + partyBoxH + 0.25;
 
@@ -333,6 +350,18 @@ export function generateRescisionPdf(
     dy += 0.14;
   }
   y += declH + 0.15;
+
+  // HR-drafted motivación / fundamentación (formal narrative).
+  // Renders between the boxed declaration and the no-discrimination closing —
+  // this is where the patrón's reasoning belongs in Mexican rescission letters.
+  if (draft.narrative && draft.narrative.trim().length > 0) {
+    const paragraphs = draft.narrative.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    for (const para of paragraphs) {
+      y = drawParagraph(doc, para, MARGIN_LEFT, y, CONTENT_WIDTH);
+      y += 0.1;
+    }
+    y += 0.05;
+  }
 
   y = drawParagraph(doc, RESCISION_DECLARACION_2, MARGIN_LEFT, y, CONTENT_WIDTH);
   y += 0.25;
