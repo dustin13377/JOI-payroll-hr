@@ -129,10 +129,12 @@ export function AppSidebar() {
   let showHRSection = false;
 
   if (isLeadership) {
-    // Invoices are owner-only — hide the link from admins/managers.
+    // Owner-only items: invoices + payroll + payroll history.
+    // Hidden from admins/managers (they still see everything else).
+    const ownerOnlyUrls = ["/facturas", "/admin/payroll", "/historial"];
     mainItems = isOwner
       ? leadershipItems
-      : leadershipItems.filter((i) => i.url !== "/facturas");
+      : leadershipItems.filter((i) => !ownerOnlyUrls.includes(i.url));
     showHRSection = true;
   } else if (isTeamLead) {
     mainItems = teamLeadItems;
