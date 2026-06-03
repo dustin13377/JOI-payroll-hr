@@ -16,6 +16,8 @@ export interface Candidate {
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   referral_source: string | null;
   applicant_notes: string | null;
+  cv_url: string | null;
+  presentation_url: string | null;
   raw_email_body: string | null;
   raw_email_received_at: string | null;
   needs_manual_review: boolean;

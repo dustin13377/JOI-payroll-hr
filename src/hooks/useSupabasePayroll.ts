@@ -35,6 +35,9 @@ function mapEmployee(row: any): EmployeeWithMeta {
     _lastWorkedDay: row.last_worked_day ?? null,
     _departmentId: row.department_id ?? null,
     _departmentName: row.departments?.name ?? null,
+    _cvUrl: row.cv_url ?? null,
+    _introRecordingUrl: row.intro_recording_url ?? null,
+    _recruitedFromCandidateId: row.recruited_from_candidate_id ?? null,
   };
 }
 
@@ -59,7 +62,20 @@ export function useEmployees() {
 export function useAddEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (emp: Omit<Employee, "_uuid" | "id"> & { campaignId?: string | null; email?: string | null; personalEmail?: string | null }) => {
+    mutationFn: async (
+      emp: Omit<Employee, "_uuid" | "id"> & {
+        campaignId?: string | null;
+        email?: string | null;
+        personalEmail?: string | null;
+        // Optional fields used by the "hire from candidate" flow:
+        curp?: string | null;
+        phone?: string | null;
+        cvUrl?: string | null;
+        introRecordingUrl?: string | null;
+        recruitedFromCandidateId?: string | null;
+        hireDate?: string | null;
+      },
+    ) => {
       if (emp.email) {
         // Use edge function for atomic auth user + employee + profile creation
         const { data, error } = await supabase.functions.invoke("create-employee", {
@@ -72,6 +88,12 @@ export function useAddEmployee() {
             monthly_base_salary: emp.sueldoBase,
             daily_discount_rate: emp.descuentoPorDia,
             kpi_bonus_amount: emp.kpiMonto,
+            curp: emp.curp ?? null,
+            phone: emp.phone ?? null,
+            cv_url: emp.cvUrl ?? null,
+            intro_recording_url: emp.introRecordingUrl ?? null,
+            recruited_from_candidate_id: emp.recruitedFromCandidateId ?? null,
+            hire_date: emp.hireDate ?? null,
           },
         });
         if (error) throw error;
@@ -86,6 +108,12 @@ export function useAddEmployee() {
         kpi_bonus_amount: emp.kpiMonto,
         title: emp.title ?? "agent",
         campaign_id: emp.campaignId ?? null,
+        curp: emp.curp ?? null,
+        phone: emp.phone ?? null,
+        cv_url: emp.cvUrl ?? null,
+        intro_recording_url: emp.introRecordingUrl ?? null,
+        recruited_from_candidate_id: emp.recruitedFromCandidateId ?? null,
+        hire_date: emp.hireDate ?? null,
       }).select("employee_id").single();
       if (error) throw error;
       return data as { employee_id: string };

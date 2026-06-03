@@ -106,6 +106,13 @@ Deno.serve(async (req: Request) => {
       monthly_base_salary,
       daily_discount_rate,
       kpi_bonus_amount,
+      // Optional candidate-derived fields (hire-from-candidate flow)
+      curp,
+      phone,
+      cv_url,
+      intro_recording_url,
+      recruited_from_candidate_id,
+      hire_date,
     } = body;
 
     if (!email || !full_name) {
@@ -201,6 +208,13 @@ Deno.serve(async (req: Request) => {
         daily_discount_rate: daily_discount_rate || 0,
         kpi_bonus_amount: kpi_bonus_amount || 0,
         organization_id: organizationId,
+        // Optional candidate-derived fields (NULL when not hiring from a candidate)
+        curp: curp || null,
+        phone: phone || null,
+        cv_url: cv_url || null,
+        intro_recording_url: intro_recording_url || null,
+        recruited_from_candidate_id: recruited_from_candidate_id || null,
+        hire_date: hire_date || null,
       })
       .select("id, employee_id")
       .single();

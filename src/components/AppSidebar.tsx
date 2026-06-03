@@ -129,7 +129,10 @@ export function AppSidebar() {
   let showHRSection = false;
 
   if (isLeadership) {
-    mainItems = leadershipItems;
+    // Invoices are owner-only — hide the link from admins/managers.
+    mainItems = isOwner
+      ? leadershipItems
+      : leadershipItems.filter((i) => i.url !== "/facturas");
     showHRSection = true;
   } else if (isTeamLead) {
     mainItems = teamLeadItems;

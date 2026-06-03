@@ -1,6 +1,8 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useEmployees, useAddEmployee, useAddEmployeesBulk, useActivePeriod, usePayrollRecords, recordToConfig, useInactiveEmployees, useReactivateEmployee, useCheckRehire, useResendInvite, type InactiveEmployeeRow } from "@/hooks/useSupabasePayroll";
+import { useUpdateCandidate } from "@/hooks/useRecruiting";
 import { calcularNomina, type Employee, type EmpTitle } from "@/types/payroll";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,7 @@ import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Upload, Plus, UserX, Download, ArrowUpDown, ChevronLeft, ChevronRight, AlertTriangle, RotateCcw, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { TerminateEmployeeDialog } from "@/components/TerminateEmployeeDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,8 +53,22 @@ export default function Empleados() {
   const reactivate = useReactivateEmployee();
   const checkRehire = useCheckRehire();
   const resendInvite = useResendInvite();
+  const updateCandidate = useUpdateCandidate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+
+  // "Hire from candidate" context — set when arriving from /empleados?hireFromCandidate=<id>.
+  // Carries the attachments + linkage we need to copy onto the new employee row.
+  const [hireFromCandidate, setHireFromCandidate] = useState<{
+    id: string;
+    full_name: string | null;
+    curp: string | null;
+    phone: string | null;
+    email: string | null;
+    cv_url: string | null;
+    presentation_url: string | null;
+  } | null>(null);
   const [view, setView] = useState<View>("active");
   const [sortAsc, setSortAsc] = useState(true);
   const [pageSize, setPageSize] = useState(15);
@@ -179,7 +195,53 @@ export default function Empleados() {
     setSkippedCheck(false);
     setRehireMatches(null);
     setDuplicateWarning(null);
+    setHireFromCandidate(null);
   };
+
+  // Auto-open the Add Employee dialog when arriving from a candidate drawer.
+  // Reads ?hireFromCandidate=<id>, fetches the candidate, prefills name/CURP,
+  // opens the wizard on step 1 (identity check) — same as a manual add.
+  // We don't auto-run the rehire check; the existing button still gates that
+  // so leadership consciously confirms there's no prior record.
+  const candidateParam = searchParams.get("hireFromCandidate");
+  useEffect(() => {
+    if (!candidateParam) return;
+    if (hireFromCandidate?.id === candidateParam) return; // already loaded
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("recruiting_candidates")
+        .select("id, full_name, curp, phone, email, cv_url, presentation_url")
+        .eq("id", candidateParam)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        toast.error("Couldn't load candidate — opening blank form instead.");
+        // Drop the param so we don't keep retrying on every render.
+        searchParams.delete("hireFromCandidate");
+        setSearchParams(searchParams, { replace: true });
+        return;
+      }
+      setHireFromCandidate(data);
+      setForm((f) => ({
+        ...f,
+        nombre: data.full_name ?? "",
+        curp: data.curp ?? "",
+        // Personal email isn't captured by the recruiting form today, but if it
+        // ever is we'll prefill it. Never prefill `email` (work email) — that's
+        // assigned by HR after hire.
+        personalEmail: data.email ?? "",
+      }));
+      setAddStep("identity");
+      setAddOpen(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateParam]);
 
   const doCreateEmployee = () => {
     if (!form.nombre) {
@@ -216,6 +278,8 @@ export default function Empleados() {
     // useAddEmployee hook handles both paths (with-email = auth user + invite,
     // without-email = plain employee row).
     const emailTrimmed = form.email.trim();
+    const todayLocal = new Date();
+    const todayISO = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
     addEmployee.mutate(
       {
         nombre: form.nombre,
@@ -226,11 +290,53 @@ export default function Empleados() {
         email: emailTrimmed || undefined,
         personalEmail: form.personalEmail.trim() || null,
         campaignId: form.campaignId,
+        // Hire-from-candidate extras (all null for a manual add):
+        curp: form.curp.trim() || hireFromCandidate?.curp || null,
+        phone: hireFromCandidate?.phone || null,
+        cvUrl: hireFromCandidate?.cv_url || null,
+        introRecordingUrl: hireFromCandidate?.presentation_url || null,
+        recruitedFromCandidateId: hireFromCandidate?.id || null,
+        // Stamp hire_date today only when we're hiring from a candidate.
+        // Manual adds without a candidate keep the legacy behaviour
+        // (HR sets hire_date later from the employee profile).
+        hireDate: hireFromCandidate ? todayISO : null,
       },
       {
         onSuccess: (data) => {
           toast.success(`Employee added — ID: ${data.employee_id}`);
           setAddOpen(false);
+
+          // If this came from a candidate, also flip the candidate row to Hired.
+          // Don't block the toast/navigation on this — if it fails we surface
+          // a separate toast and let the user fix it from the candidate drawer.
+          if (hireFromCandidate) {
+            const candidateId = hireFromCandidate.id;
+            const titleAtHire = form.title;
+            updateCandidate.mutate(
+              {
+                id: candidateId,
+                patch: {
+                  stage: "hired",
+                  final_status: "hired",
+                  hired_at: new Date().toISOString(),
+                  hired_for_role: titleAtHire,
+                },
+              },
+              {
+                onError: (err: any) =>
+                  toast.error(
+                    `Employee created, but couldn't update the candidate record: ${err?.message ?? "unknown error"}`,
+                  ),
+              },
+            );
+            // Clean the URL so a reload won't reopen the dialog.
+            searchParams.delete("hireFromCandidate");
+            setSearchParams(searchParams, { replace: true });
+            resetForm();
+            navigate(`/empleados/${data.employee_id}`);
+            return;
+          }
+
           resetForm();
         },
         onError: (err: any) => toast.error(err.message || "Error adding employee"),
@@ -369,7 +475,18 @@ export default function Empleados() {
           <Button variant="outline" onClick={() => fileRef.current?.click()}>
             <Upload className="mr-2 h-4 w-4" /> Upload CSV
           </Button>
-          <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetForm(); }}>
+          <Dialog open={addOpen} onOpenChange={(o) => {
+            setAddOpen(o);
+            if (!o) {
+              resetForm();
+              // If the dialog was opened from a candidate, drop the param so
+              // refreshing the page doesn't immediately reopen it.
+              if (searchParams.get("hireFromCandidate")) {
+                searchParams.delete("hireFromCandidate");
+                setSearchParams(searchParams, { replace: true });
+              }
+            }
+          }}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" /> New Employee</Button>
             </DialogTrigger>

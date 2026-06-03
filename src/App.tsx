@@ -144,9 +144,10 @@ const App = () => (
                     <Route path="/empleados" element={<RequireLeadership><Empleados /></RequireLeadership>} />
                     <Route path="/empleados/:id" element={<RequireTeamLeadOrAbove><EmpleadoPerfil /></RequireTeamLeadOrAbove>} />
                     <Route path="/historial" element={<RequireLeadership><Historial /></RequireLeadership>} />
-                    <Route path="/facturas" element={<RequireLeadership><Facturas /></RequireLeadership>} />
-                    <Route path="/facturas/nueva" element={<RequireLeadership><FacturaNueva /></RequireLeadership>} />
-                    <Route path="/facturas/:id" element={<RequireLeadership><FacturaDetalle /></RequireLeadership>} />
+                    {/* Invoices: owner-only. RLS also locked to is_owner() — keep both layers in sync. */}
+                    <Route path="/facturas" element={<RequireOwner><Facturas /></RequireOwner>} />
+                    <Route path="/facturas/nueva" element={<RequireOwner><FacturaNueva /></RequireOwner>} />
+                    <Route path="/facturas/:id" element={<RequireOwner><FacturaDetalle /></RequireOwner>} />
                     <Route path="/reloj" element={<Timeclock />} />
                     <Route path="/eod" element={<EODForm />} />
                     <Route path="/vacation" element={<VacationRequests />} />
