@@ -151,10 +151,23 @@ export function useInvoice(id: string | undefined) {
         .order("agent_name");
       if (linesError) throw linesError;
 
+      // Sort: agent (punch-billed) rows first, then flat-bill agent rows,
+      // then misc adjustments (no employee_id) at the bottom. Within each
+      // group, keep alphabetical by agent_name. This matches accounting
+      // convention — adjustments live below the line items.
+      const sortedLines = ((lines || []) as InvoiceLine[]).slice().sort((a, b) => {
+        const rank = (l: InvoiceLine) =>
+          l.employee_id === null ? 2 : l.is_flat_total ? 1 : 0;
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        return a.agent_name.localeCompare(b.agent_name);
+      });
+
       return {
         ...invoice,
         client: (invoice as any).clients,
-        lines: (lines || []) as InvoiceLine[],
+        lines: sortedLines,
       } as Invoice & { lines: InvoiceLine[] };
     },
   });

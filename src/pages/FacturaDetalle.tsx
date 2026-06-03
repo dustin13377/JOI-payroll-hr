@@ -445,6 +445,9 @@ function LineRow({ line, locked }: { line: InvoiceLine; locked: boolean }) {
   // is_flat_total covers misc lines AND flat-bill agent lines — both store the
   // billed amount in total_price directly with days/unit/spiffs = 0.
   const isFlat = line.is_flat_total;
+  // Misc adjustments (loans, credits, discounts) have no employee_id; flat-bill
+  // agents are still tied to an employee.
+  const isMisc = isFlat && line.employee_id === null;
 
   const handleDelete = () => {
     del.mutate(line.id, {
@@ -482,7 +485,9 @@ function LineRow({ line, locked }: { line: InvoiceLine; locked: boolean }) {
         <TableCell className="font-medium">
           {line.agent_name}
           {isFlat && (
-            <span className="ml-2 text-xs italic text-muted-foreground print:hidden">flat</span>
+            <span className="ml-2 text-xs italic text-muted-foreground print:hidden">
+              {isMisc ? "adjustment" : "flat"}
+            </span>
           )}
         </TableCell>
 
