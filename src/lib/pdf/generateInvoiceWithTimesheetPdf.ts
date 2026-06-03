@@ -35,7 +35,8 @@ const BILL_FROM_LINES = [
 ];
 
 function fmtUSD(n: number): string {
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `-$${abs}` : `$${abs}`;
 }
 
 // "12:50 PM" in the client's local time zone. Punches are stored as
