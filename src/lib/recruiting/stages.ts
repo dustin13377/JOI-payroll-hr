@@ -22,7 +22,7 @@ export const TERMINAL_STAGES: readonly Stage[] = [
 
 export const STAGE_LABELS: Record<Stage, string> = {
   new: "New",
-  triaged: "Triaged",
+  triaged: "Reviewed",
   interview_scheduled: "Interview Scheduled",
   interviewed: "Interviewed",
   warm_hold: "Warm Hold",

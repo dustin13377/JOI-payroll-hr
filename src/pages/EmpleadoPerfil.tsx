@@ -52,6 +52,7 @@ import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard
 import { ClockInHistoryCard } from "@/components/employee-profile/ClockInHistoryCard";
 import { CampaignHistoryCard } from "@/components/employee-profile/CampaignHistoryCard";
 import { ChangeCampaignDialog } from "@/components/ChangeCampaignDialog";
+import { RecruitingAttachmentsCard } from "@/components/employee-profile/RecruitingAttachmentsCard";
 
 // ── A1: Personal & Tax Info validation ──────────────────────────────
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
@@ -1010,6 +1011,10 @@ export default function EmpleadoPerfil() {
 
       {/* C1: Policy Acknowledgments — leadership only */}
       {isLeadership && <PolicyAckCard agentId={emp._uuid!} agentCampaignId={campaignId} agentRole={emp.title} />}
+
+      {/* From Application — CV + intro recording captured at hire time.
+          Self-hides if the employee has no recruiting attachments. */}
+      {isLeadership && <RecruitingAttachmentsCard emp={emp} />}
 
       {/* H2: Employment History — leadership only */}
       {isLeadership && emp._uuid && <EmploymentHistoryCard employeeUuid={emp._uuid} />}

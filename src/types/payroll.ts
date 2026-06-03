@@ -182,6 +182,11 @@ export interface EmployeeWithMeta extends Employee {
   _lastWorkedDay?: string | null;
   _departmentId?: string | null;
   _departmentName?: string | null;
+  // Recruiting linkage — populated when this employee was hired from a
+  // recruiting_candidates row via the "Hire as employee" flow.
+  _cvUrl?: string | null;
+  _introRecordingUrl?: string | null;
+  _recruitedFromCandidateId?: string | null;
 }
 
 /** @deprecated Use PayInputs + previewPay() instead. */
