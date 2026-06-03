@@ -281,6 +281,14 @@ export function ClockOutEODDialog({
                     type="number"
                     min="0"
                     inputMode="numeric"
+                    // autoComplete + data-* attrs: block browser/password-manager
+                    // autofill so the form can't silently restore yesterday's
+                    // values. Julia Nuñez 2026-06-03: a clock-in/clock-out
+                    // accident landed her in this dialog and yesterday's
+                    // numbers refilled themselves before she noticed.
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     value={value === "" || value === null || value === undefined ? "" : String(value)}
                     onChange={(e) =>
                       handleChange(
@@ -294,6 +302,9 @@ export function ClockOutEODDialog({
                   <Input
                     id={field.field_name}
                     type="text"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     value={typeof value === "string" ? value : ""}
                     onChange={(e) => handleChange(field.field_name, e.target.value)}
                     className={hasError ? "border-red-500" : ""}
@@ -345,6 +356,9 @@ export function ClockOutEODDialog({
             <Textarea
               id="eod-notes"
               placeholder="Anything worth flagging?"
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="min-h-20"

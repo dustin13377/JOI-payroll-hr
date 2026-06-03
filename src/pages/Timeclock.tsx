@@ -30,6 +30,16 @@ import { todayLocal, parseLocalDate } from "@/lib/localDate";
 import { useComplianceStatus } from "@/hooks/useComplianceStatus";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ShieldX } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TimeClockEntry {
   id: string;
@@ -117,6 +127,12 @@ export default function Timeclock() {
   const { employeeId, loading: authLoading } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [eodDialogOpen, setEodDialogOpen] = useState(false);
+  // Confirmation dialog for Clock In. Added 2026-06-03 after Julia Nuñez
+  // double-tapped: the Clock In button rendered into a red Clock Out button
+  // ~300ms later, and her second tap fired the clock-out flow. A modal
+  // breaks that fast-path so the second tap lands on Cancel/Confirm, not
+  // the (now hidden) clock-out button. HomeHero already worked this way.
+  const [confirmClockInOpen, setConfirmClockInOpen] = useState(false);
   const queryClient = useQueryClient();
   const compliance = useComplianceStatus(employeeId);
 
@@ -524,7 +540,7 @@ export default function Timeclock() {
               <Button
                 size="lg"
                 className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white text-lg"
-                onClick={() => clockInMutation.mutate()}
+                onClick={() => setConfirmClockInOpen(true)}
                 disabled={clockInMutation.isPending}
               >
                 <LogIn className="mr-2 h-5 w-5" />
@@ -673,23 +689,42 @@ export default function Timeclock() {
                     </Button>
                   </div>
 
-                  <Button
-                    size="lg"
-                    className="w-full h-12 bg-red-600 hover:bg-red-700 text-white text-lg"
-                    onClick={() => {
-                      // Need EOD first? Open the dialog. It calls back to clock out on submit.
-                      // Skip (silent) if no KPI fields configured or already submitted today.
-                      if (kpiFields.length > 0 && !todayEodLog && employee?.campaign_id) {
-                        setEodDialogOpen(true);
-                      } else {
-                        clockOutMutation.mutate();
-                      }
-                    }}
-                    disabled={clockOutMutation.isPending}
-                  >
-                    <LogOut className="mr-2 h-5 w-5" />
-                    {clockOutMutation.isPending ? "Processing..." : "Clock Out"}
-                  </Button>
+                  {/* Anti-double-tap guard: hide the red Clock Out button
+                      for the first 10 seconds after clock-in so a second
+                      stray tap on the now-empty position can't fire it.
+                      Julia hit this exact path on 2026-06-03 — her clock
+                      in/out were 7 seconds apart. */}
+                  {(() => {
+                    const secondsSinceClockIn =
+                      (currentTime.getTime() - new Date(todayEntry.clock_in).getTime()) / 1000;
+                    const guardActive = secondsSinceClockIn < 10;
+                    if (guardActive) {
+                      return (
+                        <div className="w-full h-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center text-sm text-muted-foreground">
+                          Clock Out available in {Math.ceil(10 - secondsSinceClockIn)}s
+                        </div>
+                      );
+                    }
+                    return (
+                      <Button
+                        size="lg"
+                        className="w-full h-12 bg-red-600 hover:bg-red-700 text-white text-lg"
+                        onClick={() => {
+                          // Need EOD first? Open the dialog. It calls back to clock out on submit.
+                          // Skip (silent) if no KPI fields configured or already submitted today.
+                          if (kpiFields.length > 0 && !todayEodLog && employee?.campaign_id) {
+                            setEodDialogOpen(true);
+                          } else {
+                            clockOutMutation.mutate();
+                          }
+                        }}
+                        disabled={clockOutMutation.isPending}
+                      >
+                        <LogOut className="mr-2 h-5 w-5" />
+                        {clockOutMutation.isPending ? "Processing..." : "Clock Out"}
+                      </Button>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -816,6 +851,34 @@ export default function Timeclock() {
           )}
         </CardContent>
       </Card>
+
+      {/* Clock-in confirmation modal — anti-accidental-double-tap. */}
+      <AlertDialog open={confirmClockInOpen} onOpenChange={setConfirmClockInOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clock in now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {currentTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              {pastGracePeriod &&
+                ` · ${formatMinutesVerbose(minutesPastGrace)} past grace — will be marked late`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clockInMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={clockInMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                clockInMutation.mutate(undefined, {
+                  onSuccess: () => setConfirmClockInOpen(false),
+                });
+              }}
+            >
+              {clockInMutation.isPending ? "Clocking in..." : "Clock in"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* EOD required before clock-out */}
       {employee?.campaign_id && (
