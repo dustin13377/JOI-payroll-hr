@@ -27,3 +27,7 @@ verify_jwt = false
 # The function authenticates the secret itself before processing the payload.
 [functions.inbound-application]
 verify_jwt = false
+
+[functions.import-spiffs]
+verify_jwt = false
+
