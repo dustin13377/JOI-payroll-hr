@@ -438,10 +438,10 @@ export function generateRescisionDesempenoPdf(
     y += 0.2;
 
     const finRows = [
-      { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
       { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
       { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
       { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },
+      { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
     ];
     const labelColW = 2.8;
     const valueColW = CONTENT_WIDTH - labelColW;
