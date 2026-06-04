@@ -143,7 +143,8 @@ const App = () => (
                     <Route path="/" element={<RoleHome />} />
                     <Route path="/empleados" element={<RequireLeadership><Empleados /></RequireLeadership>} />
                     <Route path="/empleados/:id" element={<RequireTeamLeadOrAbove><EmpleadoPerfil /></RequireTeamLeadOrAbove>} />
-                    <Route path="/historial" element={<RequireLeadership><Historial /></RequireLeadership>} />
+                    {/* Payroll History: owner-only. RLS also locked to is_owner(). */}
+                    <Route path="/historial" element={<RequireOwner><Historial /></RequireOwner>} />
                     {/* Invoices: owner-only. RLS also locked to is_owner() — keep both layers in sync. */}
                     <Route path="/facturas" element={<RequireOwner><Facturas /></RequireOwner>} />
                     <Route path="/facturas/nueva" element={<RequireOwner><FacturaNueva /></RequireOwner>} />
@@ -161,7 +162,8 @@ const App = () => (
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
                     <Route path="/recruiting" element={<RequireLeadership><Recruiting /></RequireLeadership>} />
                     <Route path="/campaigns/:id" element={<RequireLeadership><CampaignDetail /></RequireLeadership>} />
-                    <Route path="/payroll-run" element={<RequireLeadership><PayrollRun /></RequireLeadership>} />
+                    {/* Legacy payroll run — owner-only (kept accessible until Phase 4c cleanup). */}
+                    <Route path="/payroll-run" element={<RequireOwner><PayrollRun /></RequireOwner>} />
                     <Route path="/settings/document-types" element={<RequireLeadership><DocumentTypes /></RequireLeadership>} />
                     <Route path="/settings/departments" element={<RequireLeadership><Departments /></RequireLeadership>} />
                     <Route path="/settings/policies" element={<RequireLeadership><Policies /></RequireLeadership>} />
@@ -176,15 +178,14 @@ const App = () => (
                     <Route path="/comunicados" element={<Comunicados />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
-                    {/* Payroll Phase 4a — owner/admin/manager only */}
-                    <Route path="/admin/payroll" element={<RequireLeadership><Payroll /></RequireLeadership>} />
-                    <Route path="/admin/payroll/week/:weekId" element={<RequireLeadership><PayrollWeek /></RequireLeadership>} />
-                    {/* Payroll Phase 4b — supporting screens */}
-                    <Route path="/admin/payroll/rates" element={<RequireLeadership><PayrollRates /></RequireLeadership>} />
-                    <Route path="/admin/payroll/agent/:id" element={<RequireLeadership><PayrollAgent /></RequireLeadership>} />
-                    <Route path="/admin/payroll/holidays" element={<RequireLeadership><PayrollHolidays /></RequireLeadership>} />
-                    <Route path="/admin/payroll/client-holidays" element={<RequireLeadership><ClientHolidays /></RequireLeadership>} />
-                    <Route path="/admin/payroll/periods" element={<RequireLeadership><PayrollPeriods /></RequireLeadership>} />
+                    {/* Payroll — owner-only. RLS also locked to is_owner() on payroll_* tables. */}
+                    <Route path="/admin/payroll" element={<RequireOwner><Payroll /></RequireOwner>} />
+                    <Route path="/admin/payroll/week/:weekId" element={<RequireOwner><PayrollWeek /></RequireOwner>} />
+                    <Route path="/admin/payroll/rates" element={<RequireOwner><PayrollRates /></RequireOwner>} />
+                    <Route path="/admin/payroll/agent/:id" element={<RequireOwner><PayrollAgent /></RequireOwner>} />
+                    <Route path="/admin/payroll/holidays" element={<RequireOwner><PayrollHolidays /></RequireOwner>} />
+                    <Route path="/admin/payroll/client-holidays" element={<RequireOwner><ClientHolidays /></RequireOwner>} />
+                    <Route path="/admin/payroll/periods" element={<RequireOwner><PayrollPeriods /></RequireOwner>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </AppLayout>

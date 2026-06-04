@@ -445,6 +445,9 @@ function LineRow({ line, locked }: { line: InvoiceLine; locked: boolean }) {
   // is_flat_total covers misc lines AND flat-bill agent lines — both store the
   // billed amount in total_price directly with days/unit/spiffs = 0.
   const isFlat = line.is_flat_total;
+  // Misc adjustments (loans, credits, discounts) have no employee_id; flat-bill
+  // agents are still tied to an employee.
+  const isMisc = isFlat && line.employee_id === null;
 
   const handleDelete = () => {
     del.mutate(line.id, {
@@ -482,7 +485,9 @@ function LineRow({ line, locked }: { line: InvoiceLine; locked: boolean }) {
         <TableCell className="font-medium">
           {line.agent_name}
           {isFlat && (
-            <span className="ml-2 text-xs italic text-muted-foreground print:hidden">flat</span>
+            <span className="ml-2 text-xs italic text-muted-foreground print:hidden">
+              {isMisc ? "adjustment" : "flat"}
+            </span>
           )}
         </TableCell>
 
@@ -553,7 +558,7 @@ function LineRow({ line, locked }: { line: InvoiceLine; locked: boolean }) {
           {isFlat && !locked ? (
             <InlineNumberEditor
               value={Number(line.total_price)}
-              min={0}
+              min={Number.NEGATIVE_INFINITY}
               prefix="$"
               onCommit={async (n) => {
                 await update.mutateAsync({
@@ -660,7 +665,7 @@ function InlineNumberEditor({
       {prefix && <span className="text-sm text-muted-foreground">{prefix}</span>}
       <Input
         type="number"
-        min={min}
+        {...(Number.isFinite(min) ? { min } : {})}
         step="any"
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
@@ -710,8 +715,8 @@ function AddMiscDialog({
       toast.error("Description is required");
       return;
     }
-    if (Number.isNaN(amt) || amt <= 0) {
-      toast.error("Amount must be a positive number");
+    if (Number.isNaN(amt) || amt === 0) {
+      toast.error("Amount must be a non-zero number (use a negative for credits / discounts / loans)");
       return;
     }
     try {
@@ -765,9 +770,8 @@ function AddMiscDialog({
             <Input
               id="misc-amount"
               type="number"
-              min={0}
               step="any"
-              placeholder="0.00"
+              placeholder="0.00 — use negative for credit / loan / discount"
               value={amount}
               onChange={(e) => setAmount(e.currentTarget.value)}
             />

@@ -34,3 +34,4 @@ graphify-out/
 *.sln
 *.sw?
 .claude/settings.local.json
+supabase/.temp/
