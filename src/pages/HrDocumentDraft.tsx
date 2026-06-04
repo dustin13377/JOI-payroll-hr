@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
+import { SensitiveDataAckGate, FINIQUITO_ACK_TEXT } from "@/components/SensitiveDataAckGate";
 import { ArrowLeft, Save, FileText, Plus, Trash2, AlertTriangle, Unlink, Eye, Upload, ExternalLink, AlertCircle, CheckCircle, RefreshCw, User, Briefcase, Calendar, Quote } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,6 +34,7 @@ import { generateCartaPdf } from "@/lib/pdf/generateCartaPdf";
 import { generateActaPdf } from "@/lib/pdf/generateActaPdf";
 import { generateRenunciaPacketPdf } from "@/lib/pdf/generateRenunciaPacketPdf";
 import { generateRescisionPdf } from "@/lib/pdf/generateRescisionPdf";
+import { generateRescisionDesempenoPdf } from "@/lib/pdf/generateRescisionDesempenoPdf";
 import {
   calcAguinaldoProporcional,
   calcVacaciones,
@@ -327,13 +329,14 @@ export default function HrDocumentDraft() {
           if (!state.salarioDiarioSnapshot) state.salarioDiarioSnapshot = snapshotSeed.salarioDiarioSnapshot ?? "";
           if (!state.effectiveDate) state.effectiveDate = snapshotSeed.effectiveDate ?? "";
         }
-        if (draft.type === "rescision_prueba") {
+        if (draft.type === "rescision_prueba" || draft.type === "rescision_desempeno") {
           if (!state.curpSnapshot) state.curpSnapshot = snapshotSeed.curpSnapshot ?? "";
           if (!state.rfcSnapshot) state.rfcSnapshot = snapshotSeed.rfcSnapshot ?? "";
           if (!state.hireDateSnapshot) state.hireDateSnapshot = snapshotSeed.hireDateSnapshot ?? "";
           if (!state.salarioDiarioSnapshot) state.salarioDiarioSnapshot = snapshotSeed.salarioDiarioSnapshot ?? "";
           if (!state.terminationEffectiveDate) state.terminationEffectiveDate = snapshotSeed.effectiveDate ?? "";
-          // contract date defaults to hire date when blank — usually same day for probation
+          // contract date defaults to hire date when blank — HR adjusts (for
+          // rescision_desempeno this is the post-probation continuation date).
           if (!state.contractSigningDate) state.contractSigningDate = snapshotSeed.hireDateSnapshot ?? "";
         }
       }
@@ -388,7 +391,10 @@ export default function HrDocumentDraft() {
       fields.curp_snapshot = form.curpSnapshot || null;
       fields.rfc_snapshot = form.rfcSnapshot || null;
       fields.clave_elector = form.claveElector || null;
-    } else if (request.requestType === "rescision_prueba") {
+    } else if (
+      request.requestType === "rescision_prueba" ||
+      request.requestType === "rescision_desempeno"
+    ) {
       fields.supervisor_name_snapshot = form.supervisorNameSnapshot || null;
       fields.incident_date_long_snapshot = form.incidentDateLongSnapshot || null;
       fields.kpi_table = form.rescisionKpiTable;
@@ -492,6 +498,9 @@ export default function HrDocumentDraft() {
     }
     if (request.requestType === "rescision_prueba") {
       return generateRescisionPdf(liveDraft, request, { maskSalary: !canViewSalary });
+    }
+    if (request.requestType === "rescision_desempeno") {
+      return generateRescisionDesempenoPdf(liveDraft, request, { maskSalary: !canViewSalary });
     }
     return generateActaPdf(
       liveDraft,
@@ -641,7 +650,8 @@ export default function HrDocumentDraft() {
   // binding document and require real amounts visible to the actor.
   const isSalaryDoc =
     request.requestType === "renuncia" ||
-    request.requestType === "rescision_prueba";
+    request.requestType === "rescision_prueba" ||
+    request.requestType === "rescision_desempeno";
   const canFinalize = canViewSalary || !isSalaryDoc;
 
   // ── Render ─────────────────────────────────────────────────────────
@@ -666,7 +676,9 @@ export default function HrDocumentDraft() {
                 ? "Resignation Packet"
                 : request.requestType === "rescision_prueba"
                   ? "Probation Termination"
-                  : "Commitment Letter"}
+                  : request.requestType === "rescision_desempeno"
+                    ? "Performance Termination"
+                    : "Commitment Letter"}
           </h1>
           <Badge variant="outline" className="text-xs">
             {draft?.docRef ?? "— (generated on save)"}
@@ -690,7 +702,8 @@ export default function HrDocumentDraft() {
                 onClick={handlePreviewPdf}
                 disabled={
                   !draft ||
-                  (request.requestType === "rescision_prueba"
+                  (request.requestType === "rescision_prueba" ||
+                  request.requestType === "rescision_desempeno"
                     ? !form.terminationEffectiveDate
                     : !form.narrative.trim())
                 }
@@ -857,7 +870,9 @@ export default function HrDocumentDraft() {
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge
                   variant={
-                    request.requestType === "acta" || request.requestType === "rescision_prueba"
+                    request.requestType === "acta" ||
+                    request.requestType === "rescision_prueba" ||
+                    request.requestType === "rescision_desempeno"
                       ? "destructive"
                       : request.requestType === "renuncia"
                         ? "secondary"
@@ -870,7 +885,9 @@ export default function HrDocumentDraft() {
                       ? "Voluntary Resignation"
                       : request.requestType === "rescision_prueba"
                         ? "Probation Termination"
-                        : "Commitment Letter"}
+                        : request.requestType === "rescision_desempeno"
+                          ? "Performance Termination"
+                          : "Commitment Letter"}
                 </Badge>
                 <Badge variant="secondary" className="text-xs">
                   {request.status === "pending"
@@ -1340,6 +1357,13 @@ export default function HrDocumentDraft() {
 
                 {/* Finiquito calculator */}
                 <div className="space-y-3 rounded-lg border p-3">
+                  <SensitiveDataAckGate
+                    active={canViewSalary}
+                    context="finiquito_calculation"
+                    acknowledgmentText={FINIQUITO_ACK_TEXT}
+                    subjectEmployeeId={request.employeeId}
+                    hrDocumentRequestId={request.id}
+                  >
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
@@ -1516,6 +1540,7 @@ export default function HrDocumentDraft() {
                       }
                     />
                   </div>
+                  </SensitiveDataAckGate>
                 </div>
 
                 {/* Identity snapshots */}
@@ -1574,8 +1599,9 @@ export default function HrDocumentDraft() {
               </div>
             )}
 
-            {/* ── Rescisión Periodo de Prueba ─────────────────── */}
-            {request.requestType === "rescision_prueba" && (
+            {/* ── Rescisión (Periodo de Prueba o Bajo Desempeño) ─── */}
+            {(request.requestType === "rescision_prueba" ||
+              request.requestType === "rescision_desempeno") && (
               <div className="space-y-4 pt-2 border-t">
                 {/* Contract + termination dates */}
                 <div className="grid grid-cols-2 gap-3">
@@ -1760,6 +1786,13 @@ export default function HrDocumentDraft() {
 
                 {/* Finiquito calculator — identical to renuncia */}
                 <div className="space-y-3 rounded-lg border p-3">
+                  <SensitiveDataAckGate
+                    active={canViewSalary}
+                    context="finiquito_calculation"
+                    acknowledgmentText={FINIQUITO_ACK_TEXT}
+                    subjectEmployeeId={request.employeeId}
+                    hrDocumentRequestId={request.id}
+                  >
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
@@ -1919,6 +1952,7 @@ export default function HrDocumentDraft() {
                       }
                     />
                   </div>
+                  </SensitiveDataAckGate>
                 </div>
               </div>
             )}
