@@ -1551,10 +1551,22 @@ export default function HrDocumentDraft() {
                         className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
                           canViewFiniquito &&
-                          setFormDirty((f) => ({
-                            ...f,
-                            salariosDevengadosMonto: e.target.value,
-                          }))
+                          setFormDirty((f) => {
+                            // Live-update the Total as devengados changes, using
+                            // the current aguinaldo / vacaciones / prima values.
+                            const total = calcFiniquitoTotal({
+                              aguinaldo: parseFloat(f.aguinaldoMonto) || 0,
+                              vacaciones: parseFloat(f.vacacionesMonto) || 0,
+                              prima: parseFloat(f.primaVacacionalMonto) || 0,
+                              salariosDevengados: parseFloat(e.target.value) || 0,
+                            });
+                            return {
+                              ...f,
+                              salariosDevengadosMonto: e.target.value,
+                              totalMonto: String(total),
+                              totalEnLetras: numberToSpanishWords(total),
+                            };
+                          })
                         }
                       />
                     </div>
@@ -2015,10 +2027,22 @@ export default function HrDocumentDraft() {
                         className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
                           canViewFiniquito &&
-                          setFormDirty((f) => ({
-                            ...f,
-                            salariosDevengadosMonto: e.target.value,
-                          }))
+                          setFormDirty((f) => {
+                            // Live-update the Total as devengados changes, using
+                            // the current aguinaldo / vacaciones / prima values.
+                            const total = calcFiniquitoTotal({
+                              aguinaldo: parseFloat(f.aguinaldoMonto) || 0,
+                              vacaciones: parseFloat(f.vacacionesMonto) || 0,
+                              prima: parseFloat(f.primaVacacionalMonto) || 0,
+                              salariosDevengados: parseFloat(e.target.value) || 0,
+                            });
+                            return {
+                              ...f,
+                              salariosDevengadosMonto: e.target.value,
+                              totalMonto: String(total),
+                              totalEnLetras: numberToSpanishWords(total),
+                            };
+                          })
                         }
                       />
                     </div>
