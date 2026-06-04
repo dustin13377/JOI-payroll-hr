@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
  * the 2025 LFPDPPP (federal data-protection duty).
  */
 export const FINIQUITO_ACK_TEXT =
-  "Confirmo que la información de finiquito, salarios y datos personales que estoy por consultar es CONFIDENCIAL. " +
+  "Confirmo que la información de finiquito, salarios y datos personales a la que tengo acceso o que manejo en el ejercicio de mi función es CONFIDENCIAL. " +
   "Me comprometo a no divulgarla, comentarla ni compartirla fuera del ejercicio de mi función. " +
   "Entiendo que su divulgación indebida puede constituir causa de rescisión de la relación laboral sin responsabilidad para el patrón " +
   "(Art. 47 de la Ley Federal del Trabajo) y una violación a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.";
