@@ -235,10 +235,10 @@ export const RESCISION_DESEMPENO_ANTECEDENTES_1_TEMPLATE =
   "Con fecha {hire_date_long}, el(la) trabajador(a) ingresó a {company_name} bajo un Contrato Individual de Trabajo por Tiempo Determinado — Periodo de Prueba de treinta (30) días naturales, conforme al artículo 39-A de la Ley Federal del Trabajo.";
 
 export const RESCISION_DESEMPENO_ANTECEDENTES_2_TEMPLATE =
-  "Habiendo superado el periodo de prueba, a partir del día {contract_signing_date_long} la relación laboral continuó bajo un Contrato Individual de Trabajo por Tiempo Determinado (dada la duración de la campaña), asignándole las mismas funciones y los mismos indicadores de desempeño (KPIs) establecidos en la Cláusula Sexta del contrato original.";
+  "Habiendo superado el periodo de capacitación inicial, a partir del día {contract_signing_date_long} la relación laboral continuó bajo un Contrato Individual de Trabajo por Tiempo Determinado (dada la duración de la campaña), asignándole las mismas funciones y los mismos indicadores de desempeño (KPIs) establecidos en la Cláusula Sexta del contrato original.";
 
 export const RESCISION_DESEMPENO_ANTECEDENTES_3_TEMPLATE =
-  "Durante el seguimiento posterior al periodo de prueba, la empresa verificó que el(la) trabajador(a) mantuvo un desempeño por debajo de los indicadores mínimos requeridos, conforme consta en los registros de la campaña {campaign}, constituyendo incumplimiento a las obligaciones pactadas en el contrato de trabajo.";
+  "Durante el seguimiento posterior al periodo de capacitación inicial y en base a las evaluaciones realizadas, la empresa verificó que el(la) trabajador(a) mantuvo un desempeño por debajo de los indicadores mínimos requeridos, conforme consta en los registros de la campaña {campaign}, constituyendo incumplimiento a las obligaciones pactadas en el contrato de trabajo.";
 
 export const RESCISION_DESEMPENO_KPI_INTRO =
   "Los registros obtenidos reflejan el siguiente comparativo entre los indicadores mínimos requeridos y el desempeño promedio del trabajador durante el periodo evaluado:";
