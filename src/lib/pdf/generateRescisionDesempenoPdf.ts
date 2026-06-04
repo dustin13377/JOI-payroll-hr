@@ -227,10 +227,14 @@ export function generateRescisionDesempenoPdf(
   y += 0.1;
 
   const kpiCols = [
-    { label: "Indicador / KPI", w: CONTENT_WIDTH * 0.36 },
-    { label: "Mínimo requerido", w: CONTENT_WIDTH * 0.22 },
-    { label: "Promedio registrado", w: CONTENT_WIDTH * 0.22 },
-    { label: "Cumplimiento", w: CONTENT_WIDTH * 0.2 },
+    { label: "Indicador / KPI", w: CONTENT_WIDTH * 0.26 },
+    { label: "Obligaciones Contractuales", w: CONTENT_WIDTH * 0.22 },
+    {
+      label:
+        "Promedio Mensual Realizado de (1 del mes pasado a último del mes pasado)",
+      w: CONTENT_WIDTH * 0.28,
+    },
+    { label: "Cumplimiento de las obligaciones contractuales", w: CONTENT_WIDTH * 0.24 },
   ];
   const colXs: number[] = [];
   let cx = MARGIN_LEFT;
@@ -239,15 +243,24 @@ export function generateRescisionDesempenoPdf(
     cx += c.w;
   }
 
-  const kpiHeaderH = 0.32;
-  y = ensureSpace(doc, y, kpiHeaderH);
-  doc.setFillColor(220, 220, 220);
+  // Header height grows to fit the longest wrapped column label.
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(9);
+  const headerWrapped = kpiCols.map((c) =>
+    doc.splitTextToSize(c.label, c.w - 0.12),
+  );
+  const maxHeaderLines = Math.max(...headerWrapped.map((l) => l.length));
+  const kpiHeaderH = Math.max(0.32, 0.1 + 0.12 * maxHeaderLines);
+  y = ensureSpace(doc, y, kpiHeaderH);
   for (let i = 0; i < kpiCols.length; i++) {
+    // Re-assert the fill on every cell: doc.text() flips the active fill color
+    // to the text color (black), so without this the cells after the first one
+    // fill solid black and hide the title.
+    doc.setFillColor(220, 220, 220);
     doc.rect(colXs[i], y, kpiCols[i].w, kpiHeaderH, "FD");
-    const lines = doc.splitTextToSize(kpiCols[i].label, kpiCols[i].w - 0.12);
-    let ly = y + 0.15;
+    const lines = headerWrapped[i];
+    // Vertically center the label block within the header cell.
+    let ly = y + (kpiHeaderH - 0.12 * (lines.length - 1)) / 2;
     for (const line of lines) {
       doc.text(line, colXs[i] + kpiCols[i].w / 2, ly, { align: "center" });
       ly += 0.12;
@@ -262,7 +275,13 @@ export function generateRescisionDesempenoPdf(
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(9);
   for (const row of rows) {
-    const values = [row.kpi, row.required, row.recorded, row.met];
+    // When the agent did not meet the goal, spell out how many days fell short.
+    const days = (row.daysNotMet ?? "").trim();
+    const metCell =
+      row.met === "No" && days
+        ? `No — no alcanzó la meta en ${days} ${days === "1" ? "día" : "días"}`
+        : row.met;
+    const values = [row.kpi, row.required, row.recorded, metCell];
     const wrapped = values.map((v, i) =>
       doc.splitTextToSize(v || "—", kpiCols[i].w - 0.12),
     );

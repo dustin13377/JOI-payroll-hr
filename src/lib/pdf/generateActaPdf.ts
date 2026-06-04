@@ -141,11 +141,31 @@ export function generateActaPdf(
   y += 0.1;
 
   // ── Narrative block ───────────────────────────────────────────────
-  const narrativeText = `\u201C${draft.narrative ?? ""}\u201D`;
-  y = drawParagraph(doc, narrativeText, MARGIN_LEFT + 0.25, y, CONTENT_WIDTH - 0.5, {
-    fontStyle: "italic",
-  });
-  y += 0.15;
+  // Render the full HR narrative, preserving paragraph breaks. We split on
+  // blank lines and draw each paragraph separately (with spacing) so nothing
+  // typed in the Formal Narrative field is collapsed or dropped. drawParagraph
+  // paginates per line, so arbitrarily long narratives flow onto more pages.
+  const narrativeRaw = (draft.narrative ?? "").trim();
+  if (narrativeRaw.length > 0) {
+    const paragraphs = narrativeRaw
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    paragraphs.forEach((para, idx) => {
+      const open = idx === 0 ? "\u201C" : "";
+      const close = idx === paragraphs.length - 1 ? "\u201D" : "";
+      y = drawParagraph(
+        doc,
+        `${open}${para}${close}`,
+        MARGIN_LEFT + 0.25,
+        y,
+        CONTENT_WIDTH - 0.5,
+        { fontStyle: "italic" },
+      );
+      y += 0.1;
+    });
+    y += 0.05;
+  }
 
   // ── Reincidencia ──────────────────────────────────────────────────
   if (priorCarta) {

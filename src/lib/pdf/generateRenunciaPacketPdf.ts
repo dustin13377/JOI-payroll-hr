@@ -15,7 +15,6 @@ import {
   createDoc,
   drawParagraph,
   drawMetadataTable,
-  drawFooters,
   drawSignatureBlock,
   ensureSpace,
   MARGIN_LEFT,
@@ -34,14 +33,6 @@ function fmtMoney(n: number | null | undefined): string {
 const MASKED_MONEY = "$ * * * *";
 const MASKED_TEXT = "* * * * * * * * * *";
 
-function formatDateEnMixed(dateISO: string | null | undefined): string {
-  if (!dateISO) return "";
-  const d = new Date(`${dateISO.slice(0, 10)}T00:00:00`);
-  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  return `${days[d.getDay()]}, ${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
-}
-
 export function generateRenunciaPacketPdf(
   draft: FinalizationDraft,
   request: HrDocumentRequestQueueItem,
@@ -55,7 +46,6 @@ export function generateRenunciaPacketPdf(
   const doc = createDoc();
   const effectiveDate = draft.effectiveDate ?? draft.incidentDate;
   const effectiveDateLong = formatDateSpanishFull(effectiveDate);
-  const effectiveDateEnMixed = formatDateEnMixed(effectiveDate);
   const trabajador = draft.trabajadorNameSnapshot ?? "";
   const puesto = draft.puestoSnapshot ?? "";
 
@@ -65,7 +55,7 @@ export function generateRenunciaPacketPdf(
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(10);
   doc.text(
-    `Guadalajara, Jalisco, a ${effectiveDateEnMixed}`,
+    `Guadalajara, Jalisco, a ${effectiveDateLong}`,
     PAGE_WIDTH - 0.75,
     y,
     { align: "right" },
@@ -348,8 +338,10 @@ export function generateRenunciaPacketPdf(
   y = ensureSpace(doc, y, 0.6);
   y = drawSignatureBlock(doc, MARGIN_LEFT + CONTENT_WIDTH / 4, y, CONTENT_WIDTH / 2, "", trabajador, { bold: true });
 
-  // ── Footers ────────────────────────────────────────────────────
-  drawFooters(doc, draft.docRef ?? "");
+  // ── No footers ─────────────────────────────────────────────────
+  // The renuncia packet intentionally omits the folio header (docRef) and
+  // page numbers — it's a signed employee-facing packet, not an internal
+  // numbered record. Other doc types still call drawFooters.
 
   return doc.output("blob");
 }

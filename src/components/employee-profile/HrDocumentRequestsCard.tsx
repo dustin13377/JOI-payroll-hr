@@ -170,9 +170,9 @@ export default function HrDocumentRequestsCard({
                         : req.requestType === "renuncia"
                           ? "Renuncia"
                           : req.requestType === "rescision_prueba"
-                            ? "Rescisión periodo de prueba"
+                            ? "Rescisión periodo de prueba 30 Días"
                             : req.requestType === "rescision_desempeno"
-                              ? "Rescisión por bajo desempeño"
+                              ? "Rescisión por bajo desempeño Contrato de Capacitación Inicial"
                               : "Carta de compromiso"}
                     </Badge>
                     <Badge variant={statusInfo.variant} className="text-xs">
@@ -288,7 +288,7 @@ export default function HrDocumentRequestsCard({
                     onChange={() => setRequestType("rescision_prueba")}
                     className="accent-primary shrink-0"
                   />
-                  <span className="text-sm leading-tight">Rescisión periodo de prueba</span>
+                  <span className="text-sm leading-tight">Rescisión periodo de prueba 30 Días</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer rounded-md border p-2 hover:bg-muted/40">
                   <input
@@ -298,7 +298,7 @@ export default function HrDocumentRequestsCard({
                     onChange={() => setRequestType("rescision_desempeno")}
                     className="accent-primary shrink-0"
                   />
-                  <span className="text-sm leading-tight">Rescisión por bajo desempeño</span>
+                  <span className="text-sm leading-tight">Rescisión por bajo desempeño Contrato de Capacitación Inicial</span>
                 </label>
               </div>
             </div>
