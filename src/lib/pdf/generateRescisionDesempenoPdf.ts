@@ -22,7 +22,7 @@ import {
   RESCISION_DESEMPENO_SUBTITLE,
   RESCISION_DESEMPENO_ANTECEDENTES_1_TEMPLATE,
   RESCISION_DESEMPENO_ANTECEDENTES_2_TEMPLATE,
-  RESCISION_DESEMPENO_ANTECEDENTES_3,
+  RESCISION_DESEMPENO_ANTECEDENTES_3_TEMPLATE,
   RESCISION_DESEMPENO_KPI_INTRO,
   RESCISION_DESEMPENO_KPI_FOOTNOTE,
   RESCISION_DESEMPENO_FUNDAMENTO_INTRO,
@@ -65,7 +65,7 @@ const BLANK = "_______________________";
 
 export function generateRescisionDesempenoPdf(
   draft: FinalizationDraft,
-  _request: HrDocumentRequestQueueItem,
+  request: HrDocumentRequestQueueItem,
   opts?: { maskSalary?: boolean },
 ): Blob {
   const mask = opts?.maskSalary === true;
@@ -206,7 +206,10 @@ export function generateRescisionDesempenoPdf(
   });
   y = drawParagraph(doc, ant2, MARGIN_LEFT, y, CONTENT_WIDTH);
   y += 0.1;
-  y = drawParagraph(doc, RESCISION_DESEMPENO_ANTECEDENTES_3, MARGIN_LEFT, y, CONTENT_WIDTH);
+  const ant3 = renderTemplate(RESCISION_DESEMPENO_ANTECEDENTES_3_TEMPLATE, {
+    campaign: request.campaignName || "asignada",
+  });
+  y = drawParagraph(doc, ant3, MARGIN_LEFT, y, CONTENT_WIDTH);
   y += 0.2;
 
   // ── Section III: INCUMPLIMIENTO / KPI TABLE ────────────────────────

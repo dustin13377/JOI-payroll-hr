@@ -237,8 +237,8 @@ export const RESCISION_DESEMPENO_ANTECEDENTES_1_TEMPLATE =
 export const RESCISION_DESEMPENO_ANTECEDENTES_2_TEMPLATE =
   "Habiendo superado el periodo de prueba, a partir del día {contract_signing_date_long} la relación laboral continuó bajo un Contrato Individual de Trabajo por Tiempo Determinado (dada la duración de la campaña), asignándole las mismas funciones y los mismos indicadores de desempeño (KPIs) establecidos en la Cláusula Sexta del contrato original.";
 
-export const RESCISION_DESEMPENO_ANTECEDENTES_3 =
-  "Durante el seguimiento posterior al periodo de prueba, la empresa verificó que el(la) trabajador(a) mantuvo un desempeño por debajo de los indicadores mínimos requeridos, conforme consta en los registros de la campaña asignada, constituyendo incumplimiento a las obligaciones pactadas en el contrato de trabajo.";
+export const RESCISION_DESEMPENO_ANTECEDENTES_3_TEMPLATE =
+  "Durante el seguimiento posterior al periodo de prueba, la empresa verificó que el(la) trabajador(a) mantuvo un desempeño por debajo de los indicadores mínimos requeridos, conforme consta en los registros de la campaña {campaign}, constituyendo incumplimiento a las obligaciones pactadas en el contrato de trabajo.";
 
 export const RESCISION_DESEMPENO_KPI_INTRO =
   "Los registros obtenidos reflejan el siguiente comparativo entre los indicadores mínimos requeridos y el desempeño promedio del trabajador durante el periodo evaluado:";
@@ -279,7 +279,6 @@ export const RESCISION_DESEMPENO_LIQUIDACION_BULLETS: string[] = [
   "Parte proporcional de vacaciones y prima vacacional (arts. 76–80 LFT).",
   "Parte proporcional de aguinaldo (art. 87 LFT).",
   "Devolución de documentos originales y constancia de trabajo (art. 132, frac. XIII LFT).",
-  "Aviso de baja ante el IMSS y entrega de comprobante al trabajador.",
 ];
 
 export const RESCISION_DESEMPENO_NO_INDEMNIZACION =
