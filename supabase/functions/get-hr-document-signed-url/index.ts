@@ -5,7 +5,7 @@
 // sees all). If the row is returned, a service_role client issues the signed
 // URL from storage (bypasses storage RLS which is leadership-only).
 //
-// POST body: { finalizationId: string, type: "carta" | "acta" | "renuncia" | "rescision_prueba", fileType: "pdf" | "signed_scan" }
+// POST body: { finalizationId: string, type: "carta" | "acta" | "renuncia" | "rescision_prueba" | "rescision_desempeno", fileType: "pdf" | "signed_scan" }
 // Returns:   { signedUrl: string }
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!["carta", "acta", "renuncia", "rescision_prueba"].includes(type)) {
+    if (!["carta", "acta", "renuncia", "rescision_prueba", "rescision_desempeno"].includes(type)) {
       return new Response(
         JSON.stringify({ error: "Invalid type" }),
         { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
@@ -81,13 +81,15 @@ Deno.serve(async (req) => {
     });
 
     const table =
-      type === "rescision_prueba"
-        ? "rescision_prueba_documents"
-        : type === "renuncia"
-          ? "resignation_packets"
-          : type === "carta"
-            ? "cartas_compromiso"
-            : "actas_administrativas";
+      type === "rescision_desempeno"
+        ? "rescision_desempeno_documents"
+        : type === "rescision_prueba"
+          ? "rescision_prueba_documents"
+          : type === "renuncia"
+            ? "resignation_packets"
+            : type === "carta"
+              ? "cartas_compromiso"
+              : "actas_administrativas";
     const pathColumn = fileType === "pdf" ? "pdf_path" : "signed_scan_path";
 
     const { data: row, error: queryErr } = await userClient

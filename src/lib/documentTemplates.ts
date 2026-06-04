@@ -220,6 +220,83 @@ export const RESCISION_CONSTANCIA_INTRO =
 export const RESCISION_LEGAL_REP_NAME = "DIOMEDES SANDOVAL ROJAS";
 export const RESCISION_LEGAL_REP_TITLE = "Representante Legal · Outsource Consulting Group";
 
+// ── Rescisión por Bajo Desempeño (Art. 47 Frac. XI) ─────────────────
+// Post-probation termination: employee passed the 30-day prueba, continued on
+// a fixed-term contract (por tiempo determinado / campaign duration), and is
+// terminated for sustained KPI failure. Different legal grounds from the
+// probation rescisión above (Art. 39-A).
+
+export const RESCISION_DESEMPENO_TITLE = "AVISO DE RESCISIÓN DE CONTRATO DE TRABAJO";
+
+export const RESCISION_DESEMPENO_SUBTITLE =
+  "Rescisión sin responsabilidad para el patrón — Incumplimiento de Indicadores de Desempeño";
+
+export const RESCISION_DESEMPENO_ANTECEDENTES_1_TEMPLATE =
+  "Con fecha {hire_date_long}, el(la) trabajador(a) ingresó a {company_name} bajo un Contrato Individual de Trabajo por Tiempo Determinado — Periodo de Prueba de treinta (30) días naturales, conforme al artículo 39-A de la Ley Federal del Trabajo.";
+
+export const RESCISION_DESEMPENO_ANTECEDENTES_2_TEMPLATE =
+  "Habiendo superado el periodo de prueba, a partir del día {contract_signing_date_long} la relación laboral continuó bajo un Contrato Individual de Trabajo por Tiempo Determinado (dada la duración de la campaña), asignándole las mismas funciones y los mismos indicadores de desempeño (KPIs) establecidos en la Cláusula Sexta del contrato original.";
+
+export const RESCISION_DESEMPENO_ANTECEDENTES_3 =
+  "Durante el seguimiento posterior al periodo de prueba, la empresa verificó que el(la) trabajador(a) mantuvo un desempeño por debajo de los indicadores mínimos requeridos, conforme consta en los registros de la campaña asignada, constituyendo incumplimiento a las obligaciones pactadas en el contrato de trabajo.";
+
+export const RESCISION_DESEMPENO_KPI_INTRO =
+  "Los registros obtenidos reflejan el siguiente comparativo entre los indicadores mínimos requeridos y el desempeño promedio del trabajador durante el periodo evaluado:";
+
+export const RESCISION_DESEMPENO_KPI_FOOTNOTE =
+  "* Registros obtenidos de BLB CRM, RingCentral y Origination Tracker. El trabajador tuvo acceso a dichos registros y fue informado de su desempeño durante el periodo evaluado.";
+
+export const RESCISION_DESEMPENO_FUNDAMENTO_INTRO =
+  "La presente rescisión se funda en los siguientes preceptos de la Ley Federal del Trabajo:";
+
+export const RESCISION_DESEMPENO_FUNDAMENTO_ROWS: { article: string; text: string }[] = [
+  {
+    article: "Art. 47 LFT Frac. XI",
+    text: "Son causas de rescisión de la relación de trabajo, sin responsabilidad para el patrón, el incumplimiento de las obligaciones que imponga el contrato individual, siempre que sean de importancia y que el patrón no las haya renunciado previamente.",
+  },
+  {
+    article: "Art. 134 LFT Frac. I y X",
+    text: "Son obligaciones de los trabajadores: desempeñar el servicio bajo la dirección del patrón con la intensidad, cuidado y esmero apropiados, y observar las disposiciones contractuales relativas a la disciplina y el rendimiento.",
+  },
+  {
+    article: "Art. 47 LFT Último párrafo",
+    text: "El patrón deberá dar al trabajador aviso escrito de la fecha y causa o causas de la rescisión. El aviso deberá entregarse personalmente al trabajador.",
+  },
+];
+
+export const RESCISION_DESEMPENO_DECLARACION_TEMPLATE =
+  "Por medio del presente documento, {company_name}, por conducto de su representante legal, notifica formalmente al(a la) Sr.(a) {trabajador_name} la RESCISIÓN DE SU CONTRATO INDIVIDUAL DE TRABAJO SIN RESPONSABILIDAD PARA LA EMPRESA, con efectos a partir del día {termination_date_long}, con fundamento en el artículo 47, fracción XI de la Ley Federal del Trabajo, en razón del incumplimiento reiterado y documentado de los indicadores de desempeño establecidos en su contrato de trabajo.";
+
+export const RESCISION_DESEMPENO_DECLARACION_2 =
+  "La rescisión obedece exclusivamente al incumplimiento de las métricas de desempeño contractualmente pactadas, sin que medie discriminación, represalia ni violación a derecho laboral alguno.";
+
+export const RESCISION_DESEMPENO_LIQUIDACION_INTRO =
+  "La empresa cubrirá al trabajador(a), en un plazo no mayor a cinco (5) días hábiles a partir de la fecha efectiva de baja, los conceptos que correspondan conforme a ley:";
+
+export const RESCISION_DESEMPENO_LIQUIDACION_BULLETS: string[] = [
+  "Salario devengado hasta la fecha efectiva de rescisión.",
+  "Parte proporcional de días de descanso obligatorio (art. 74 LFT).",
+  "Parte proporcional de vacaciones y prima vacacional (arts. 76–80 LFT).",
+  "Parte proporcional de aguinaldo (art. 87 LFT).",
+  "Devolución de documentos originales y constancia de trabajo (art. 132, frac. XIII LFT).",
+  "Aviso de baja ante el IMSS y entrega de comprobante al trabajador.",
+];
+
+export const RESCISION_DESEMPENO_NO_INDEMNIZACION =
+  "Al tratarse de una rescisión por causa justificada imputable al trabajador (art. 47 LFT), no procede el pago de indemnización constitucional (tres meses de salario, art. 50 LFT) ni de prima de antigüedad (art. 162 LFT).";
+
+export const RESCISION_DESEMPENO_ENTREGA_INTRO =
+  "El trabajador se obliga a entregar en su último día laborado lo siguiente:";
+
+export const RESCISION_DESEMPENO_ENTREGA_BULLETS: string[] = [
+  "Equipo de cómputo y accesorios asignados, en las mismas condiciones de entrega.",
+  "Credencial y cualquier identificación interna de la empresa.",
+  "Cualquier otro material, documento o herramienta propiedad de la empresa.",
+];
+
+export const RESCISION_DESEMPENO_ACUSE =
+  "El(La) trabajador(a) abajo firmante declara haber recibido personalmente el presente aviso de rescisión, estar en conocimiento de su contenido, causas y fundamento legal, y no tener reclamación laboral pendiente al momento de la firma, sin perjuicio del pago de los conceptos de liquidación señalados en el apartado VI.";
+
 // ── Template rendering helper ───────────────────────────────────────
 
 export function renderTemplate(

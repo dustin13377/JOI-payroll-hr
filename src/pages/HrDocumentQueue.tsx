@@ -146,7 +146,9 @@ export default function HrDocumentQueue() {
                           <TableCell>
                             <Badge
                               variant={
-                                req.requestType === "acta" || req.requestType === "rescision_prueba"
+                                req.requestType === "acta" ||
+                                req.requestType === "rescision_prueba" ||
+                                req.requestType === "rescision_desempeno"
                                   ? "destructive"
                                   : req.requestType === "renuncia"
                                     ? "secondary"
@@ -160,7 +162,9 @@ export default function HrDocumentQueue() {
                                   ? "Resignation"
                                   : req.requestType === "rescision_prueba"
                                     ? "Probation Termination"
-                                    : "Commitment Letter"}
+                                    : req.requestType === "rescision_desempeno"
+                                      ? "Performance Termination"
+                                      : "Commitment Letter"}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -295,7 +299,7 @@ function RequestDetail({
           {/* Header info */}
           <div className="flex items-center gap-3 flex-wrap">
             <Badge
-              variant={req.requestType === "acta" || req.requestType === "rescision_prueba" ? "destructive" : req.requestType === "renuncia" ? "secondary" : "outline"}
+              variant={req.requestType === "acta" || req.requestType === "rescision_prueba" || req.requestType === "rescision_desempeno" ? "destructive" : req.requestType === "renuncia" ? "secondary" : "outline"}
             >
               {req.requestType === "acta"
                 ? "Disciplinary Act"
@@ -303,7 +307,9 @@ function RequestDetail({
                   ? "Voluntary Resignation"
                   : req.requestType === "rescision_prueba"
                     ? "Probation Termination"
-                    : "Commitment Letter"}
+                    : req.requestType === "rescision_desempeno"
+                      ? "Performance Termination"
+                      : "Commitment Letter"}
             </Badge>
             <Badge variant={si.variant}>{si.label}</Badge>
           </div>
