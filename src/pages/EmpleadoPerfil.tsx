@@ -1505,7 +1505,7 @@ function AgentLogCard({
         note: noteText.trim(),
         campaignId,
         authorId: authorEmployeeId,
-        visibleToAgent: isLeadership ? shareWithAgent : false,
+        visibleToAgent: shareWithAgent,
       },
       {
         onSuccess: () => {
@@ -1600,7 +1600,7 @@ function AgentLogCard({
                         )}
                       </div>
                       <p className="text-sm">{entry.note}</p>
-                      {isLeadership && (
+                      {(isLeadership || entry.author_id === authorEmployeeId) && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1673,7 +1673,7 @@ function AgentLogCard({
                 rows={4}
               />
             </div>
-            {isLeadership && (
+            {authorEmployeeId && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
