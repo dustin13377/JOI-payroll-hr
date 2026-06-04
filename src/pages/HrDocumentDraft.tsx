@@ -175,7 +175,10 @@ function seedToFormState(seed: SnapshotSeed): DraftFormState {
 export default function HrDocumentDraft() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { employeeId: authEmployeeId, canViewSalary } = useAuth();
+  const { employeeId: authEmployeeId, canViewSalary, isLeadership, isOwner } = useAuth();
+  // Confidentiality gate: shown to managers + admins (leadership), but the
+  // owner is exempt. Note this exempts the owner ROLE, not a specific person.
+  const ackGateActive = isLeadership && !isOwner;
   const MASKED = "* * * * *";
 
   // Request + existing draft
@@ -335,9 +338,20 @@ export default function HrDocumentDraft() {
           if (!state.hireDateSnapshot) state.hireDateSnapshot = snapshotSeed.hireDateSnapshot ?? "";
           if (!state.salarioDiarioSnapshot) state.salarioDiarioSnapshot = snapshotSeed.salarioDiarioSnapshot ?? "";
           if (!state.terminationEffectiveDate) state.terminationEffectiveDate = snapshotSeed.effectiveDate ?? "";
-          // contract date defaults to hire date when blank — HR adjusts (for
-          // rescision_desempeno this is the post-probation continuation date).
-          if (!state.contractSigningDate) state.contractSigningDate = snapshotSeed.hireDateSnapshot ?? "";
+          // Contract/continuation date default:
+          //   rescision_prueba    → hire date (probation contract signed at hire)
+          //   rescision_desempeno → hire + 30 days (end of the prueba period;
+          //     when the fixed-term contract continued). HR can still adjust.
+          if (!state.contractSigningDate) {
+            const hire = snapshotSeed.hireDateSnapshot ?? "";
+            if (draft.type === "rescision_desempeno" && hire) {
+              const d = new Date(`${hire}T00:00:00`);
+              d.setDate(d.getDate() + 30);
+              state.contractSigningDate = d.toISOString().slice(0, 10);
+            } else {
+              state.contractSigningDate = hire;
+            }
+          }
         }
       }
       setForm(state);
@@ -1358,7 +1372,7 @@ export default function HrDocumentDraft() {
                 {/* Finiquito calculator */}
                 <div className="space-y-3 rounded-lg border p-3">
                   <SensitiveDataAckGate
-                    active={canViewSalary}
+                    active={ackGateActive}
                     context="finiquito_calculation"
                     acknowledgmentText={FINIQUITO_ACK_TEXT}
                     subjectEmployeeId={request.employeeId}
@@ -1623,7 +1637,9 @@ export default function HrDocumentDraft() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="rp-contract-date" className="text-xs font-medium">
-                      Contract signing date
+                      {request.requestType === "rescision_desempeno"
+                        ? "Fin del periodo de prueba (continuación)"
+                        : "Contract signing date"}
                     </Label>
                     <Input
                       id="rp-contract-date"
@@ -1637,7 +1653,9 @@ export default function HrDocumentDraft() {
                       }
                     />
                     <p className="text-[10px] text-muted-foreground">
-                      Defaults to hire date if blank.
+                      {request.requestType === "rescision_desempeno"
+                        ? "Fecha en que terminó la prueba de 30 días y continuó el contrato. Por defecto ≈30 días tras el ingreso."
+                        : "Defaults to hire date if blank."}
                     </p>
                   </div>
                   <div className="space-y-1 col-span-2">
@@ -1787,7 +1805,7 @@ export default function HrDocumentDraft() {
                 {/* Finiquito calculator — identical to renuncia */}
                 <div className="space-y-3 rounded-lg border p-3">
                   <SensitiveDataAckGate
-                    active={canViewSalary}
+                    active={ackGateActive}
                     context="finiquito_calculation"
                     acknowledgmentText={FINIQUITO_ACK_TEXT}
                     subjectEmployeeId={request.employeeId}
