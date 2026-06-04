@@ -97,7 +97,7 @@ export function SensitiveDataAckGate({
         <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p className="text-sm font-semibold text-amber-900">
-            Confidential — severance / salary data
+            Confidencial — datos de finiquito y salario
           </p>
           <p className="text-xs leading-relaxed text-amber-800 whitespace-pre-line">
             {acknowledgmentText}
@@ -110,7 +110,7 @@ export function SensitiveDataAckGate({
         disabled={saving}
         className="bg-amber-600 text-white hover:bg-amber-700"
       >
-        {saving ? "Recording…" : "I understand — reveal amounts"}
+        {saving ? "Registrando…" : "Entiendo — mostrar montos"}
       </Button>
     </div>
   );
