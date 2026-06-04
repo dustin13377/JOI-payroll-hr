@@ -155,7 +155,9 @@ export default function HrDocumentRequestsCard({
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge
                       variant={
-                        req.requestType === "acta" || req.requestType === "rescision_prueba"
+                        req.requestType === "acta" ||
+                        req.requestType === "rescision_prueba" ||
+                        req.requestType === "rescision_desempeno"
                           ? "destructive"
                           : req.requestType === "renuncia"
                             ? "secondary"
@@ -169,7 +171,9 @@ export default function HrDocumentRequestsCard({
                           ? "Renuncia"
                           : req.requestType === "rescision_prueba"
                             ? "Rescisión periodo de prueba"
-                            : "Carta de compromiso"}
+                            : req.requestType === "rescision_desempeno"
+                              ? "Rescisión por bajo desempeño"
+                              : "Carta de compromiso"}
                     </Badge>
                     <Badge variant={statusInfo.variant} className="text-xs">
                       {statusInfo.label}
@@ -214,10 +218,10 @@ export default function HrDocumentRequestsCard({
                   )}
 
                   {req.status === "fulfilled" &&
-                    (req.fulfilledCartaId || req.fulfilledActaId || req.fulfilledRenunciaId || req.fulfilledRescisionId) && (
+                    (req.fulfilledCartaId || req.fulfilledActaId || req.fulfilledRenunciaId || req.fulfilledRescisionId || req.fulfilledRescisionDesempenoId) && (
                       <FulfilledDocLinks
                         finalizationId={
-                          (req.fulfilledCartaId ?? req.fulfilledActaId ?? req.fulfilledRenunciaId ?? req.fulfilledRescisionId)!
+                          (req.fulfilledCartaId ?? req.fulfilledActaId ?? req.fulfilledRenunciaId ?? req.fulfilledRescisionId ?? req.fulfilledRescisionDesempenoId)!
                         }
                         type={req.requestType}
                       />
@@ -286,6 +290,16 @@ export default function HrDocumentRequestsCard({
                   />
                   <span className="text-sm leading-tight">Rescisión periodo de prueba</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer rounded-md border p-2 hover:bg-muted/40">
+                  <input
+                    type="radio"
+                    name="request-type"
+                    checked={requestType === "rescision_desempeno"}
+                    onChange={() => setRequestType("rescision_desempeno")}
+                    className="accent-primary shrink-0"
+                  />
+                  <span className="text-sm leading-tight">Rescisión por bajo desempeño</span>
+                </label>
               </div>
             </div>
 
@@ -341,7 +355,8 @@ export default function HrDocumentRequestsCard({
                   ? "Request Act"
                   : requestType === "renuncia"
                     ? "Request Resignation"
-                    : requestType === "rescision_prueba"
+                    : requestType === "rescision_prueba" ||
+                        requestType === "rescision_desempeno"
                       ? "Request Rescisión"
                       : "Request Letter"}
             </Button>

@@ -1,7 +1,7 @@
 // B2/B3 domain types — cartas de compromiso + actas administrativas
 // Hand-curated shapes for UI/hook use. Snake_case in DB → camelCase here.
 
-export type HrDocumentRequestType = 'carta' | 'acta' | 'renuncia' | 'rescision_prueba';
+export type HrDocumentRequestType = 'carta' | 'acta' | 'renuncia' | 'rescision_prueba' | 'rescision_desempeno';
 
 export type HrDocumentRequestStatus =
   | 'pending'
@@ -24,6 +24,7 @@ export interface HrDocumentRequest {
   fulfilledActaId: string | null;
   fulfilledRenunciaId: string | null;
   fulfilledRescisionId: string | null;
+  fulfilledRescisionDesempenoId: string | null;
   canceledReason: string | null;
   createdAt: string;
   updatedAt: string;
@@ -104,6 +105,10 @@ export interface RescisionPruebaDocument {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Rescisión por Bajo Desempeño (Art. 47 Frac. XI) ─────────────────
+// Same row shape as the probation rescisión; different legal grounds.
+export type RescisionDesempenoDocument = RescisionPruebaDocument;
 
 export interface ActaAdministrativa {
   id: string;

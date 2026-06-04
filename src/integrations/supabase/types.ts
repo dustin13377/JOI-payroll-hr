@@ -3330,6 +3330,105 @@ export type Database = {
         }
         Relationships: []
       }
+      rescision_desempeno_documents: {
+        Row: {
+          aguinaldo_monto: number | null
+          company_legal_address_snapshot: string | null
+          company_legal_name_snapshot: string | null
+          contract_signing_date: string | null
+          created_at: string
+          created_by: string
+          curp_snapshot: string | null
+          doc_ref: string | null
+          employee_id: string
+          hire_date_snapshot: string | null
+          horario_snapshot: string | null
+          id: string
+          incident_date_long_snapshot: string | null
+          kpi_table: Json
+          narrative: string | null
+          pdf_path: string | null
+          prima_vacacional_monto: number | null
+          puesto_snapshot: string | null
+          request_id: string | null
+          rfc_snapshot: string | null
+          salario_diario_snapshot: number | null
+          signed_at: string | null
+          signed_scan_path: string | null
+          supervisor_name_snapshot: string | null
+          termination_effective_date: string
+          total_en_letras: string | null
+          total_monto: number | null
+          trabajador_name_snapshot: string | null
+          updated_at: string
+          vacaciones_monto: number | null
+        }
+        Insert: {
+          aguinaldo_monto?: number | null
+          company_legal_address_snapshot?: string | null
+          company_legal_name_snapshot?: string | null
+          contract_signing_date?: string | null
+          created_at?: string
+          created_by: string
+          curp_snapshot?: string | null
+          doc_ref?: string | null
+          employee_id: string
+          hire_date_snapshot?: string | null
+          horario_snapshot?: string | null
+          id?: string
+          incident_date_long_snapshot?: string | null
+          kpi_table?: Json
+          narrative?: string | null
+          pdf_path?: string | null
+          prima_vacacional_monto?: number | null
+          puesto_snapshot?: string | null
+          request_id?: string | null
+          rfc_snapshot?: string | null
+          salario_diario_snapshot?: number | null
+          signed_at?: string | null
+          signed_scan_path?: string | null
+          supervisor_name_snapshot?: string | null
+          termination_effective_date: string
+          total_en_letras?: string | null
+          total_monto?: number | null
+          trabajador_name_snapshot?: string | null
+          updated_at?: string
+          vacaciones_monto?: number | null
+        }
+        Update: {
+          aguinaldo_monto?: number | null
+          company_legal_address_snapshot?: string | null
+          company_legal_name_snapshot?: string | null
+          contract_signing_date?: string | null
+          created_at?: string
+          created_by?: string
+          curp_snapshot?: string | null
+          doc_ref?: string | null
+          employee_id?: string
+          hire_date_snapshot?: string | null
+          horario_snapshot?: string | null
+          id?: string
+          incident_date_long_snapshot?: string | null
+          kpi_table?: Json
+          narrative?: string | null
+          pdf_path?: string | null
+          prima_vacacional_monto?: number | null
+          puesto_snapshot?: string | null
+          request_id?: string | null
+          rfc_snapshot?: string | null
+          salario_diario_snapshot?: number | null
+          signed_at?: string | null
+          signed_scan_path?: string | null
+          supervisor_name_snapshot?: string | null
+          termination_effective_date?: string
+          total_en_letras?: string | null
+          total_monto?: number | null
+          trabajador_name_snapshot?: string | null
+          updated_at?: string
+          vacaciones_monto?: number | null
+        }
+        Relationships: []
+      }
       rescision_prueba_documents: {
         Row: {
           aguinaldo_monto: number | null
