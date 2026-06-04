@@ -232,10 +232,13 @@ export function generateRescisionPdf(
   // Header row
   const kpiHeaderH = 0.32;
   y = ensureSpace(doc, y, kpiHeaderH);
-  doc.setFillColor(220, 220, 220);
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(9);
   for (let i = 0; i < kpiCols.length; i++) {
+    // Re-assert the fill on every cell: doc.text() flips the active fill color
+    // to the text color (black), so without this the cells after the first one
+    // fill solid black and hide the title.
+    doc.setFillColor(220, 220, 220);
     doc.rect(colXs[i], y, kpiCols[i].w, kpiHeaderH, "FD");
     const lines = doc.splitTextToSize(kpiCols[i].label, kpiCols[i].w - 0.12);
     let ly = y + 0.15;

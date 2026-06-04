@@ -252,8 +252,11 @@ export function generateRescisionDesempenoPdf(
   const maxHeaderLines = Math.max(...headerWrapped.map((l) => l.length));
   const kpiHeaderH = Math.max(0.32, 0.1 + 0.12 * maxHeaderLines);
   y = ensureSpace(doc, y, kpiHeaderH);
-  doc.setFillColor(220, 220, 220);
   for (let i = 0; i < kpiCols.length; i++) {
+    // Re-assert the fill on every cell: doc.text() flips the active fill color
+    // to the text color (black), so without this the cells after the first one
+    // fill solid black and hide the title.
+    doc.setFillColor(220, 220, 220);
     doc.rect(colXs[i], y, kpiCols[i].w, kpiHeaderH, "FD");
     const lines = headerWrapped[i];
     // Vertically center the label block within the header cell.
