@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,23 @@ export const FINIQUITO_ACK_TEXT =
  */
 const sessionAcked = new Set<string>();
 
+/** Build the dedupe key for a given sensitive view. */
+function ackKey(context: string, subjectEmployeeId?: string | null): string {
+  return `${context}:${subjectEmployeeId ?? "all"}`;
+}
+
+/**
+ * Has the viewer acknowledged this record this session? Lets callers (e.g. the
+ * PDF generator) honor the same gate the on-screen view uses, so amounts can't
+ * leak into a downloaded PDF without an acknowledgment on file.
+ */
+export function hasSensitiveAck(
+  context: string,
+  subjectEmployeeId?: string | null,
+): boolean {
+  return sessionAcked.has(ackKey(context, subjectEmployeeId));
+}
+
 interface Props {
   /**
    * When false, the gate is transparent and renders children directly. Pass
@@ -42,6 +59,8 @@ interface Props {
   subjectEmployeeId?: string | null;
   /** Optional link back to the HR document request. */
   hrDocumentRequestId?: string | null;
+  /** Fired once the record is acknowledged (or already was this session). */
+  onAcknowledged?: () => void;
   children: ReactNode;
 }
 
@@ -51,12 +70,19 @@ export function SensitiveDataAckGate({
   acknowledgmentText,
   subjectEmployeeId,
   hrDocumentRequestId,
+  onAcknowledged,
   children,
 }: Props) {
   const { employeeId } = useAuth();
-  const key = `${context}:${subjectEmployeeId ?? "all"}`;
+  const key = ackKey(context, subjectEmployeeId);
   const [acked, setAcked] = useState(() => sessionAcked.has(key));
   const [saving, setSaving] = useState(false);
+
+  // Sync the parent when the gate opens — whether just now or already acked
+  // earlier this session (e.g. after a re-render) — so PDF visibility matches.
+  useEffect(() => {
+    if (!active || acked) onAcknowledged?.();
+  }, [active, acked, onAcknowledged]);
 
   if (!active || acked) return <>{children}</>;
 

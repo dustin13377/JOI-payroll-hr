@@ -175,11 +175,21 @@ function seedToFormState(seed: SnapshotSeed): DraftFormState {
 export default function HrDocumentDraft() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { employeeId: authEmployeeId, canViewSalary, isLeadership, isOwner } = useAuth();
+  const { employeeId: authEmployeeId, canViewSalary, isManager, isLeadership, isOwner } = useAuth();
   // Confidentiality gate: shown to managers + admins (leadership), but the
   // owner is exempt. Note this exempts the owner ROLE, not a specific person.
   const ackGateActive = isLeadership && !isOwner;
   const MASKED = "* * * * *";
+  // Managers-and-up can VIEW the finiquito math — but only after acknowledging
+  // the confidentiality box. The owner is exempt from the box (ackGateActive is
+  // false for them). Finalizing/uploading the signed PDF stays Owner/HR-only
+  // (canFinalize). finiquitoAcked mirrors the gate so the PDF honors the same
+  // rule the on-screen calculator does — no amounts leak without an ack.
+  const canViewFiniquito = canViewSalary || isManager;
+  const [finiquitoAcked, setFiniquitoAcked] = useState(false);
+  // True only when the viewer may see real amounts AND (owner, or has acked).
+  const finiquitoUnmasked =
+    canViewFiniquito && (!ackGateActive || finiquitoAcked);
 
   // Request + existing draft
   const { data: request, isLoading: reqLoading } = useHrDocumentRequest(id);
@@ -394,7 +404,9 @@ export default function HrDocumentDraft() {
         form.reincidenciaPriorCartaId || null;
     } else if (request.requestType === "renuncia") {
       fields.effective_date = form.effectiveDate || null;
-      fields.narrative = form.renunciaNarrative || null;
+      // narrative is already set from form.narrative (the Formal Narrative box)
+      // in the base `fields` above. Don't overwrite it with renunciaNarrative —
+      // that field is never edited in the UI, so it would clobber what HR typed.
       fields.hire_date_snapshot = form.hireDateSnapshot || null;
       fields.salario_diario_snapshot = form.salarioDiarioSnapshot ? parseFloat(form.salarioDiarioSnapshot) : null;
       fields.aguinaldo_monto = form.aguinaldoMonto ? parseFloat(form.aguinaldoMonto) : null;
@@ -508,13 +520,13 @@ export default function HrDocumentDraft() {
       return generateCartaPdf(liveDraft, request);
     }
     if (request.requestType === "renuncia") {
-      return generateRenunciaPacketPdf(liveDraft, request, { maskSalary: !canViewSalary });
+      return generateRenunciaPacketPdf(liveDraft, request, { maskSalary: !finiquitoUnmasked });
     }
     if (request.requestType === "rescision_prueba") {
-      return generateRescisionPdf(liveDraft, request, { maskSalary: !canViewSalary });
+      return generateRescisionPdf(liveDraft, request, { maskSalary: !finiquitoUnmasked });
     }
     if (request.requestType === "rescision_desempeno") {
-      return generateRescisionDesempenoPdf(liveDraft, request, { maskSalary: !canViewSalary });
+      return generateRescisionDesempenoPdf(liveDraft, request, { maskSalary: !finiquitoUnmasked });
     }
     return generateActaPdf(
       liveDraft,
@@ -1380,12 +1392,13 @@ export default function HrDocumentDraft() {
                     acknowledgmentText={FINIQUITO_ACK_TEXT}
                     subjectEmployeeId={request.employeeId}
                     hrDocumentRequestId={request.id}
+                    onAcknowledged={() => setFiniquitoAcked(true)}
                   >
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
                     </Label>
-                    {canViewSalary && (
+                    {canViewFiniquito && (
                       <Button
                         type="button"
                         variant="outline"
@@ -1417,7 +1430,7 @@ export default function HrDocumentDraft() {
                     )}
                   </div>
 
-                  {!canViewSalary && (
+                  {!canViewFiniquito && (
                     <p className="text-[11px] text-muted-foreground italic">
                       Salary information is hidden. Visible to Owner and HR only.
                     </p>
@@ -1444,13 +1457,13 @@ export default function HrDocumentDraft() {
                         Daily wage ($ MXN)
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.salarioDiarioSnapshot : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.salarioDiarioSnapshot : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             salarioDiarioSnapshot: e.target.value,
@@ -1466,13 +1479,13 @@ export default function HrDocumentDraft() {
                         Prorated Christmas bonus
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.aguinaldoMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.aguinaldoMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: e.target.value,
@@ -1485,13 +1498,13 @@ export default function HrDocumentDraft() {
                         Accrued vacation
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.vacacionesMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.vacacionesMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             vacacionesMonto: e.target.value,
@@ -1504,13 +1517,13 @@ export default function HrDocumentDraft() {
                         Vacation premium (25%)
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.primaVacacionalMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.primaVacacionalMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             primaVacacionalMonto: e.target.value,
@@ -1523,13 +1536,13 @@ export default function HrDocumentDraft() {
                         Total
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.totalMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.totalMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             totalMonto: e.target.value,
@@ -1545,11 +1558,11 @@ export default function HrDocumentDraft() {
                     </Label>
                     <Textarea
                       rows={2}
-                      value={canViewSalary ? form.totalEnLetras : MASKED}
-                      readOnly={!canViewSalary}
-                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                      value={canViewFiniquito ? form.totalEnLetras : MASKED}
+                      readOnly={!canViewFiniquito}
+                      className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
-                        canViewSalary &&
+                        canViewFiniquito &&
                         setFormDirty((f) => ({
                           ...f,
                           totalEnLetras: e.target.value,
@@ -1773,9 +1786,9 @@ export default function HrDocumentDraft() {
                             Cumplimiento
                           </Label>
                         )}
-                        <Input
+                        <select
                           value={row.met}
-                          placeholder="Sí / No / Parcial"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onChange={(e) =>
                             setFormDirty((f) => {
                               const t = [...f.rescisionKpiTable];
@@ -1783,7 +1796,12 @@ export default function HrDocumentDraft() {
                               return { ...f, rescisionKpiTable: t };
                             })
                           }
-                        />
+                        >
+                          <option value="">—</option>
+                          <option value="Sí">Sí</option>
+                          <option value="No">No</option>
+                          <option value="Parcial">Parcial</option>
+                        </select>
                       </div>
                       <Button
                         type="button"
@@ -1813,12 +1831,13 @@ export default function HrDocumentDraft() {
                     acknowledgmentText={FINIQUITO_ACK_TEXT}
                     subjectEmployeeId={request.employeeId}
                     hrDocumentRequestId={request.id}
+                    onAcknowledged={() => setFiniquitoAcked(true)}
                   >
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium uppercase tracking-wider">
                       Severance — LFT Calculation
                     </Label>
-                    {canViewSalary && (
+                    {canViewFiniquito && (
                       <Button
                         type="button"
                         variant="outline"
@@ -1850,7 +1869,7 @@ export default function HrDocumentDraft() {
                     )}
                   </div>
 
-                  {!canViewSalary && (
+                  {!canViewFiniquito && (
                     <p className="text-[11px] text-muted-foreground italic">
                       Salary information is hidden. Visible to Owner and HR only.
                     </p>
@@ -1861,13 +1880,13 @@ export default function HrDocumentDraft() {
                       Daily wage ($ MXN)
                     </Label>
                     <Input
-                      type={canViewSalary ? "number" : "text"}
+                      type={canViewFiniquito ? "number" : "text"}
                       step="0.01"
-                      value={canViewSalary ? form.salarioDiarioSnapshot : MASKED}
-                      readOnly={!canViewSalary}
-                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                      value={canViewFiniquito ? form.salarioDiarioSnapshot : MASKED}
+                      readOnly={!canViewFiniquito}
+                      className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
-                        canViewSalary &&
+                        canViewFiniquito &&
                         setFormDirty((f) => ({
                           ...f,
                           salarioDiarioSnapshot: e.target.value,
@@ -1882,13 +1901,13 @@ export default function HrDocumentDraft() {
                         Prorated Christmas bonus
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.aguinaldoMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.aguinaldoMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: e.target.value,
@@ -1901,13 +1920,13 @@ export default function HrDocumentDraft() {
                         Accrued vacation
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.vacacionesMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.vacacionesMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             vacacionesMonto: e.target.value,
@@ -1920,13 +1939,13 @@ export default function HrDocumentDraft() {
                         Vacation premium (25%)
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.primaVacacionalMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.primaVacacionalMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             primaVacacionalMonto: e.target.value,
@@ -1939,13 +1958,13 @@ export default function HrDocumentDraft() {
                         Total
                       </Label>
                       <Input
-                        type={canViewSalary ? "number" : "text"}
+                        type={canViewFiniquito ? "number" : "text"}
                         step="0.01"
-                        value={canViewSalary ? form.totalMonto : MASKED}
-                        readOnly={!canViewSalary}
-                        className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                        value={canViewFiniquito ? form.totalMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                         onChange={(e) =>
-                          canViewSalary &&
+                          canViewFiniquito &&
                           setFormDirty((f) => ({
                             ...f,
                             totalMonto: e.target.value,
@@ -1961,11 +1980,11 @@ export default function HrDocumentDraft() {
                     </Label>
                     <Textarea
                       rows={2}
-                      value={canViewSalary ? form.totalEnLetras : MASKED}
-                      readOnly={!canViewSalary}
-                      className={!canViewSalary ? "bg-muted/30 tracking-widest" : undefined}
+                      value={canViewFiniquito ? form.totalEnLetras : MASKED}
+                      readOnly={!canViewFiniquito}
+                      className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
                       onChange={(e) =>
-                        canViewSalary &&
+                        canViewFiniquito &&
                         setFormDirty((f) => ({
                           ...f,
                           totalEnLetras: e.target.value,

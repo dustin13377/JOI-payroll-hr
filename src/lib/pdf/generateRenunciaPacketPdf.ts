@@ -15,7 +15,6 @@ import {
   createDoc,
   drawParagraph,
   drawMetadataTable,
-  drawFooters,
   drawSignatureBlock,
   ensureSpace,
   MARGIN_LEFT,
@@ -348,8 +347,10 @@ export function generateRenunciaPacketPdf(
   y = ensureSpace(doc, y, 0.6);
   y = drawSignatureBlock(doc, MARGIN_LEFT + CONTENT_WIDTH / 4, y, CONTENT_WIDTH / 2, "", trabajador, { bold: true });
 
-  // ── Footers ────────────────────────────────────────────────────
-  drawFooters(doc, draft.docRef ?? "");
+  // ── No footers ─────────────────────────────────────────────────
+  // The renuncia packet intentionally omits the folio header (docRef) and
+  // page numbers — it's a signed employee-facing packet, not an internal
+  // numbered record. Other doc types still call drawFooters.
 
   return doc.output("blob");
 }
