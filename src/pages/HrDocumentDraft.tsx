@@ -1028,6 +1028,9 @@ export default function HrDocumentDraft() {
               <div className="space-y-1">
                 <Label htmlFor="snap-horario" className="text-xs text-muted-foreground">
                   Schedule
+                  <span className="ml-2 font-normal italic">
+                    Ej: Lun-Mar-Mié-Jue 7:00 AM – 6:00 PM · Hora de Comida: 13:00
+                  </span>
                 </Label>
                 <Textarea
                   id="snap-horario"
