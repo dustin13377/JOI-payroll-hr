@@ -103,6 +103,7 @@ interface DraftFormState {
   aguinaldoMonto: string;
   vacacionesMonto: string;
   primaVacacionalMonto: string;
+  salariosDevengadosMonto: string;
   totalMonto: string;
   totalEnLetras: string;
   curpSnapshot: string;
@@ -134,6 +135,7 @@ function draftToFormState(draft: FinalizationDraft): DraftFormState {
     aguinaldoMonto: draft.aguinaldoMonto != null ? String(draft.aguinaldoMonto) : "",
     vacacionesMonto: draft.vacacionesMonto != null ? String(draft.vacacionesMonto) : "",
     primaVacacionalMonto: draft.primaVacacionalMonto != null ? String(draft.primaVacacionalMonto) : "",
+    salariosDevengadosMonto: draft.salariosDevengadosMonto != null ? String(draft.salariosDevengadosMonto) : "",
     totalMonto: draft.totalMonto != null ? String(draft.totalMonto) : "",
     totalEnLetras: draft.totalEnLetras ?? "",
     curpSnapshot: draft.curpSnapshot ?? "",
@@ -158,6 +160,7 @@ function seedToFormState(seed: SnapshotSeed): DraftFormState {
     aguinaldoMonto: "",
     vacacionesMonto: "",
     primaVacacionalMonto: "",
+    salariosDevengadosMonto: "",
     totalMonto: "",
     totalEnLetras: "",
     curpSnapshot: "",
@@ -295,6 +298,7 @@ export default function HrDocumentDraft() {
     aguinaldoMonto: "",
     vacacionesMonto: "",
     primaVacacionalMonto: "",
+    salariosDevengadosMonto: "",
     totalMonto: "",
     totalEnLetras: "",
     curpSnapshot: "",
@@ -412,6 +416,7 @@ export default function HrDocumentDraft() {
       fields.aguinaldo_monto = form.aguinaldoMonto ? parseFloat(form.aguinaldoMonto) : null;
       fields.vacaciones_monto = form.vacacionesMonto ? parseFloat(form.vacacionesMonto) : null;
       fields.prima_vacacional_monto = form.primaVacacionalMonto ? parseFloat(form.primaVacacionalMonto) : null;
+      fields.salarios_devengados_monto = form.salariosDevengadosMonto ? parseFloat(form.salariosDevengadosMonto) : null;
       fields.total_monto = form.totalMonto ? parseFloat(form.totalMonto) : null;
       fields.total_en_letras = form.totalEnLetras || null;
       fields.curp_snapshot = form.curpSnapshot || null;
@@ -434,6 +439,7 @@ export default function HrDocumentDraft() {
       fields.aguinaldo_monto = form.aguinaldoMonto ? parseFloat(form.aguinaldoMonto) : null;
       fields.vacaciones_monto = form.vacacionesMonto ? parseFloat(form.vacacionesMonto) : null;
       fields.prima_vacacional_monto = form.primaVacacionalMonto ? parseFloat(form.primaVacacionalMonto) : null;
+      fields.salarios_devengados_monto = form.salariosDevengadosMonto ? parseFloat(form.salariosDevengadosMonto) : null;
       fields.total_monto = form.totalMonto ? parseFloat(form.totalMonto) : null;
       fields.total_en_letras = form.totalEnLetras || null;
       fields.curp_snapshot = form.curpSnapshot || null;
@@ -498,6 +504,7 @@ export default function HrDocumentDraft() {
       aguinaldoMonto: form.aguinaldoMonto ? parseFloat(form.aguinaldoMonto) : draft.aguinaldoMonto,
       vacacionesMonto: form.vacacionesMonto ? parseFloat(form.vacacionesMonto) : draft.vacacionesMonto,
       primaVacacionalMonto: form.primaVacacionalMonto ? parseFloat(form.primaVacacionalMonto) : draft.primaVacacionalMonto,
+      salariosDevengadosMonto: form.salariosDevengadosMonto ? parseFloat(form.salariosDevengadosMonto) : draft.salariosDevengadosMonto,
       totalMonto: form.totalMonto ? parseFloat(form.totalMonto) : draft.totalMonto,
       totalEnLetras: form.totalEnLetras || draft.totalEnLetras,
       curpSnapshot: form.curpSnapshot || draft.curpSnapshot,
@@ -1414,7 +1421,8 @@ export default function HrDocumentDraft() {
                           const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
                           const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
                           const prima = calcPrimaVacacional(vac.amount);
-                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
+                          const devengados = parseFloat(form.salariosDevengadosMonto) || 0;
+                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima, salariosDevengados: devengados });
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: String(aguinaldo),
@@ -1528,6 +1536,37 @@ export default function HrDocumentDraft() {
                             ...f,
                             primaVacacionalMonto: e.target.value,
                           }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Salarios Devengados de Días
+                      </Label>
+                      <Input
+                        type={canViewFiniquito ? "number" : "text"}
+                        step="0.01"
+                        value={canViewFiniquito ? form.salariosDevengadosMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
+                        onChange={(e) =>
+                          canViewFiniquito &&
+                          setFormDirty((f) => {
+                            // Live-update the Total as devengados changes, using
+                            // the current aguinaldo / vacaciones / prima values.
+                            const total = calcFiniquitoTotal({
+                              aguinaldo: parseFloat(f.aguinaldoMonto) || 0,
+                              vacaciones: parseFloat(f.vacacionesMonto) || 0,
+                              prima: parseFloat(f.primaVacacionalMonto) || 0,
+                              salariosDevengados: parseFloat(e.target.value) || 0,
+                            });
+                            return {
+                              ...f,
+                              salariosDevengadosMonto: e.target.value,
+                              totalMonto: String(total),
+                              totalEnLetras: numberToSpanishWords(total),
+                            };
+                          })
                         }
                       />
                     </div>
@@ -1875,7 +1914,8 @@ export default function HrDocumentDraft() {
                           const aguinaldo = calcAguinaldoProporcional({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
                           const vac = calcVacaciones({ salarioDiario: sd, hireDate: hd, resignationDate: rd });
                           const prima = calcPrimaVacacional(vac.amount);
-                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima });
+                          const devengados = parseFloat(form.salariosDevengadosMonto) || 0;
+                          const total = calcFiniquitoTotal({ aguinaldo, vacaciones: vac.amount, prima, salariosDevengados: devengados });
                           setFormDirty((f) => ({
                             ...f,
                             aguinaldoMonto: String(aguinaldo),
@@ -1972,6 +2012,37 @@ export default function HrDocumentDraft() {
                             ...f,
                             primaVacacionalMonto: e.target.value,
                           }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Salarios Devengados de Días
+                      </Label>
+                      <Input
+                        type={canViewFiniquito ? "number" : "text"}
+                        step="0.01"
+                        value={canViewFiniquito ? form.salariosDevengadosMonto : MASKED}
+                        readOnly={!canViewFiniquito}
+                        className={!canViewFiniquito ? "bg-muted/30 tracking-widest" : undefined}
+                        onChange={(e) =>
+                          canViewFiniquito &&
+                          setFormDirty((f) => {
+                            // Live-update the Total as devengados changes, using
+                            // the current aguinaldo / vacaciones / prima values.
+                            const total = calcFiniquitoTotal({
+                              aguinaldo: parseFloat(f.aguinaldoMonto) || 0,
+                              vacaciones: parseFloat(f.vacacionesMonto) || 0,
+                              prima: parseFloat(f.primaVacacionalMonto) || 0,
+                              salariosDevengados: parseFloat(e.target.value) || 0,
+                            });
+                            return {
+                              ...f,
+                              salariosDevengadosMonto: e.target.value,
+                              totalMonto: String(total),
+                              totalEnLetras: numberToSpanishWords(total),
+                            };
+                          })
                         }
                       />
                     </div>

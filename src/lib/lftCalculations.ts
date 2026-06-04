@@ -111,13 +111,20 @@ export function calcPrimaVacacional(vacacionesMonto: number): number {
   return round2(vacacionesMonto * 0.25);
 }
 
-/** Sum aguinaldo + vacaciones + prima, rounded to 2 decimals. */
+/**
+ * Sum aguinaldo + vacaciones + prima (+ salarios devengados, if any),
+ * rounded to 2 decimals. salariosDevengados is a manual amount HR enters for
+ * days already worked but not yet paid in the final period.
+ */
 export function calcFiniquitoTotal(args: {
   aguinaldo: number;
   vacaciones: number;
   prima: number;
+  salariosDevengados?: number;
 }): number {
-  return round2(args.aguinaldo + args.vacaciones + args.prima);
+  return round2(
+    args.aguinaldo + args.vacaciones + args.prima + (args.salariosDevengados ?? 0),
+  );
 }
 
 // ── Number to Spanish words (MX peso format) ────────────────────────

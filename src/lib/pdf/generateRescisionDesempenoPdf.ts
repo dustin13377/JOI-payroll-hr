@@ -425,6 +425,7 @@ export function generateRescisionDesempenoPdf(
 
   // Optional computed finiquito desglose (shown only when HR fills amounts).
   if (
+    draft.salariosDevengadosMonto != null ||
     draft.aguinaldoMonto != null ||
     draft.vacacionesMonto != null ||
     draft.primaVacacionalMonto != null ||
@@ -440,6 +441,7 @@ export function generateRescisionDesempenoPdf(
       { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
       { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
       { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },
+      { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
     ];
     const labelColW = 2.8;
     const valueColW = CONTENT_WIDTH - labelColW;

@@ -338,6 +338,7 @@ export interface FinalizationDraft {
   aguinaldoMonto: number | null;
   vacacionesMonto: number | null;
   primaVacacionalMonto: number | null;
+  salariosDevengadosMonto: number | null;
   totalMonto: number | null;
   totalEnLetras: string | null;
   curpSnapshot: string | null;
@@ -394,6 +395,7 @@ function mapFinalizationRow(
     aguinaldoMonto: (row.aguinaldo_monto as number) ?? null,
     vacacionesMonto: (row.vacaciones_monto as number) ?? null,
     primaVacacionalMonto: (row.prima_vacacional_monto as number) ?? null,
+    salariosDevengadosMonto: (row.salarios_devengados_monto as number) ?? null,
     totalMonto: (row.total_monto as number) ?? null,
     totalEnLetras: (row.total_en_letras as string) ?? null,
     curpSnapshot: (row.curp_snapshot as string) ?? null,
@@ -500,6 +502,7 @@ export interface DraftUpdateFields {
   aguinaldo_monto?: number | null;
   vacaciones_monto?: number | null;
   prima_vacacional_monto?: number | null;
+  salarios_devengados_monto?: number | null;
   total_monto?: number | null;
   total_en_letras?: string | null;
   curp_snapshot?: string | null;

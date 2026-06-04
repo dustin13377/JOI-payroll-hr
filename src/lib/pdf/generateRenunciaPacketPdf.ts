@@ -153,6 +153,7 @@ export function generateRenunciaPacketPdf(
     { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
     { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
     { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },
+    { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
   ];
   y = drawMetadataTable(doc, items.map((i) => ({ label: i.label, value: i.value })), MARGIN_LEFT, y, 2.5, CONTENT_WIDTH);
 
