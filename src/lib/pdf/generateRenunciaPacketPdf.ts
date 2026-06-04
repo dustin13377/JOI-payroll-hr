@@ -150,6 +150,7 @@ export function generateRenunciaPacketPdf(
 
   // Itemized table
   const items = [
+    { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
     { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
     { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
     { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },

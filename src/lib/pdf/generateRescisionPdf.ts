@@ -413,6 +413,7 @@ export function generateRescisionPdf(
 
   // Computed finiquito amounts (if available)
   if (
+    draft.salariosDevengadosMonto != null ||
     draft.aguinaldoMonto != null ||
     draft.vacacionesMonto != null ||
     draft.primaVacacionalMonto != null ||
@@ -425,6 +426,7 @@ export function generateRescisionPdf(
     y += 0.2;
 
     const finRows = [
+      { label: "Salarios Devengados de Días", value: money(draft.salariosDevengadosMonto) },
       { label: "Aguinaldo proporcional", value: money(draft.aguinaldoMonto) },
       { label: "Vacaciones correspondientes", value: money(draft.vacacionesMonto) },
       { label: "Prima vacacional (25%)", value: money(draft.primaVacacionalMonto) },
