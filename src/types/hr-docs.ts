@@ -71,6 +71,7 @@ export interface RescisionKpiRow {
   required: string;  // Requerido (e.g. "350 llamadas")
   recorded: string;  // Registrado — what the agent actually did
   met: string;       // Cumplimiento — "Sí" / "No" / "Parcial" / blank
+  daysNotMet?: string; // Días sin cumplir — shown/used only when met === "No"
 }
 
 export interface RescisionPruebaDocument {

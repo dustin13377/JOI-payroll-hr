@@ -1707,7 +1707,7 @@ export default function HrDocumentDraft() {
                           ...f,
                           rescisionKpiTable: [
                             ...f.rescisionKpiTable,
-                            { kpi: "", required: "", recorded: "", met: "" },
+                            { kpi: "", required: "", recorded: "", met: "", daysNotMet: "" },
                           ],
                         }))
                       }
@@ -1792,7 +1792,13 @@ export default function HrDocumentDraft() {
                           onChange={(e) =>
                             setFormDirty((f) => {
                               const t = [...f.rescisionKpiTable];
-                              t[idx] = { ...t[idx], met: e.target.value };
+                              const met = e.target.value;
+                              // Clear the days count when it no longer applies.
+                              t[idx] = {
+                                ...t[idx],
+                                met,
+                                daysNotMet: met === "No" ? t[idx].daysNotMet ?? "" : "",
+                              };
                               return { ...f, rescisionKpiTable: t };
                             })
                           }
@@ -1802,6 +1808,22 @@ export default function HrDocumentDraft() {
                           <option value="No">No</option>
                           <option value="Parcial">Parcial</option>
                         </select>
+                        {row.met === "No" && (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={row.daysNotMet ?? ""}
+                            placeholder="Días sin cumplir"
+                            className="mt-1"
+                            onChange={(e) =>
+                              setFormDirty((f) => {
+                                const t = [...f.rescisionKpiTable];
+                                t[idx] = { ...t[idx], daysNotMet: e.target.value };
+                                return { ...f, rescisionKpiTable: t };
+                              })
+                            }
+                          />
+                        )}
                       </div>
                       <Button
                         type="button"

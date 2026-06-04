@@ -254,7 +254,13 @@ export function generateRescisionPdf(
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(9);
   for (const row of rows) {
-    const values = [row.kpi, row.required, row.recorded, row.met];
+    // When the agent did not meet the goal, spell out how many days fell short.
+    const days = (row.daysNotMet ?? "").trim();
+    const metCell =
+      row.met === "No" && days
+        ? `No — no alcanzó la meta en ${days} ${days === "1" ? "día" : "días"}`
+        : row.met;
+    const values = [row.kpi, row.required, row.recorded, metCell];
     const wrapped = values.map((v, i) =>
       doc.splitTextToSize(v || "—", kpiCols[i].w - 0.12),
     );
