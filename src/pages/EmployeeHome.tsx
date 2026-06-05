@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import SignedHrDocumentsCard from "@/components/employee-profile/SignedHrDocumentsCard";
+import UptrainingCard from "@/components/employee-profile/UptrainingCard";
 import { ClockOutEODDialog, KPIField } from "@/components/ClockOutEODDialog";
 import {
   Clock,
@@ -824,6 +825,15 @@ export default function EmployeeHome() {
 
       {/* B2/B3: Signed cartas + actas — agent read-only */}
       <SignedHrDocumentsCard employeeId={employeeId} />
+
+      {/* Uptraining constancias — agent read-only (hidden when none) */}
+      {employeeId && (
+        <UptrainingCard
+          employeeId={employeeId}
+          authEmployeeId={employeeId}
+          mode="agent"
+        />
+      )}
 
       {/* Weekly chart */}
       <Card>

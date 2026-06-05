@@ -46,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDateMX } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequestsCard";
+import UptrainingCard from "@/components/employee-profile/UptrainingCard";
 import { EmploymentHistoryCard } from "@/components/employee-profile/EmploymentHistoryCard";
 import { ThirtyDayReviewCard } from "@/components/employee-profile/ThirtyDayReviewCard";
 import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
@@ -1007,6 +1008,11 @@ export default function EmpleadoPerfil() {
       {/* B2/B3: Cartas & Actas — leadership + TL on own campaign */}
       {(isLeadership || (isTeamLead && campaignId)) && (
         <HrDocumentRequestsCard employeeId={emp._uuid!} authEmployeeId={authEmployeeId!} />
+      )}
+
+      {/* Uptraining — generate + upload signed constancia; leadership + TL on own campaign */}
+      {(isLeadership || (isTeamLead && campaignId)) && (
+        <UptrainingCard employeeId={emp._uuid!} authEmployeeId={authEmployeeId!} mode="manage" />
       )}
 
       {/* C1: Policy Acknowledgments — leadership only */}
