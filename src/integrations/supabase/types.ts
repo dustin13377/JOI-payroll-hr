@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      uptraining_documents: {
+        Row: {
+          id: string
+          employee_id: string
+          organization_id: string
+          file_path: string
+          original_filename: string | null
+          note: string | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          employee_id: string
+          organization_id?: string
+          file_path: string
+          original_filename?: string | null
+          note?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          employee_id?: string
+          organization_id?: string
+          file_path?: string
+          original_filename?: string | null
+          note?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       _legacy_time_off_requests: {
         Row: {
           created_at: string | null

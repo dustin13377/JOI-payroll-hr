@@ -232,7 +232,7 @@ export const RESCISION_DESEMPENO_SUBTITLE =
   "Rescisión sin responsabilidad para el patrón — Incumplimiento de Indicadores de Desempeño";
 
 export const RESCISION_DESEMPENO_ANTECEDENTES_1_TEMPLATE =
-  "Con fecha {hire_date_long}, el(la) trabajador(a) ingresó a {company_name} bajo un Contrato Individual de Trabajo por Tiempo Determinado — Periodo de Prueba de treinta (30) días naturales, conforme al artículo 39-A de la Ley Federal del Trabajo.";
+  "Con fecha {hire_date_long}, el(la) trabajador(a) ingresó a {company_name} bajo un Contrato Individual de Trabajo por Tiempo Determinado — Capacitación Inicial, conforme al artículo 39-B de la Ley Federal del Trabajo.";
 
 export const RESCISION_DESEMPENO_ANTECEDENTES_2_TEMPLATE =
   "Habiendo superado el periodo de capacitación inicial, a partir del día {contract_signing_date_long} la relación laboral continuó bajo un Contrato Individual de Trabajo por Tiempo Determinado (dada la duración de la campaña), asignándole las mismas funciones y los mismos indicadores de desempeño (KPIs) establecidos en la Cláusula Sexta del contrato original.";
@@ -295,6 +295,66 @@ export const RESCISION_DESEMPENO_ENTREGA_BULLETS: string[] = [
 
 export const RESCISION_DESEMPENO_ACUSE =
   "El(La) trabajador(a) abajo firmante declara haber recibido personalmente el presente aviso de rescisión, estar en conocimiento de su contenido, causas y fundamento legal, y no tener reclamación laboral pendiente al momento de la firma, sin perjuicio del pago de los conceptos de liquidación señalados en el apartado VI.";
+
+// ── Constancia de Uptraining / Capacitación Continua ────────────────
+// Light-fill printable form. The app auto-populates the agent header and the
+// KPI-minimums table (from campaign_kpi_config); the coach/TL fills sessions,
+// topics, commitments and signatures by hand, then scans the signed copy.
+
+export const UPTRAINING_TITLE = "CONSTANCIA DE UPTRAINING / CAPACITACIÓN CONTINUA";
+
+export const UPTRAINING_SUBTITLE =
+  "Registro individual de sesión(es) de reforzamiento y seguimiento de desempeño";
+
+// Section III.A — predefined topics. Rendered as blank checkboxes to mark by hand.
+export const UPTRAINING_TOPICS: string[] = [
+  "Presentación y pitch de apertura",
+  "Manejo de objeciones",
+  "Calificación del prospecto",
+  "Proceso de aprobación del producto",
+  "Uso de CRM",
+  "Registro en Origination Tracker",
+  "Agendado de citas en Google Calendar",
+  "Seguimiento de cita (call cadence)",
+  "Talk time y llamadas por hora",
+  "Package Back / Credit Pull / Sets / Activations",
+  "Calidad de llamada (QA)",
+  "Escalación a Team Lead / Manager",
+  "Manejo de disposiciones en CRM",
+  "Conocimiento del producto",
+  "Revisión de grabaciones propias",
+  "Role play con supervisor",
+  "Manejo del tiempo en piso",
+  "Políticas de asistencia y puntualidad",
+  "Reporteo diario de métricas",
+];
+
+export const UPTRAINING_SESSION_HEADERS: string[] = [
+  "#",
+  "Fecha",
+  "Horario",
+  "Instructor / Coach",
+  "Duración (hrs)",
+  "Modalidad",
+];
+
+export const UPTRAINING_KPI_HEADERS: string[] = [
+  "Indicador / KPI",
+  "Mínimo requerido",
+  "Promedio del agente",
+  "Meta post-uptraining",
+  "✔",
+];
+
+export const UPTRAINING_FIRMAS_INTRO =
+  "Las partes abajo firmantes declaran que el uptraining descrito fue impartido y recibido en los términos indicados en el presente documento.";
+
+export const UPTRAINING_FOOTER =
+  "Documento interno  ·  Recursos Humanos  ·  Outsource Consulting Group S.A.S.  ·  Guadalajara, Jalisco";
+
+export const UPTRAINING_LEGAL_REP_NAME = "DIOMEDES SANDOVAL ROJAS";
+export const UPTRAINING_LEGAL_REP_TITLE =
+  "Representante legal  ·  Outsource Consulting Group";
 
 // ── Template rendering helper ───────────────────────────────────────
 
