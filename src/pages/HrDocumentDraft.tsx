@@ -185,8 +185,9 @@ export default function HrDocumentDraft() {
   const MASKED = "* * * * *";
   // Managers-and-up can VIEW the finiquito math — but only after acknowledging
   // the confidentiality box. The owner is exempt from the box (ackGateActive is
-  // false for them). Finalizing/uploading the signed PDF stays Owner/HR-only
-  // (canFinalize). finiquitoAcked mirrors the gate so the PDF honors the same
+  // false for them). Finalizing/uploading the signed PDF is allowed for Owner/HR
+  // always, and for managers once they've acked the confidentiality box (see
+  // canFinalize). finiquitoAcked mirrors the gate so the PDF honors the same
   // rule the on-screen calculator does — no amounts leak without an ack.
   const canViewFiniquito = canViewSalary || isManager;
   const [finiquitoAcked, setFiniquitoAcked] = useState(false);
@@ -560,7 +561,7 @@ export default function HrDocumentDraft() {
   async function handleFinalizePdf() {
     if (!draft || !request) return;
     if (!canFinalize) {
-      toast.error("Finalize requires Owner / HR — they verify the real finiquito amounts.");
+      toast.error("Acknowledge the confidentiality box above to finalize finiquito documents.");
       return;
     }
     // Auto-save before PDF generation
@@ -607,7 +608,7 @@ export default function HrDocumentDraft() {
     if (!file) return;
 
     if (!canFinalize) {
-      toast.error("Uploading the signed scan is Owner / HR only.");
+      toast.error("Acknowledge the confidentiality box above to upload the signed scan.");
       return;
     }
     if (file.type !== "application/pdf") {
@@ -685,7 +686,10 @@ export default function HrDocumentDraft() {
     request.requestType === "renuncia" ||
     request.requestType === "rescision_prueba" ||
     request.requestType === "rescision_desempeno";
-  const canFinalize = canViewSalary || !isSalaryDoc;
+  // Owner/HR can always finalize. Managers can finalize salary docs once they've
+  // acknowledged the confidentiality box (finiquitoUnmasked encodes "allowed to
+  // see real amounts AND has acked if required"). Non-salary docs are open to all.
+  const canFinalize = !isSalaryDoc || canViewSalary || finiquitoUnmasked;
 
   // ── Render ─────────────────────────────────────────────────────────
 
@@ -756,9 +760,9 @@ export default function HrDocumentDraft() {
               ) : (
                 <span
                   className="text-xs text-muted-foreground italic"
-                  title="Finalizing requires the actual finiquito amounts. Only Owner / HR can produce the signed PDF."
+                  title="Finalizing requires the actual finiquito amounts. Acknowledge the confidentiality box above to unlock."
                 >
-                  Finalize is Owner / HR only
+                  Acknowledge confidentiality box to finalize
                 </span>
               )}
             </>
@@ -811,8 +815,10 @@ export default function HrDocumentDraft() {
 
           {!canFinalize && !draft.signedAt && (
             <p className="text-xs text-muted-foreground italic">
-              Uploading the signed scan is Owner / HR only — they verify the
-              real finiquito amounts on the printed document before locking it.
+              Acknowledge the confidentiality box above (Confidencial — datos de
+              finiquito y salario) to unlock finalizing and uploading the signed
+              scan. You verify the real finiquito amounts on the printed
+              document before locking it.
             </p>
           )}
 
@@ -1693,7 +1699,7 @@ export default function HrDocumentDraft() {
                   <div className="space-y-1">
                     <Label htmlFor="rp-contract-date" className="text-xs font-medium">
                       {request.requestType === "rescision_desempeno"
-                        ? "Fin del periodo de prueba (continuación)"
+                        ? "Fin del periodo de capacitación inicial (continuación)"
                         : "Contract signing date"}
                     </Label>
                     <Input
@@ -1709,7 +1715,7 @@ export default function HrDocumentDraft() {
                     />
                     <p className="text-[10px] text-muted-foreground">
                       {request.requestType === "rescision_desempeno"
-                        ? "Fecha en que terminó la prueba de 30 días y continuó el contrato. Por defecto ≈30 días tras el ingreso."
+                        ? "Fecha en que terminó la capacitación inicial y continuó el contrato. Por defecto ≈30 días tras el ingreso."
                         : "Defaults to hire date if blank."}
                     </p>
                   </div>
