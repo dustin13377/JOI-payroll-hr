@@ -13,7 +13,7 @@ import { UserPlus, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
 import {
-  normalizeMxPhone,
+  normalizePhone,
   buildInterviewInviteMessage,
   buildWhatsAppUrl,
 } from "@/lib/recruiting/whatsapp";
@@ -69,7 +69,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
 
   const handleSendInvite = () => {
     if (!candidate) return;
-    const phoneDigits = normalizeMxPhone(candidate.phone);
+    const phoneDigits = normalizePhone(candidate.phone);
     if (!phoneDigits) {
       toast.error("No valid WhatsApp number on file. Add one under Details first.");
       return;
@@ -156,9 +156,9 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   variant="outline"
                   className="w-full"
                   onClick={handleSendInvite}
-                  disabled={sendInvite.isPending || !normalizeMxPhone(candidate.phone)}
+                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone)}
                   title={
-                    normalizeMxPhone(candidate.phone)
+                    normalizePhone(candidate.phone)
                       ? undefined
                       : "No valid WhatsApp number on file"
                   }

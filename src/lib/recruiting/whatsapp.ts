@@ -13,38 +13,64 @@ export const CALENDLY_INTERVIEW_URL =
 export const INTERVIEW_INVITE_TEMPLATE_KEY = "interview_invite_whatsapp";
 
 /**
- * Normalize a Mexican phone number to digits-only with the 52 country code,
- * which is what wa.me expects (no +, spaces, or dashes).
+ * Normalize a phone number to digits-only with a country code, which is what
+ * wa.me expects (no +, spaces, or dashes). Candidates are mostly local (MX) but
+ * some apply with US or other international numbers, so we respect an explicit
+ * country code when one is present and only assume Mexico for a bare local
+ * 10-digit number.
  *
  * Handles the common shapes we see in applications:
- *   - "33 1234 5678"        (10-digit local)        -> 523312345678
- *   - "+52 33 1234 5678"    (with country code)     -> 523312345678
- *   - "+52 1 33 1234 5678"  (old mobile "1" prefix) -> 523312345678
+ *   - "33 1234 5678"        (bare MX local)          -> 523312345678
+ *   - "+52 33 1234 5678"    (MX with code)           -> 523312345678
+ *   - "+52 1 33 1234 5678"  (old MX mobile "1")       -> 523312345678
+ *   - "001 470 908 1189"    (US, 00 intl prefix)      -> 14709081189
+ *   - "+1 470 908 1189"     (US with +)               -> 14709081189
+ *   - "14709081189"         (US with country code)    -> 14709081189
  *
- * Returns null if we can't confidently produce a valid number, so the caller
- * can disable the button rather than open WhatsApp to a broken contact.
+ * Returns null if we can't produce something plausible, so the caller can
+ * disable the button rather than open WhatsApp to a broken contact.
  */
-export function normalizeMxPhone(raw: string | null | undefined): string | null {
+export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  let digits = raw.replace(/\D/g, "");
+  const trimmed = raw.trim();
+  const hadPlus = trimmed.startsWith("+");
+  let digits = trimmed.replace(/\D/g, "");
   if (!digits) return null;
+
+  // "00" international exit prefix (e.g. 001 470… ) — strip it; what remains
+  // already starts with a country code, same as a leading "+".
+  let hadExplicitCode = hadPlus;
+  if (!hadPlus && digits.startsWith("00")) {
+    digits = digits.slice(2);
+    hadExplicitCode = true;
+  }
 
   // Old Mexican mobile format: 52 + 1 + 10 digits -> drop the legacy 1.
   if (digits.length === 13 && digits.startsWith("521")) {
-    digits = "52" + digits.slice(3);
+    return "52" + digits.slice(3);
   }
 
-  // Already has country code: 52 + 10 digits.
+  // MX with country code: 52 + 10 digits.
   if (digits.length === 12 && digits.startsWith("52")) {
     return digits;
   }
 
-  // Bare 10-digit local number -> prepend country code.
-  if (digits.length === 10) {
+  // US/Canada with country code: 1 + 10 digits.
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return digits;
+  }
+
+  // Bare 10-digit local number with no explicit code -> assume Mexico.
+  if (digits.length === 10 && !hadExplicitCode) {
     return "52" + digits;
   }
 
-  // Anything else we can't trust (too short, foreign, malformed).
+  // Otherwise trust it if it already carries a country code (via + or 00) and
+  // is a plausible international length.
+  if (hadExplicitCode && digits.length >= 8 && digits.length <= 15) {
+    return digits;
+  }
+
   return null;
 }
 
