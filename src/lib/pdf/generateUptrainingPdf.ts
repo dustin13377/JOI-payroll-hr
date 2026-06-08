@@ -119,9 +119,12 @@ function drawTable(
   y = ensureSpace(doc, y, headH + rowH);
   doc.setLineWidth(HAIRLINE);
   doc.setDrawColor(0, 0, 0);
-  doc.setFillColor(225, 225, 225);
   let cx = x0;
   for (let c = 0; c < headers.length; c++) {
+    // Re-set the fill before every cell: jsPDF's text() leaves the PDF fill
+    // color set to the last text color (black), so a subsequent filled rect
+    // would come out black. Setting gray here keeps every header cell gray.
+    doc.setFillColor(225, 225, 225);
     doc.rect(cx, y, colWidths[c], headH, "FD");
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(fontSize);
@@ -335,7 +338,7 @@ export function generateUptrainingPdf(seed: UptrainingSeed): Blob {
     { fontSize: 8.5, fontStyle: "italic" },
   );
   y += 0.06;
-  const kpiWidths = [2.2, 1.4, 1.4, 1.5, 0.5];
+  const kpiWidths = [2.2, 1.4, 1.4, 1.4, 0.6];
   // Use campaign KPI minimums when available; otherwise a few blank rows.
   const kpiRows: string[][] =
     seed.kpiRows.length > 0
