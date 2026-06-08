@@ -1,6 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Stage } from "@/lib/recruiting/stages";
+import { INTERVIEW_INVITE_TEMPLATE_KEY } from "@/lib/recruiting/whatsapp";
+
+// Stages from which sending an invite should advance the candidate to
+// "contacted". Anyone already further along the funnel (interview_scheduled,
+// interviewed, …) or in a terminal stage keeps their stage — a re-send must
+// never drag a candidate backwards.
+const ADVANCE_TO_CONTACTED_FROM: ReadonlySet<Stage> = new Set<Stage>([
+  "new",
+  "triaged",
+  "contacted",
+]);
 
 export interface Candidate {
   id: string;
@@ -90,6 +101,66 @@ export function useUpdateCandidate() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
       qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.id] });
+    },
+  });
+}
+
+/**
+ * Records that a WhatsApp interview invite was sent (Path A wa.me link).
+ *
+ * This does the DB side only — logging the message and updating the candidate.
+ * The caller opens the wa.me link itself, synchronously on click, so the
+ * browser doesn't block the popup.
+ *
+ * Effects:
+ *   1. Inserts a recruiting_messages row (channel whatsapp, outbound,
+ *      status 'link_generated' — we generated a link, we can't confirm a send).
+ *   2. Stamps last_contacted_at = now().
+ *   3. Advances stage to 'contacted' only when the candidate isn't already
+ *      further along the funnel (see ADVANCE_TO_CONTACTED_FROM).
+ */
+export function useSendWhatsAppInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidate,
+      messageBody,
+    }: {
+      candidate: Pick<Candidate, "id" | "stage">;
+      messageBody: string;
+    }) => {
+      const { data: auth } = await supabase.auth.getUser();
+      const sentBy = auth?.user?.id ?? null;
+
+      const { error: msgErr } = await supabase.from("recruiting_messages").insert({
+        candidate_id: candidate.id,
+        direction: "outbound",
+        channel: "whatsapp",
+        template_key: INTERVIEW_INVITE_TEMPLATE_KEY,
+        body: messageBody,
+        sent_by: sentBy,
+        status: "link_generated",
+      });
+      if (msgErr) throw msgErr;
+
+      const patch: Partial<Candidate> = {
+        last_contacted_at: new Date().toISOString(),
+      };
+      if (ADVANCE_TO_CONTACTED_FROM.has(candidate.stage)) {
+        patch.stage = "contacted";
+      }
+
+      const { error: updErr } = await supabase
+        .from("recruiting_candidates")
+        .update(patch)
+        .eq("id", candidate.id);
+      if (updErr) throw updErr;
+
+      return { advanced: patch.stage === "contacted" };
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
+      qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.candidate.id] });
     },
   });
 }

@@ -1,6 +1,7 @@
 export const STAGES = [
   "new",
   "triaged",
+  "contacted",
   "interview_scheduled",
   "interviewed",
   "warm_hold",
@@ -23,6 +24,7 @@ export const TERMINAL_STAGES: readonly Stage[] = [
 export const STAGE_LABELS: Record<Stage, string> = {
   new: "New",
   triaged: "Reviewed",
+  contacted: "Contacted",
   interview_scheduled: "Interview Scheduled",
   interviewed: "Interviewed",
   warm_hold: "Warm Hold",
@@ -36,7 +38,8 @@ export const STAGE_LABELS: Record<Stage, string> = {
 // Forward-only graph (excludes terminal-from-anywhere — that's a global rule)
 const FORWARD_EDGES: Record<Stage, Stage[]> = {
   new: ["triaged"],
-  triaged: ["interview_scheduled"],
+  triaged: ["contacted"],
+  contacted: ["interview_scheduled"],
   interview_scheduled: ["interviewed"],
   interviewed: ["warm_hold"],
   warm_hold: ["reactivated"],
