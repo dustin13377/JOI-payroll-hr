@@ -6,12 +6,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { StageSelector } from "./StageSelector";
-import { useCandidate, useUpdateCandidate } from "@/hooks/useRecruiting";
+import { useCandidate, useUpdateCandidate, useSendWhatsAppInvite } from "@/hooks/useRecruiting";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { UserPlus } from "lucide-react";
+import { UserPlus, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
+import {
+  normalizePhone,
+  buildInterviewInviteMessage,
+  buildWhatsAppUrl,
+} from "@/lib/recruiting/whatsapp";
 import { MediaAttachment } from "@/components/MediaAttachment";
 import type { Stage } from "@/lib/recruiting/stages";
 
@@ -23,6 +28,7 @@ interface Props {
 export function CandidateDrawer({ candidateId, onClose }: Props) {
   const { data: candidate, isLoading } = useCandidate(candidateId ?? undefined);
   const updateMutation = useUpdateCandidate();
+  const sendInvite = useSendWhatsAppInvite();
   const navigate = useNavigate();
 
   const [editing, setEditing] = useState(false);
@@ -59,6 +65,32 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     } catch (e) {
       toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
+  };
+
+  const handleSendInvite = () => {
+    if (!candidate) return;
+    const phoneDigits = normalizePhone(candidate.phone);
+    if (!phoneDigits) {
+      toast.error("No valid WhatsApp number on file. Add one under Details first.");
+      return;
+    }
+    const message = buildInterviewInviteMessage(candidate.full_name);
+    // Open WhatsApp synchronously on click so the browser doesn't block the
+    // popup. The DB write happens after — the recruiter still taps send.
+    window.open(
+      buildWhatsAppUrl(phoneDigits, message),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    sendInvite.mutate(
+      { candidate: { id: candidate.id, stage: candidate.stage }, messageBody: message },
+      {
+        onSuccess: (res) =>
+          toast.success(res.advanced ? "Invite sent — moved to Contacted" : "Invite logged"),
+        onError: (e) =>
+          toast.error(`Couldn't log the invite: ${e instanceof Error ? e.message : "unknown"}`),
+      },
+    );
   };
 
   const saveEdits = async () => {
@@ -112,6 +144,34 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   <UserPlus className="mr-2 h-4 w-4" />
                   Hire as employee
                 </Button>
+              )}
+
+              {/*
+                WhatsApp interview invite (Path A: opens WhatsApp with the
+                Calendly link pre-filled; recruiter taps send). Hidden for
+                terminal candidates. Disabled when there's no usable phone.
+              */}
+              {!isTerminal(candidate.stage) && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSendInvite}
+                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone)}
+                  title={
+                    normalizePhone(candidate.phone)
+                      ? undefined
+                      : "No valid WhatsApp number on file"
+                  }
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Send WhatsApp interview invite
+                </Button>
+              )}
+
+              {candidate.last_contacted_at && (
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Last contacted {format(new Date(candidate.last_contacted_at), "PP p")}
+                </p>
               )}
 
               <Separator />
