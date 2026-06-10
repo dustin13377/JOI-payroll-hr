@@ -5,9 +5,13 @@ import { CandidateTable } from "@/components/recruiting/CandidateTable";
 import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
 import { UpcomingInterviews } from "@/components/recruiting/UpcomingInterviews";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STAGES, STAGE_LABELS } from "@/lib/recruiting/stages";
-import { Search } from "lucide-react";
+import { Check, Copy, ExternalLink, Search } from "lucide-react";
+import { toast } from "sonner";
+
+const BOOKING_URL = "https://calendly.com/humanresources-justoutsource/30min";
 
 const STAGE_FILTER_ACTIVE = "active";
 
@@ -17,6 +21,18 @@ export default function Recruiting() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>(STAGE_FILTER_ACTIVE);
+  const [copied, setCopied] = useState(false);
+
+  const copyBookingLink = async () => {
+    try {
+      await navigator.clipboard.writeText(BOOKING_URL);
+      setCopied(true);
+      toast.success("Interview booking link copied");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy — your browser blocked clipboard access");
+    }
+  };
 
   // Deep-link: /recruiting?candidate=<id> opens that candidate's drawer.
   // Hired candidates are normally filtered out (terminal), so we also flip
@@ -57,13 +73,30 @@ export default function Recruiting() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">Recruiting</h2>
-        <p className="text-sm text-muted-foreground">
-          {isLoading
-            ? "Loading…"
-            : `${filtered.length} of ${candidates.length} candidate${candidates.length === 1 ? "" : "s"}`}
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Recruiting</h2>
+          <p className="text-sm text-muted-foreground">
+            {isLoading
+              ? "Loading…"
+              : `${filtered.length} of ${candidates.length} candidate${candidates.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={copyBookingLink}>
+            {copied ? (
+              <Check className="mr-2 h-4 w-4 text-green-600" />
+            ) : (
+              <Copy className="mr-2 h-4 w-4" />
+            )}
+            {copied ? "Copied!" : "Copy interview booking link"}
+          </Button>
+          <Button asChild variant="ghost" size="sm" title="Open the booking page">
+            <a href={BOOKING_URL} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </Button>
+        </div>
       </div>
 
       <UpcomingInterviews />
