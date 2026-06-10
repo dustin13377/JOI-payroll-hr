@@ -202,23 +202,54 @@ Deno.serve(async (req) => {
       return json({ error: "Leadership only" }, 403);
     }
 
-    // --- Fetch the ICS feed ---
-    const icsUrl = Deno.env.get("HR_CALENDAR_ICS_URL") ?? PUBLIC_ICS_URL;
-    const res = await fetch(icsUrl);
+    // --- Fetch the calendar feed ---
+    // HR_CALENDAR_ICS_URL may point at either:
+    //   a) an iCal (.ics) feed, or
+    //   b) the HR account's Apps Script web app, which returns
+    //      { events: [{ summary, location, meetUrl, start, end, allDay }] }
+    //      (workaround for Workspace blocking the secret iCal address)
+    const feedUrl = Deno.env.get("HR_CALENDAR_ICS_URL") ?? PUBLIC_ICS_URL;
+    const res = await fetch(feedUrl);
     if (!res.ok) {
-      console.error("ICS fetch failed", res.status, icsUrl.split("?")[0]);
+      console.error("calendar fetch failed", res.status, feedUrl.split("?")[0]);
       return json(
         {
           error: "calendar_unavailable",
           detail:
-            "Could not fetch the calendar feed. If the calendar is not public, set the HR_CALENDAR_ICS_URL secret to the calendar's secret iCal address.",
+            "Could not fetch the calendar feed. Check the HR_CALENDAR_ICS_URL secret.",
         },
         502,
       );
     }
 
-    const ics = await res.text();
-    const all = parseIcs(ics);
+    const body = await res.text();
+    let all: CalendarEvent[];
+    const trimmed = body.trimStart();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const rawEvents = Array.isArray(parsed) ? parsed : parsed.events;
+        if (!Array.isArray(rawEvents)) throw new Error("no events array");
+        all = rawEvents
+          .filter((e: Record<string, unknown>) => typeof e?.start === "string")
+          .map((e: Record<string, unknown>) => ({
+            summary: typeof e.summary === "string" ? e.summary : "(no title)",
+            location: typeof e.location === "string" ? e.location : null,
+            meetUrl:
+              typeof e.meetUrl === "string" && e.meetUrl.startsWith("http")
+                ? e.meetUrl
+                : null,
+            start: e.start as string,
+            end: typeof e.end === "string" ? e.end : null,
+            allDay: e.allDay === true,
+          }));
+      } catch (parseErr) {
+        console.error("JSON feed parse failed", parseErr);
+        return json({ error: "calendar_unavailable", detail: "Feed returned unreadable JSON." }, 502);
+      }
+    } else {
+      all = parseIcs(body);
+    }
 
     // Window: yesterday → +60 days, sorted ascending
     const now = Date.now();

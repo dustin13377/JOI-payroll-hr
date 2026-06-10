@@ -39,7 +39,7 @@ export function RecruitingAttachmentsCard({ emp }: Props) {
         <MediaAttachment
           label="CV / Resume"
           url={cv}
-          buttonLabel="View CV (PDF)"
+          buttonLabel="View CV"
           hideWhenEmpty
         />
         <MediaAttachment label="Intro recording" url={intro} hideWhenEmpty />

@@ -7,6 +7,8 @@ export interface ParsedApplication {
     | "b2b_setter"
     | "funding_activation"
     | "customer_reactivation"
+    | "ai_automation"
+    | "ai_operations"
     | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   applicant_notes: string | null;
@@ -136,8 +138,12 @@ function mapRoleInterest(
   }
   if (p === "Customer Reactivation Specialist") return "customer_reactivation";
   if (p === "Open") return null; // intentional — goes to raw_email_body
-  // Loose fallback: applicants type the position in free text on both forms.
+  // Dropdown options (added to both forms 2026-06-10) and free-text answers
+  // are matched loosely. Note: the English "Funding Activation," option has a
+  // trailing comma in its value — contains-matching absorbs it.
   const low = p.toLowerCase();
+  if (low.includes("ai automation")) return "ai_automation";
+  if (low.includes("ai operations")) return "ai_operations";
   if (low.includes("funding")) return "funding_activation";
   if (low.includes("b2b")) return "b2b_setter";
   if (low.includes("reactivation")) return "customer_reactivation";

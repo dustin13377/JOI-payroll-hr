@@ -65,18 +65,34 @@ export function MediaAttachment({ label, url, buttonLabel, hideWhenEmpty }: Prop
         <Button asChild size="sm" variant="outline">
           <a href={url} target="_blank" rel="noopener noreferrer">
             <FileText className="mr-2 h-4 w-4" />
-            {buttonLabel ?? "View (PDF)"}
+            {buttonLabel ?? "View"} (PDF)
             <ExternalLink className="ml-2 h-3 w-3" />
           </a>
         </Button>
       )}
       {kind === "doc" && (
-        <Button asChild size="sm" variant="outline">
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            <Download className="mr-2 h-4 w-4" />
-            {buttonLabel ?? "Download (Word doc)"}
-          </a>
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Word docs can't render natively in the browser — route through
+              Microsoft's Office viewer so it opens as a readable page instead
+              of forcing a download. The file URL must be publicly reachable
+              (Gravity Forms upload URLs are). */}
+          <Button asChild size="sm" variant="outline">
+            <a
+              href={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              {buttonLabel ?? "View"} (Word)
+              <ExternalLink className="ml-2 h-3 w-3" />
+            </a>
+          </Button>
+          <Button asChild size="sm" variant="ghost" title="Download original file">
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              <Download className="h-4 w-4" />
+            </a>
+          </Button>
+        </div>
       )}
       {kind === "audio" && (
         <audio controls preload="none" className="w-full">

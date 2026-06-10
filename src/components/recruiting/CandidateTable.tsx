@@ -8,6 +8,8 @@ const ROLE_LABELS: Record<string, string> = {
   b2b_setter: "B2B Setter",
   funding_activation: "Funding",
   customer_reactivation: "Reactivation",
+  ai_automation: "AI Automation",
+  ai_operations: "AI Operations",
 };
 
 interface Props {
