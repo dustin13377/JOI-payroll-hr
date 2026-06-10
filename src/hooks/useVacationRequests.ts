@@ -382,3 +382,36 @@ export function useHRDenyVacationRequest() {
     },
   });
 }
+
+interface HRCancelVars {
+  id: string;
+}
+
+/**
+ * HR cancels a request from /hr/time-off — covers "plans changed" after
+ * approval as well as withdrawing a still-pending request on the
+ * employee's behalf. Audit trail lands in hr_reviewed_by/at.
+ */
+export function useHRCancelVacationRequest() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (vars: HRCancelVars) => {
+      const { error } = await supabase
+        .from("vacation_requests")
+        .update({
+          status: "cancelled",
+          hr_reviewed_by: user?.id ?? null,
+          hr_reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hrPendingVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hrPendingTLVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hrAllVacationRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+    },
+  });
+}

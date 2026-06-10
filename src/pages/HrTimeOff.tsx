@@ -40,6 +40,7 @@ import {
   useHRAllVacationRequests,
   useHRApproveVacationRequest,
   useHRDenyVacationRequest,
+  useHRCancelVacationRequest,
   useOwnerOverrideApproveVacationRequest,
 } from "@/hooks/useVacationRequests";
 
@@ -195,6 +196,8 @@ export default function HrTimeOff() {
   // Vacation deny inline state
   const [vacDenyingId, setVacDenyingId] = useState<string | null>(null);
   const [vacDenyReason, setVacDenyReason] = useState("");
+  // Cancel confirmation state (All Requests table)
+  const [vacCancellingId, setVacCancellingId] = useState<string | null>(null);
 
   const sendNotification = useCallback(async (campaignId: string, daysBefore: 14 | 7) => {
     const key = `${campaignId}|${daysBefore}`;
@@ -223,6 +226,7 @@ export default function HrTimeOff() {
   const { data: vacAll = [], isLoading: loadingVacAll } = useHRAllVacationRequests();
   const vacApproveMutation = useHRApproveVacationRequest();
   const vacDenyMutation = useHRDenyVacationRequest();
+  const vacCancelMutation = useHRCancelVacationRequest();
   const ownerOverrideMutation = useOwnerOverrideApproveVacationRequest();
 
   const today = todayLocal();
@@ -805,6 +809,7 @@ export default function HrTimeOff() {
                       <TableHead className="text-right">Days</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Requested</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -845,6 +850,55 @@ export default function HrTimeOff() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {formatDateMX(req.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {/* Cancellable: anything not already terminal, and not in the past */}
+                          {(req.status === "approved" ||
+                            req.status === "pending_hr" ||
+                            req.status === "pending_tl") &&
+                            req.end_date >= today &&
+                            (vacCancellingId === req.id ? (
+                              <div className="flex gap-1 justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7"
+                                  disabled={vacCancelMutation.isPending}
+                                  onClick={() =>
+                                    vacCancelMutation.mutate(
+                                      { id: req.id },
+                                      {
+                                        onSuccess: () => {
+                                          toast.success("Request cancelled");
+                                          setVacCancellingId(null);
+                                        },
+                                        onError: (err) =>
+                                          toast.error(err instanceof Error ? err.message : "Failed"),
+                                      }
+                                    )
+                                  }
+                                >
+                                  Confirm cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7"
+                                  onClick={() => setVacCancellingId(null)}
+                                >
+                                  Keep
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7"
+                                onClick={() => setVacCancellingId(req.id)}
+                              >
+                                Cancel
+                              </Button>
+                            ))}
                         </TableCell>
                       </TableRow>
                     ))}
