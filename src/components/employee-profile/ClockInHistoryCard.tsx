@@ -5,7 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditPunchDialog } from "@/components/EditPunchDialog";
-import { todayLocal, parseLocalDate } from "@/lib/localDate";
+import { AddDayOffDialog, type ExistingDayOff } from "@/components/AddDayOffDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { todayLocal, parseLocalDate, formatDateUSShort } from "@/lib/localDate";
 
 /**
  * Calendar-style clock-in history on EmpleadoPerfil.
@@ -22,6 +30,9 @@ import { todayLocal, parseLocalDate } from "@/lib/localDate";
  * yet — we don't penalize an in-progress day.
  *
  * Clicking any cell opens EditPunchDialog so TLs can fix punches inline.
+ * For manager+ (canManageDayOff), clicking opens a chooser: edit punches OR
+ * add/remove a day off (paid or unpaid) — and future dates become clickable
+ * so days off can be planned ahead. Approved time off renders sky-blue.
  * Month navigation stops at the agent's hire_date (no point seeing months
  * before they existed).
  */
@@ -57,10 +68,22 @@ interface Props {
   lastWorkedDay: string | null;    // YYYY-MM-DD; null = still active
   shift: Shift | null;             // null = no campaign / no shift configured
   clientId: string | null;         // employee's client (for client_holidays lookup)
+  campaignId: string | null;       // for inserting day-off rows (NOT NULL in DB)
+  canManageDayOff: boolean;        // manager+ — unlocks add/remove day off
 }
 
 // Holiday info we look up for the visible month
 type HolidayInfo = { date: string; name: string; kind: "statutory" | "client" };
+
+// Approved time-off covering a given day (from vacation_requests)
+type TimeOffInfo = ExistingDayOff;
+
+const TIME_OFF_LABELS: Record<TimeOffInfo["request_type"], string> = {
+  vacation: "Vacation",
+  sick: "Sick",
+  personal: "Personal",
+  other: "Other",
+};
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -87,7 +110,8 @@ type DayStatus =
   | { kind: "live"; row: ClockRow }          // today, clocked in, not yet out
   | { kind: "green"; row: ClockRow; holidayWorked?: HolidayInfo }
   | { kind: "yellow"; row: ClockRow; reason: string; holidayWorked?: HolidayInfo }
-  | { kind: "holiday"; info: HolidayInfo };  // client/LFT holiday, no work expected
+  | { kind: "holiday"; info: HolidayInfo }   // client/LFT holiday, no work expected
+  | { kind: "timeoff"; info: TimeOffInfo };  // approved day off (paid or unpaid)
 
 function classifyDay(
   dateStr: string,
@@ -97,13 +121,19 @@ function classifyDay(
   lastWorkedDay: string | null,
   today: string,
   holidays: Map<string, HolidayInfo>,
+  timeOff: Map<string, TimeOffInfo>,
 ): DayStatus {
-  // Future
-  if (dateStr > today) return { kind: "future" };
-
   // Outside employment window
   if (hireDate && dateStr < hireDate) return { kind: "off" };
   if (lastWorkedDay && dateStr > lastWorkedDay) return { kind: "off" };
+
+  // Approved day off with no punch — wins over future/missed/holiday so
+  // planned (future) days off are visible on the calendar too.
+  const dayOff = timeOff.get(dateStr);
+  if (dayOff && !row) return { kind: "timeoff", info: dayOff };
+
+  // Future
+  if (dateStr > today) return { kind: "future" };
 
   const holiday = holidays.get(dateStr);
 
@@ -173,8 +203,9 @@ function statusColor(s: DayStatus): string {
     case "missed": return "bg-red-500 hover:bg-red-600 text-white";
     case "live":   return "bg-blue-200 hover:bg-blue-300 text-blue-950 animate-pulse";
     case "off":    return "bg-muted hover:bg-muted/80 text-muted-foreground";
-    case "future": return "bg-muted/40 text-muted-foreground/40 cursor-default";
+    case "future": return "bg-muted/40 text-muted-foreground/40";
     case "holiday": return "bg-purple-200 hover:bg-purple-300 text-purple-950";
+    case "timeoff": return "bg-sky-300 hover:bg-sky-400 text-sky-950";
   }
 }
 
@@ -187,6 +218,7 @@ function statusLabel(s: DayStatus): string {
     case "off":    return "Off / not scheduled";
     case "future": return "—";
     case "holiday": return `Holiday — ${s.info.name}`;
+    case "timeoff": return `Day off — ${TIME_OFF_LABELS[s.info.request_type]} (${s.info.is_paid ? "paid" : "unpaid"})`;
   }
 }
 
@@ -197,6 +229,8 @@ export function ClockInHistoryCard({
   lastWorkedDay,
   shift,
   clientId,
+  campaignId,
+  canManageDayOff,
 }: Props) {
   // Month being viewed (anchored to first of month, local)
   const [viewMonth, setViewMonth] = useState<Date>(() => {
@@ -207,6 +241,9 @@ export function ClockInHistoryCard({
   });
 
   const [editTarget, setEditTarget] = useState<{ date: string; row?: ClockRow } | null>(null);
+  // Manager+ day-off flow: chooser (edit punches vs day off) + the day-off dialog itself
+  const [chooser, setChooser] = useState<{ date: string; row?: ClockRow; timeOff?: TimeOffInfo } | null>(null);
+  const [dayOffTarget, setDayOffTarget] = useState<{ date: string; timeOff?: TimeOffInfo } | null>(null);
 
   const year = viewMonth.getFullYear();
   const month = viewMonth.getMonth(); // 0-11
@@ -286,6 +323,36 @@ export function ClockInHistoryCard({
     enabled: true, // always run; statutory holidays apply even with no clientId
   });
 
+  // Approved time off in the visible month — drives the sky-blue cells.
+  // Range overlap: request starts before month-end AND ends after month-start.
+  const { data: timeOffByDate = new Map<string, TimeOffInfo>() } = useQuery({
+    queryKey: ["clock-in-history-timeoff", employeeUuid, monthStart, monthEnd],
+    queryFn: async (): Promise<Map<string, TimeOffInfo>> => {
+      const m = new Map<string, TimeOffInfo>();
+      const { data, error } = await supabase
+        .from("vacation_requests")
+        .select("id, start_date, end_date, request_type, is_paid")
+        .eq("employee_id", employeeUuid)
+        .eq("status", "approved")
+        .lte("start_date", monthEnd)
+        .gte("end_date", monthStart);
+      if (error) throw error;
+      for (const r of (data || []) as TimeOffInfo[]) {
+        // Expand the request's date range, clamped to the visible month
+        const from = r.start_date > monthStart ? r.start_date : monthStart;
+        const to = r.end_date < monthEnd ? r.end_date : monthEnd;
+        const cursor = parseLocalDate(from);
+        const stop = parseLocalDate(to);
+        while (cursor.getTime() <= stop.getTime()) {
+          m.set(todayLocal(cursor), r);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+      return m;
+    },
+    enabled: !!employeeUuid,
+  });
+
   const today = todayLocal();
   const rowByDate = useMemo(() => {
     const m = new Map<string, ClockRow>();
@@ -325,23 +392,40 @@ export function ClockInHistoryCard({
   const nextDisabled = new Date(year, month + 1, 1).getTime() > nowMonthStart;
 
   function handleCellClick(dateStr: string, row: ClockRow | undefined) {
-    if (dateStr > today) return; // future = no-op
-    setEditTarget({ date: dateStr, row });
+    const timeOff = timeOffByDate.get(dateStr);
+
+    if (!canManageDayOff) {
+      // TLs: punch editing only, past/today only (original behavior)
+      if (dateStr > today) return;
+      setEditTarget({ date: dateStr, row });
+      return;
+    }
+
+    if (dateStr > today) {
+      // Future: nothing to punch-edit — go straight to add/remove day off
+      setDayOffTarget({ date: dateStr, timeOff });
+      return;
+    }
+
+    // Past/today: let the manager pick between punches and day off
+    setChooser({ date: dateStr, row, timeOff });
   }
 
   // Monthly summary counters
   const summary = useMemo(() => {
-    let green = 0, yellow = 0, missed = 0, holiday = 0;
+    let green = 0, yellow = 0, missed = 0, holiday = 0, timeoff = 0;
     for (const cell of cells) {
-      if (!cell.date || cell.date > today) continue;
-      const s = classifyDay(cell.date, rowByDate.get(cell.date), shift, hireDate, lastWorkedDay, today, holidays);
+      if (!cell.date) continue;
+      const s = classifyDay(cell.date, rowByDate.get(cell.date), shift, hireDate, lastWorkedDay, today, holidays, timeOffByDate);
+      if (s.kind === "timeoff") { timeoff++; continue; }
+      if (cell.date > today) continue;
       if (s.kind === "green")  green++;
       else if (s.kind === "yellow") yellow++;
       else if (s.kind === "missed") missed++;
       else if (s.kind === "holiday") holiday++;
     }
-    return { green, yellow, missed, holiday };
-  }, [cells, rowByDate, shift, hireDate, lastWorkedDay, today, holidays]);
+    return { green, yellow, missed, holiday, timeoff };
+  }, [cells, rowByDate, shift, hireDate, lastWorkedDay, today, holidays, timeOffByDate]);
 
   return (
     <Card>
@@ -377,6 +461,7 @@ export function ClockInHistoryCard({
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-amber-400" /> Clock in/out ({summary.yellow})</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-red-500" /> Missed ({summary.missed})</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-purple-200" /> Holiday ({summary.holiday})</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-sky-300" /> Day off ({summary.timeoff})</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-muted" /> Off-schedule</span>
         </div>
       </CardHeader>
@@ -397,11 +482,12 @@ export function ClockInHistoryCard({
               return <div key={`pad-${i}`} className="aspect-square" />;
             }
             const row = rowByDate.get(cell.date);
-            const status = classifyDay(cell.date, row, shift, hireDate, lastWorkedDay, today, holidays);
+            const status = classifyDay(cell.date, row, shift, hireDate, lastWorkedDay, today, holidays, timeOffByDate);
             const day = Number(cell.date.slice(-2));
             const isToday = cell.date === today;
             const wasEdited = editedDates.has(cell.date);
-            const isClickable = status.kind !== "future";
+            // Manager+ can click future days to plan a day off
+            const isClickable = canManageDayOff || status.kind !== "future";
             return (
               <button
                 key={cell.date}
@@ -433,6 +519,52 @@ export function ClockInHistoryCard({
           <p className="text-xs text-muted-foreground mt-3">Loading…</p>
         )}
       </CardContent>
+
+      {/* Manager+ chooser: edit punches vs add/remove day off */}
+      {chooser && (
+        <Dialog open={!!chooser} onOpenChange={(open) => { if (!open) setChooser(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{formatDateUSShort(chooser.date)}</DialogTitle>
+              <DialogDescription>
+                What do you want to do for {employeeName} on this day?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditTarget({ date: chooser.date, row: chooser.row });
+                  setChooser(null);
+                }}
+              >
+                Edit punches
+              </Button>
+              <Button
+                variant={chooser.timeOff ? "destructive" : "default"}
+                onClick={() => {
+                  setDayOffTarget({ date: chooser.date, timeOff: chooser.timeOff });
+                  setChooser(null);
+                }}
+              >
+                {chooser.timeOff ? "Remove day off" : "Add day off"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {dayOffTarget && (
+        <AddDayOffDialog
+          open={!!dayOffTarget}
+          onOpenChange={(open) => { if (!open) setDayOffTarget(null); }}
+          employeeUuid={employeeUuid}
+          employeeName={employeeName}
+          campaignId={campaignId}
+          date={dayOffTarget.date}
+          existing={dayOffTarget.timeOff}
+        />
+      )}
 
       {editTarget && (
         <EditPunchDialog

@@ -968,6 +968,8 @@ export default function EmpleadoPerfil() {
           hireDate={emp._hireDate ?? null}
           lastWorkedDay={emp._lastWorkedDay ?? null}
           clientId={currentCampaign?.client_id ?? null}
+          campaignId={currentCampaign?.id ?? null}
+          canManageDayOff={isLeadership}
           shift={campaignShifts[0] ? {
             start_time: campaignShifts[0].start_time,
             end_time: campaignShifts[0].end_time,

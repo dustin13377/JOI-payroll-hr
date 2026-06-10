@@ -20,7 +20,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { todayLocal } from "@/lib/localDate";
+import { todayLocal, formatDateUSShort } from "@/lib/localDate";
 import { formatMinutesVerbose } from "@/lib/formatDuration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -338,7 +338,7 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  {now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  {formatDateUSShort(now)}
                 </p>
                 {pastGracePeriod && (
                   <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
