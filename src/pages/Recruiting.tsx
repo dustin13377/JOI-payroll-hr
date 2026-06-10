@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useCandidates } from "@/hooks/useRecruiting";
 import { CandidateTable } from "@/components/recruiting/CandidateTable";
 import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
+import { UpcomingInterviews } from "@/components/recruiting/UpcomingInterviews";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STAGES, STAGE_LABELS } from "@/lib/recruiting/stages";
@@ -64,6 +65,8 @@ export default function Recruiting() {
             : `${filtered.length} of ${candidates.length} candidate${candidates.length === 1 ? "" : "s"}`}
         </p>
       </div>
+
+      <UpcomingInterviews />
 
       <div className="flex gap-2">
         <div className="relative flex-1 max-w-sm">
