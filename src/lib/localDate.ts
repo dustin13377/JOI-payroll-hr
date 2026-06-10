@@ -24,30 +24,22 @@ export function parseLocalDate(dateStr: string): Date {
 }
 
 /**
- * Format a date as DD/MM/YY (Mexican standard, 2-digit year).
- * Accepts ISO strings, Date objects, or null/undefined (returns "").
+ * App-wide standard date format: MM/DD/YYYY (US style), per D's decision
+ * 2026-06-10. All numeric on-screen dates go through here.
+ *
+ * NOTE: the "MX" names are legacy — they used to emit DD/MM/YY(YY). They now
+ * delegate to `formatDateUSShort` so every existing call site flips to US
+ * format without touching 25 files. New code should call `formatDateUSShort`
+ * directly. (Spanish legal documents are unaffected — those use
+ * `formatDateSpanishFull` / `formatDateSpanishMedium` below.)
  */
 export function formatDateMX(d: string | Date | null | undefined): string {
-  if (d == null) return "";
-  const date = typeof d === "string" ? parseLocalDate(d.slice(0, 10)) : d;
-  if (isNaN(date.getTime())) return "";
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yy = String(date.getFullYear()).slice(-2);
-  return `${dd}/${mm}/${yy}`;
+  return formatDateUSShort(d);
 }
 
-/**
- * Format a date as DD/MM/YYYY (4-digit year) for forms/reports.
- */
+/** @deprecated legacy name — same MM/DD/YYYY output as formatDateUSShort. */
 export function formatDateMXLong(d: string | Date | null | undefined): string {
-  if (d == null) return "";
-  const date = typeof d === "string" ? parseLocalDate(d.slice(0, 10)) : d;
-  if (isNaN(date.getTime())) return "";
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = String(date.getFullYear());
-  return `${dd}/${mm}/${yyyy}`;
+  return formatDateUSShort(d);
 }
 
 const MONTHS_EN = [

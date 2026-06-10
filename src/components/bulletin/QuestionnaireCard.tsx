@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ClipboardList, CheckCircle2, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { formatDateUSShort } from "@/lib/localDate";
 import {
   BulletinPost,
   BulletinQuestion,
@@ -238,7 +239,7 @@ export function QuestionnaireCard({
               {timeAgo(post.published_at)}
               {post.author_name && <> · {post.author_name}</>}
               {post.expires_at && (
-                <> · closes {new Date(post.expires_at).toLocaleDateString()}</>
+                <> · closes {formatDateUSShort(post.expires_at)}</>
               )}
             </p>
           </div>

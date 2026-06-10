@@ -251,7 +251,7 @@ function ExpandedRow({
             <p className="text-xs text-muted-foreground">
               Auto-derived from time_clock on{" "}
               {ad.derived_at
-                ? new Date(String(ad.derived_at)).toLocaleString("es-MX")
+                ? new Date(String(ad.derived_at)).toLocaleString("en-US")
                 : "unknown date"}
               .
             </p>

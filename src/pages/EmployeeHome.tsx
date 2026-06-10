@@ -49,7 +49,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ShieldX, ShieldAlert } from "lucide-react";
 import { ACCEPTED_DOCUMENT_TYPES, ACCEPTED_DOCUMENT_EXTENSIONS, MAX_DOCUMENT_SIZE_BYTES } from "@/lib/documentUpload";
 import { useAgentLogEntries } from "@/hooks/useAgentLog";
-import { formatDateMX, formatDateMXLong } from "@/lib/localDate";
+import { formatDateMX, formatDateMXLong, formatDateUSShort } from "@/lib/localDate";
 import { useAgentIncidents, getIncidentDocSignedUrl, INCIDENT_TYPE_LABELS, type IncidentType } from "@/hooks/useAttendanceIncidents";
 import { useMyApplicablePolicies, useMyPolicyAcks } from "@/hooks/usePolicies";
 import { FileWarning, StickyNote, Eye, ScrollText } from "lucide-react";
@@ -641,7 +641,7 @@ export default function EmployeeHome() {
                   {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  {now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  {formatDateUSShort(now)}
                 </p>
                 {pastGracePeriod && (
                   <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
