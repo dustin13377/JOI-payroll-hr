@@ -39,6 +39,8 @@ export interface AgentReviewWithJoins extends AgentReview {
     full_name: string;
     work_name: string | null;
     hire_date: string | null;
+    /** Present only on queries using REVIEW_SELECT_ACTIVE. */
+    is_active?: boolean;
   } | null;
   campaign: {
     id: string;
@@ -75,6 +77,20 @@ const REVIEW_SELECT = `
   hr_reviewer:hr_decided_by ( full_name )
 `;
 
+/**
+ * Same shape but with an INNER join on employees so we can filter the /reviews
+ * list to active employees only. Agents terminated/resigned before finishing
+ * probation keep their review rows (history on their profile) but disappear
+ * from the review queue and the sidebar badge.
+ */
+const REVIEW_SELECT_ACTIVE = `
+  *,
+  employee:employee_id!inner ( id, full_name, work_name, hire_date, is_active ),
+  campaign:campaign_id ( id, name ),
+  reviewer:reviewed_by ( full_name ),
+  hr_reviewer:hr_decided_by ( full_name )
+`;
+
 const QUERY_KEYS = {
   list: ["agent-reviews", "list"] as const,
   forEmployee: (employeeId: string) => ["agent-reviews", "employee", employeeId] as const,
@@ -99,7 +115,8 @@ export function useAgentReviews(opts: { onlyOpen?: boolean } = {}) {
     queryFn: async () => {
       let q = supabase
         .from("agent_reviews")
-        .select(REVIEW_SELECT)
+        .select(REVIEW_SELECT_ACTIVE)
+        .eq("employee.is_active", true)
         .order("due_date", { ascending: true });
       if (onlyOpen) q = q.is("completed_at", null);
       const { data, error } = await q;
@@ -156,7 +173,9 @@ export function usePendingAgentReviewsCount(enabled: boolean) {
       const [actionable, pendingHr] = await Promise.all([
         supabase
           .from("agent_reviews")
-          .select("*", { count: "exact", head: true })
+          // INNER join so terminated agents' open reviews don't inflate the badge
+          .select("*, employee:employee_id!inner ( is_active )", { count: "exact", head: true })
+          .eq("employee.is_active", true)
           .is("completed_at", null)
           .lte("due_date", today),
         supabase

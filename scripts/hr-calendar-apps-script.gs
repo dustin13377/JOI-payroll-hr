@@ -26,6 +26,10 @@
 // Replace with your own random string (e.g. mash the keyboard, 30+ chars).
 const TOKEN = "CHANGE-ME-to-a-long-random-string";
 
+// Read the HR calendar explicitly (NOT "primary") so this works even if the
+// script was deployed from a different account that has access to it.
+const CALENDAR_ID = "humanresources@justoutsource.it";
+
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.token !== TOKEN) {
     return ContentService.createTextOutput("unauthorized");
@@ -35,7 +39,7 @@ function doGet(e) {
   const timeMin = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // yesterday
   const timeMax = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // +60 days
 
-  const resp = Calendar.Events.list("primary", {
+  const resp = Calendar.Events.list(CALENDAR_ID, {
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
     singleEvents: true, // expands recurring events into instances

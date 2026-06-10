@@ -247,8 +247,25 @@ Deno.serve(async (req) => {
         console.error("JSON feed parse failed", parseErr);
         return json({ error: "calendar_unavailable", detail: "Feed returned unreadable JSON." }, 502);
       }
-    } else {
+    } else if (/BEGIN:VCALENDAR/i.test(body)) {
       all = parseIcs(body);
+    } else {
+      // Neither JSON nor ICS — most likely the Apps Script replied
+      // "unauthorized" because the token in HR_CALENDAR_ICS_URL doesn't
+      // match the TOKEN in the script. Surface it instead of showing an
+      // empty calendar.
+      console.error(
+        "calendar feed unrecognized, first 80 chars:",
+        body.slice(0, 80),
+      );
+      return json(
+        {
+          error: "calendar_unavailable",
+          detail:
+            "Feed returned neither JSON nor ICS — check that the token in HR_CALENDAR_ICS_URL matches the script's TOKEN.",
+        },
+        502,
+      );
     }
 
     // Window: yesterday → +60 days, sorted ascending
