@@ -222,7 +222,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
 
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Attachments</h3>
-                <MediaAttachment label="CV / Resume" url={candidate.cv_url} buttonLabel="View CV (PDF)" />
+                <MediaAttachment label="CV / Resume" url={candidate.cv_url} buttonLabel="View CV" />
                 <MediaAttachment label="Intro recording" url={candidate.presentation_url} />
               </div>
 

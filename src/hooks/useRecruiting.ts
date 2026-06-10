@@ -23,7 +23,7 @@ export interface Candidate {
   email: string | null;
   phone: string | null;
   city: string | null;
-  role_interest: "b2b_setter" | "funding_activation" | "customer_reactivation" | null;
+  role_interest: "b2b_setter" | "funding_activation" | "customer_reactivation" | "ai_automation" | "ai_operations" | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   referral_source: string | null;
   applicant_notes: string | null;

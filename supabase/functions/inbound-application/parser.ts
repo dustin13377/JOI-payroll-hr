@@ -1,11 +1,14 @@
 export interface ParsedApplication {
   full_name: string | null;
   curp: string | null;
+  email: string | null;
   phone: string | null; // E.164, e.g. "+526674241679"
   role_interest:
     | "b2b_setter"
     | "funding_activation"
     | "customer_reactivation"
+    | "ai_automation"
+    | "ai_operations"
     | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   applicant_notes: string | null;
@@ -87,22 +90,36 @@ function buildFieldMap(html: string): Map<string, string> {
   return map;
 }
 
-/** Get plain-text value for a label from the field map. */
-function getValue(map: Map<string, string>, label: string): string | null {
-  const raw = map.get(label.toUpperCase());
-  if (raw == null) return null;
-  const text = stripTags(raw).trim();
-  return text || null;
+/**
+ * Get plain-text value for a label from the field map.
+ * Accepts multiple label aliases (English + Spanish forms) — first hit wins.
+ */
+function getValue(
+  map: Map<string, string>,
+  ...labels: string[]
+): string | null {
+  for (const label of labels) {
+    const raw = map.get(label.toUpperCase());
+    if (raw == null) continue;
+    const text = stripTags(raw).trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 /**
  * Get the href URL for a label whose value is an <a> link.
  * Decodes &amp; entities so the stored URL is valid.
+ * Accepts multiple label aliases (English + Spanish forms) — first hit wins.
  */
-function getHref(map: Map<string, string>, label: string): string | null {
-  const raw = map.get(label.toUpperCase());
-  if (raw == null) return null;
-  return extractHref(raw);
+function getHref(map: Map<string, string>, ...labels: string[]): string | null {
+  for (const label of labels) {
+    const raw = map.get(label.toUpperCase());
+    if (raw == null) continue;
+    const href = extractHref(raw);
+    if (href) return href;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +138,15 @@ function mapRoleInterest(
   }
   if (p === "Customer Reactivation Specialist") return "customer_reactivation";
   if (p === "Open") return null; // intentional — goes to raw_email_body
+  // Dropdown options (added to both forms 2026-06-10) and free-text answers
+  // are matched loosely. Note: the English "Funding Activation," option has a
+  // trailing comma in its value — contains-matching absorbs it.
+  const low = p.toLowerCase();
+  if (low.includes("ai automation")) return "ai_automation";
+  if (low.includes("ai operations")) return "ai_operations";
+  if (low.includes("funding")) return "funding_activation";
+  if (low.includes("b2b")) return "b2b_setter";
+  if (low.includes("reactivation")) return "customer_reactivation";
   warnings.push(`Unrecognized position value: "${p}"`);
   return null;
 }
@@ -182,17 +208,25 @@ function buildNotes(map: Map<string, string>): string | null {
   // (cv_url, presentation_url), not stuffed into the notes blob.
   const lines: string[] = [];
 
-  const add = (label: string, key: string) => {
-    const v = getValue(map, key);
+  const add = (label: string, ...keys: string[]) => {
+    const v = getValue(map, ...keys);
     if (v) lines.push(`${label}: ${v}`);
   };
 
-  add("Last company", "LAST COMPANY YOU WORKED FOR");
-  add("Length of employment", "LENGTH OF EMPLOYMENT");
-  add("Reason for leaving", "REASON FOR LEAVING");
-  add("Commute time", "COMMUTE TIME");
-  add("Salary expectation", "SALARY EXPECTATION");
-  add("Available start date", "AVAILABLE START DATE");
+  add(
+    "Last company",
+    "LAST COMPANY YOU WORKED FOR",
+    "ÚLTIMA COMPAÑÍA PARA LA QUE TRABAJÓ",
+  );
+  add("Length of employment", "LENGTH OF EMPLOYMENT", "TIEMPO DE ANTIGÜEDAD");
+  add("Reason for leaving", "REASON FOR LEAVING", "MOTIVO DE BAJA");
+  add("Commute time", "COMMUTE TIME", "TIEMPO DE TRASLADO");
+  add("Salary expectation", "SALARY EXPECTATION", "EXPECTATIVA SALARIAL");
+  add(
+    "Available start date",
+    "AVAILABLE START DATE",
+    "DISPONIBILIDAD PARA COMENZAR",
+  );
 
   return lines.length > 0 ? lines.join("\n") : null;
 }
@@ -207,8 +241,10 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
   const map = buildFieldMap(htmlBody);
 
   // --- Basic fields ---
-  const firstName = getValue(map, "FIRST NAME");
-  const lastName = getValue(map, "LAST NAME");
+  // English form: FIRST NAME / LAST NAME.
+  // Spanish form: NOMBRE COMPLETO / APELLIDOS.
+  const firstName = getValue(map, "FIRST NAME", "NOMBRE COMPLETO");
+  const lastName = getValue(map, "LAST NAME", "APELLIDOS");
   const full_name =
     firstName && lastName
       ? `${firstName} ${lastName}`.trim()
@@ -216,18 +252,37 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
 
   const curp = getValue(map, "CURP");
 
-  const rawPhone = getValue(map, "WHATSAPP NUMBER");
+  // Both forms render the applicant email as an "Email" field whose value is
+  // a mailto: link. Prefer the visible text; fall back to the mailto href.
+  let email = getValue(map, "EMAIL", "CORREO ELECTRÓNICO");
+  if (!email) {
+    const mailto = getHref(map, "EMAIL", "CORREO ELECTRÓNICO");
+    if (mailto?.toLowerCase().startsWith("mailto:")) {
+      email = mailto.slice("mailto:".length).trim() || null;
+    }
+  }
+  // Basic sanity check so junk never lands in the email column.
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    warnings.push(`Discarded invalid email value: "${email}"`);
+    email = null;
+  }
+
+  const rawPhone = getValue(map, "WHATSAPP NUMBER", "NÚMERO WHATSAPP");
   const phone = normalizePhone(rawPhone, warnings);
 
-  const position = getValue(map, "POSITION YOU ARE APPLYING FOR");
+  const position = getValue(
+    map,
+    "POSITION YOU ARE APPLYING FOR",
+    "VACANTE A LA QUE DESEA POSTULARSE",
+  );
   const role_interest = mapRoleInterest(position, warnings);
 
-  const englishRaw = getValue(map, "ENGLISH LEVEL");
+  const englishRaw = getValue(map, "ENGLISH LEVEL", "NIVEL DE INGLÉS");
   const english_level_self = mapEnglishLevel(englishRaw);
 
   // --- Link fields ---
   const cv_url = getHref(map, "CURRICULUM VITAE");
-  const presentation_url = getHref(map, "PRESENTATION");
+  const presentation_url = getHref(map, "PRESENTATION", "PRESENTACIÓN");
 
   // --- Notes ---
   const applicant_notes = buildNotes(map);
@@ -240,6 +295,7 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
   return {
     full_name,
     curp,
+    email,
     phone,
     role_interest,
     english_level_self,
