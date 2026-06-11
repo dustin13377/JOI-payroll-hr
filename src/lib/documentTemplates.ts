@@ -343,7 +343,7 @@ export const UPTRAINING_KPI_HEADERS: string[] = [
   "Mínimo requerido",
   "Promedio del agente",
   "Meta post-uptraining",
-  "✔",
+  "Cumple",
 ];
 
 export const UPTRAINING_FIRMAS_INTRO =

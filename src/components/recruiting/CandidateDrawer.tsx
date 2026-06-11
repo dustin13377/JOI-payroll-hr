@@ -18,6 +18,7 @@ import {
   buildWhatsAppUrl,
 } from "@/lib/recruiting/whatsapp";
 import { MediaAttachment } from "@/components/MediaAttachment";
+import { PositionFitPicker } from "./PositionFitPicker";
 import type { Stage } from "@/lib/recruiting/stages";
 
 interface Props {
@@ -39,6 +40,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     city: "",
     applicant_notes: "",
   });
+  const [recruiterNotes, setRecruiterNotes] = useState("");
 
   useEffect(() => {
     if (candidate) {
@@ -49,9 +51,38 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
         city: candidate.city ?? "",
         applicant_notes: candidate.applicant_notes ?? "",
       });
+      setRecruiterNotes(candidate.recruiter_notes ?? "");
       setEditing(false);
     }
   }, [candidate]);
+
+  const recruiterNotesDirty =
+    !!candidate && recruiterNotes !== (candidate.recruiter_notes ?? "");
+
+  const saveRecruiterNotes = async () => {
+    if (!candidate) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: candidate.id,
+        patch: { recruiter_notes: recruiterNotes.trim() || null },
+      });
+      toast.success("Notes saved");
+    } catch (e) {
+      toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  };
+
+  const handlePositionsChange = async (next: string[]) => {
+    if (!candidate) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: candidate.id,
+        patch: { position_fits: next },
+      });
+    } catch (e) {
+      toast.error(`Update failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  };
 
   const handleStageChange = async (next: Stage) => {
     if (!candidate) return;
@@ -176,6 +207,38 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
 
               <Separator />
 
+              {/* Position fit tags — which roles this person is good for,
+                  regardless of what they applied to. Saves on toggle. */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Position fit</h3>
+                <PositionFitPicker
+                  value={candidate.position_fits ?? []}
+                  onChange={handlePositionsChange}
+                  disabled={updateMutation.isPending}
+                />
+              </div>
+
+              {/* Internal recruiter notes — separate from applicant_notes,
+                  which holds what the candidate wrote on the form. */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">Recruiter notes</h3>
+                  {recruiterNotesDirty && (
+                    <Button size="sm" onClick={saveRecruiterNotes} disabled={updateMutation.isPending}>
+                      Save
+                    </Button>
+                  )}
+                </div>
+                <Textarea
+                  value={recruiterNotes}
+                  onChange={(e) => setRecruiterNotes(e.target.value)}
+                  placeholder="e.g. Great customer service profile, not a sales fit"
+                  rows={3}
+                />
+              </div>
+
+              <Separator />
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-medium">Details</h3>
@@ -205,7 +268,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 ))}
 
                 <div>
-                  <Label className="text-sm">Applicant notes</Label>
+                  <Label className="text-sm">Applicant notes (from application form)</Label>
                   {editing ? (
                     <Textarea
                       value={form.applicant_notes}

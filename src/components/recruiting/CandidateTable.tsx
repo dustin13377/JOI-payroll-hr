@@ -1,4 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { StageBadge } from "./StageBadge";
 import { format } from "date-fns";
 import type { Candidate } from "@/hooks/useRecruiting";
@@ -33,6 +34,7 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
           <TableHead>Name</TableHead>
           <TableHead>Email</TableHead>
           <TableHead>Role</TableHead>
+          <TableHead>Position fit</TableHead>
           <TableHead>English</TableHead>
           <TableHead>City</TableHead>
           <TableHead>Applied</TableHead>
@@ -50,6 +52,19 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
             <TableCell className="font-medium">{c.full_name ?? "—"}</TableCell>
             <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
             <TableCell>{c.role_interest ? ROLE_LABELS[c.role_interest] : "—"}</TableCell>
+            <TableCell>
+              {c.position_fits?.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {c.position_fits.map((p) => (
+                    <Badge key={p} variant="secondary" className="text-xs">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                "—"
+              )}
+            </TableCell>
             <TableCell>{c.english_level_self}</TableCell>
             <TableCell>{c.city ?? "—"}</TableCell>
             <TableCell className="text-muted-foreground text-sm">

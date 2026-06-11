@@ -27,6 +27,8 @@ export interface Candidate {
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   referral_source: string | null;
   applicant_notes: string | null;
+  recruiter_notes: string | null;
+  position_fits: string[];
   cv_url: string | null;
   presentation_url: string | null;
   raw_email_body: string | null;
@@ -102,6 +104,53 @@ export function useUpdateCandidate() {
       qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
       qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.id] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Position options (editable dropdown — recruiters add new ones as they go)
+// ---------------------------------------------------------------------------
+
+export interface RecruitingPosition {
+  id: string;
+  name: string;
+}
+
+const POSITIONS_KEY = ["recruiting", "positions"] as const;
+
+export function usePositions() {
+  return useQuery({
+    queryKey: POSITIONS_KEY,
+    queryFn: async (): Promise<RecruitingPosition[]> => {
+      const { data, error } = await supabase
+        .from("recruiting_positions")
+        .select("id, name")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as RecruitingPosition[];
+    },
+  });
+}
+
+export function useAddPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Position name is empty");
+      const { data, error } = await supabase
+        .from("recruiting_positions")
+        .insert({ name: trimmed })
+        .select("id, name")
+        .single();
+      if (error) {
+        // Unique violation = someone already added it; treat as success.
+        if (error.code === "23505") return { id: "", name: trimmed };
+        throw error;
+      }
+      return data as RecruitingPosition;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: POSITIONS_KEY }),
   });
 }
 
