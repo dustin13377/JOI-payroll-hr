@@ -3,7 +3,31 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, ChevronDown, ChevronUp, Video } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  useCandidates,
+  useInterviewOutcomes,
+  useMarkInterviewOutcome,
+  type Candidate,
+  type InterviewOutcome,
+} from "@/hooks/useRecruiting";
+import { toast } from "sonner";
+import { Calendar, Check, ChevronDown, ChevronUp, Video, X } from "lucide-react";
 
 const EMBED_URL =
   "https://calendar.google.com/calendar/embed?src=humanresources%40justoutsource.it&ctz=America%2FMexico_City&mode=WEEK";
@@ -49,8 +73,48 @@ function isToday(e: CalendarEvent): boolean {
   return todayStr === eventStr;
 }
 
+/** Stable identifier for a calendar slot — also the upsert key in the DB. */
+function eventKey(e: CalendarEvent): string {
+  return `${e.start}|${e.summary}`;
+}
+
+/** Has the event's start time already passed? (all-day events excluded) */
+function hasStarted(e: CalendarEvent): boolean {
+  return !e.allDay && new Date(e.start).getTime() <= Date.now();
+}
+
+/** Calendly/Google titles look like "Jane Doe and Human Resources JOI". */
+function extractEventName(summary: string): string | null {
+  const m = summary.match(/^(.*?)\s+and\s+Human Resources/i);
+  return (m ? m[1] : summary).trim() || null;
+}
+
+/**
+ * Match the calendar name to candidates: every word of the event name must
+ * appear in the candidate's full_name (case-insensitive). An exact full-name
+ * match wins outright.
+ */
+function matchCandidates(name: string, candidates: Candidate[]): Candidate[] {
+  const lower = name.toLowerCase();
+  const exact = candidates.filter((c) => (c.full_name ?? "").toLowerCase() === lower);
+  if (exact.length === 1) return exact;
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  return candidates.filter((c) => {
+    const full = (c.full_name ?? "").toLowerCase();
+    return words.every((w) => full.includes(w));
+  });
+}
+
+interface PendingMark {
+  event: CalendarEvent;
+  outcome: InterviewOutcome;
+}
+
 export function UpcomingInterviews() {
   const [showCalendar, setShowCalendar] = useState(false);
+  // Set when a click couldn't be auto-matched to one candidate — opens picker.
+  const [pending, setPending] = useState<PendingMark | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["hr-calendar"],
@@ -63,6 +127,40 @@ export function UpcomingInterviews() {
     staleTime: 5 * 60 * 1000, // refetch at most every 5 minutes
     retry: 1,
   });
+
+  const { data: candidates = [] } = useCandidates();
+  const { data: outcomes = [] } = useInterviewOutcomes();
+  const markOutcome = useMarkInterviewOutcome();
+
+  const outcomeByKey = new Map(outcomes.map((o) => [o.event_key, o.outcome]));
+
+  const save = (event: CalendarEvent, candidateId: string, outcome: InterviewOutcome) => {
+    markOutcome.mutate(
+      {
+        candidateId,
+        eventKey: eventKey(event),
+        scheduledAt: event.start,
+        outcome,
+      },
+      {
+        onSuccess: () =>
+          toast.success(outcome === "completed" ? "Marked completed" : "Marked no-show"),
+        onError: (e) =>
+          toast.error(`Couldn't save: ${e instanceof Error ? e.message : "unknown"}`),
+      },
+    );
+  };
+
+  const handleMark = (event: CalendarEvent, outcome: InterviewOutcome) => {
+    const name = extractEventName(event.summary);
+    const matches = name ? matchCandidates(name, candidates) : [];
+    if (matches.length === 1) {
+      save(event, matches[0].id, outcome);
+    } else {
+      // 0 or several matches — let the user pick.
+      setPending({ event, outcome });
+    }
+  };
 
   const events = (data ?? []).slice(0, 10);
 
@@ -102,34 +200,78 @@ export function UpcomingInterviews() {
         )}
         {events.length > 0 && (
           <ul className="divide-y">
-            {events.map((e, i) => (
-              <li key={i} className="py-1.5 flex items-baseline gap-3 text-sm">
-                <span
-                  className={
-                    "w-24 shrink-0 tabular-nums " +
-                    (isToday(e)
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground")
-                  }
-                >
-                  {isToday(e) ? "Today" : fmtDay(e)}
-                </span>
-                <span className="w-36 shrink-0 tabular-nums text-muted-foreground">
-                  {fmtTime(e)}
-                </span>
-                <span className="truncate flex-1">{e.summary}</span>
-                {e.meetUrl && (
-                  <a
-                    href={e.meetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            {events.map((e, i) => {
+              const marked = outcomeByKey.get(eventKey(e));
+              return (
+                <li key={i} className="py-1.5 flex items-baseline gap-3 text-sm">
+                  <span
+                    className={
+                      "w-24 shrink-0 tabular-nums " +
+                      (isToday(e)
+                        ? "font-semibold text-primary"
+                        : "text-muted-foreground")
+                    }
                   >
-                    <Video className="h-3.5 w-3.5" /> Join
-                  </a>
-                )}
-              </li>
-            ))}
+                    {isToday(e) ? "Today" : fmtDay(e)}
+                  </span>
+                  <span className="w-36 shrink-0 tabular-nums text-muted-foreground">
+                    {fmtTime(e)}
+                  </span>
+                  <span className="truncate flex-1">{e.summary}</span>
+
+                  {/* Right side: outcome state > outcome buttons (started events) > Join */}
+                  {marked ? (
+                    <button
+                      type="button"
+                      className="shrink-0"
+                      title="Click to change"
+                      onClick={() =>
+                        handleMark(e, marked === "completed" ? "no_show" : "completed")
+                      }
+                    >
+                      <Badge
+                        variant={marked === "completed" ? "default" : "destructive"}
+                        className="text-xs"
+                      >
+                        {marked === "completed" ? "Completed" : "No show"}
+                      </Badge>
+                    </button>
+                  ) : hasStarted(e) ? (
+                    <span className="shrink-0 flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs"
+                        disabled={markOutcome.isPending}
+                        onClick={() => handleMark(e, "completed")}
+                      >
+                        <Check className="h-3 w-3 mr-1" /> Completed
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                        disabled={markOutcome.isPending}
+                        onClick={() => handleMark(e, "no_show")}
+                      >
+                        <X className="h-3 w-3 mr-1" /> No show
+                      </Button>
+                    </span>
+                  ) : (
+                    e.meetUrl && (
+                      <a
+                        href={e.meetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <Video className="h-3.5 w-3.5" /> Join
+                      </a>
+                    )
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
         {showCalendar && (
@@ -147,6 +289,45 @@ export function UpcomingInterviews() {
           </div>
         )}
       </CardContent>
+
+      {/* Candidate picker — only when the event name didn't match exactly one candidate */}
+      <Dialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Which candidate is this?</DialogTitle>
+            <DialogDescription>
+              Couldn't auto-match “{pending ? extractEventName(pending.event.summary) : ""}”
+              to one candidate. Pick them to mark{" "}
+              {pending?.outcome === "completed" ? "Completed" : "No show"}.
+            </DialogDescription>
+          </DialogHeader>
+          <Command>
+            <CommandInput placeholder="Search candidates…" />
+            <CommandList className="max-h-64">
+              <CommandEmpty>No candidates found.</CommandEmpty>
+              <CommandGroup>
+                {candidates.map((c) => (
+                  <CommandItem
+                    key={c.id}
+                    value={`${c.full_name ?? ""} ${c.email ?? ""}`}
+                    onSelect={() => {
+                      if (pending) save(pending.event, c.id, pending.outcome);
+                      setPending(null);
+                    }}
+                  >
+                    <span className="truncate">{c.full_name ?? "Unnamed"}</span>
+                    {c.email && (
+                      <span className="ml-2 text-xs text-muted-foreground truncate">
+                        {c.email}
+                      </span>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

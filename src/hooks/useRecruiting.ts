@@ -154,6 +154,99 @@ export function useAddPosition() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Interview outcomes (Completed / No show from the Upcoming Interviews widget)
+// ---------------------------------------------------------------------------
+
+export type InterviewOutcome = "completed" | "no_show";
+
+export interface InterviewRecord {
+  id: string;
+  candidate_id: string;
+  conducted_at: string;
+  scheduled_at: string | null;
+  event_key: string | null;
+  outcome: InterviewOutcome | null;
+  interview_type: string;
+  recommendation: string | null;
+  notes: string | null;
+}
+
+const OUTCOMES_KEY = ["recruiting", "interview-outcomes"] as const;
+
+/** All rows that came from the calendar widget (event_key set), for showing
+ *  each event's current Completed/No-show state. */
+export function useInterviewOutcomes() {
+  return useQuery({
+    queryKey: OUTCOMES_KEY,
+    queryFn: async (): Promise<InterviewRecord[]> => {
+      const { data, error } = await supabase
+        .from("recruiting_interviews")
+        .select("id, candidate_id, conducted_at, scheduled_at, event_key, outcome, interview_type, recommendation, notes")
+        .not("event_key", "is", null);
+      if (error) throw error;
+      return (data ?? []) as InterviewRecord[];
+    },
+  });
+}
+
+/** Interview history for one candidate (drawer). */
+export function useCandidateInterviews(candidateId: string | undefined) {
+  return useQuery({
+    queryKey: ["recruiting", "interviews", candidateId],
+    enabled: !!candidateId,
+    queryFn: async (): Promise<InterviewRecord[]> => {
+      if (!candidateId) return [];
+      const { data, error } = await supabase
+        .from("recruiting_interviews")
+        .select("id, candidate_id, conducted_at, scheduled_at, event_key, outcome, interview_type, recommendation, notes")
+        .eq("candidate_id", candidateId)
+        .order("conducted_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as InterviewRecord[];
+    },
+  });
+}
+
+/**
+ * Marks a calendar event as completed / no-show for a candidate.
+ * Upserts on event_key so correcting a mis-click updates the same row.
+ */
+export function useMarkInterviewOutcome() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidateId,
+      eventKey,
+      scheduledAt,
+      outcome,
+    }: {
+      candidateId: string;
+      eventKey: string;
+      scheduledAt: string;
+      outcome: InterviewOutcome;
+    }) => {
+      const { data: auth } = await supabase.auth.getUser();
+      const { error } = await supabase.from("recruiting_interviews").upsert(
+        {
+          candidate_id: candidateId,
+          event_key: eventKey,
+          scheduled_at: scheduledAt,
+          outcome,
+          conducted_by: auth?.user?.id ?? null,
+          interview_type: "screen",
+        },
+        { onConflict: "event_key" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: OUTCOMES_KEY });
+      qc.invalidateQueries({ queryKey: ["recruiting", "interviews", vars.candidateId] });
+    },
+  });
+}
+
 /**
  * Records that a WhatsApp interview invite was sent (Path A wa.me link).
  *
