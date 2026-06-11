@@ -6,7 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { StageSelector } from "./StageSelector";
-import { useCandidate, useUpdateCandidate, useSendWhatsAppInvite } from "@/hooks/useRecruiting";
+import { Badge } from "@/components/ui/badge";
+import {
+  useCandidate,
+  useUpdateCandidate,
+  useSendWhatsAppInvite,
+  useCandidateInterviews,
+} from "@/hooks/useRecruiting";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { UserPlus, MessageCircle } from "lucide-react";
@@ -28,6 +34,7 @@ interface Props {
 
 export function CandidateDrawer({ candidateId, onClose }: Props) {
   const { data: candidate, isLoading } = useCandidate(candidateId ?? undefined);
+  const { data: interviews = [] } = useCandidateInterviews(candidateId ?? undefined);
   const updateMutation = useUpdateCandidate();
   const sendInvite = useSendWhatsAppInvite();
   const navigate = useNavigate();
@@ -217,6 +224,43 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   disabled={updateMutation.isPending}
                 />
               </div>
+
+              {/* Interview attendance history — fed by the Completed / No show
+                  buttons on the Upcoming Interviews widget. */}
+              {interviews.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium">Interview history</h3>
+                    {(() => {
+                      const noShows = interviews.filter((iv) => iv.outcome === "no_show").length;
+                      return noShows > 0 ? (
+                        <Badge variant="destructive" className="text-xs">
+                          {noShows} no-show{noShows > 1 ? "s" : ""}
+                        </Badge>
+                      ) : null;
+                    })()}
+                  </div>
+                  <ul className="space-y-1">
+                    {interviews.map((iv) => (
+                      <li key={iv.id} className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground tabular-nums">
+                          {format(new Date(iv.scheduled_at ?? iv.conducted_at), "MM/dd/yyyy p")}
+                        </span>
+                        {iv.outcome ? (
+                          <Badge
+                            variant={iv.outcome === "completed" ? "default" : "destructive"}
+                            className="text-xs"
+                          >
+                            {iv.outcome === "completed" ? "Completed" : "No show"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">Interviewed</Badge>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Internal recruiter notes — separate from applicant_notes,
                   which holds what the candidate wrote on the form. */}

@@ -3250,11 +3250,14 @@ export type Database = {
           conducted_at: string
           conducted_by: string | null
           english_score: number | null
+          event_key: string | null
           id: string
           interview_type: string
           notes: string | null
+          outcome: string | null
           overall_score: number | null
           recommendation: string | null
+          scheduled_at: string | null
         }
         Insert: {
           candidate_id: string
@@ -3263,11 +3266,14 @@ export type Database = {
           conducted_at?: string
           conducted_by?: string | null
           english_score?: number | null
+          event_key?: string | null
           id?: string
           interview_type?: string
           notes?: string | null
+          outcome?: string | null
           overall_score?: number | null
           recommendation?: string | null
+          scheduled_at?: string | null
         }
         Update: {
           candidate_id?: string
@@ -3276,11 +3282,14 @@ export type Database = {
           conducted_at?: string
           conducted_by?: string | null
           english_score?: number | null
+          event_key?: string | null
           id?: string
           interview_type?: string
           notes?: string | null
+          outcome?: string | null
           overall_score?: number | null
           recommendation?: string | null
+          scheduled_at?: string | null
         }
         Relationships: [
           {
