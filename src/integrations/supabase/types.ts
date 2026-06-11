@@ -3159,9 +3159,11 @@ export type Database = {
           next_followup_at: string | null
           pass_reason: string | null
           phone: string | null
+          position_fits: string[]
           presentation_url: string | null
           qualified_for_roles: string[]
           raw_email_body: string | null
+          recruiter_notes: string | null
           raw_email_received_at: string | null
           referral_source: string | null
           role_interest: string | null
@@ -3191,10 +3193,12 @@ export type Database = {
           next_followup_at?: string | null
           pass_reason?: string | null
           phone?: string | null
+          position_fits?: string[]
           presentation_url?: string | null
           qualified_for_roles?: string[]
           raw_email_body?: string | null
           raw_email_received_at?: string | null
+          recruiter_notes?: string | null
           referral_source?: string | null
           role_interest?: string | null
           source?: string
@@ -3223,10 +3227,12 @@ export type Database = {
           next_followup_at?: string | null
           pass_reason?: string | null
           phone?: string | null
+          position_fits?: string[]
           presentation_url?: string | null
           qualified_for_roles?: string[]
           raw_email_body?: string | null
           raw_email_received_at?: string | null
+          recruiter_notes?: string | null
           referral_source?: string | null
           role_interest?: string | null
           source?: string
@@ -3332,6 +3338,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      recruiting_positions: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
       required_document_types: {
         Row: {
