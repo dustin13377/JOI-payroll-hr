@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import { todayLocal } from "@/lib/localDate";
 import {
   Dialog,
@@ -126,7 +127,7 @@ export function SubmitEODForAgentDialog({
           reason: reason.trim(),
         },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       if ((data as { error?: string })?.error) {
         throw new Error((data as { error: string }).error);
       }

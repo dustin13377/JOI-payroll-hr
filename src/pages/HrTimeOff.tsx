@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -206,7 +207,7 @@ export default function HrTimeOff() {
       const { error } = await supabase.functions.invoke("holiday-notifications", {
         body: { mode: "manual", campaignId, daysBefore },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       toast.success("Email sent");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send email");

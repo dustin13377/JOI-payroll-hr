@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { edgeErrorMessage } from '@/lib/edge';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1327,7 +1328,7 @@ export default function CampaignDetail() {
                     const { data, error } = await supabase.functions.invoke('send-eod-digest', {
                       body: reqBody,
                     });
-                    if (error) throw error;
+                    if (error) throw new Error(await edgeErrorMessage(error));
                     if (data?.error) throw new Error(data.error);
                     toast.success(
                       `Test digest sent to ${data.sent_to} for ${data.date} (${data.eod_count}/${data.agent_count} agents submitted)`,
@@ -1359,7 +1360,7 @@ export default function CampaignDetail() {
                     const { data, error } = await supabase.functions.invoke('send-eod-digest', {
                       body: { mode: 'manual_fire', campaign_id: id },
                     });
-                    if (error) throw error;
+                    if (error) throw new Error(await edgeErrorMessage(error));
                     if (data?.error) throw new Error(data.error);
                     if (data?.status === 'already_sent_today') {
                       toast.info('Digest was already sent today for this campaign.');

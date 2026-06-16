@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Employee, EmployeeWithMeta, PayrollConfig, PayrollResult } from "@/types/payroll";
 import { calcularNomina } from "@/types/payroll";
+import { edgeErrorMessage } from "@/lib/edge";
 
 // Map DB row to frontend Employee
 function mapEmployee(row: any): EmployeeWithMeta {
@@ -96,7 +97,7 @@ export function useAddEmployee() {
             hire_date: emp.hireDate ?? null,
           },
         });
-        if (error) throw error;
+        if (error) throw new Error(await edgeErrorMessage(error));
         if (data?.error) throw new Error(data.error);
         return { employee_id: data.employee_id as string };
       }
@@ -254,7 +255,7 @@ export function useEditTimeClock() {
       const { data, error } = await supabase.functions.invoke("edit-time-clock", {
         body: input,
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       if (data?.error) throw new Error(data.error);
       return data as {
         time_clock: Record<string, unknown>;
@@ -289,7 +290,7 @@ export function useResendInvite() {
       const { data, error } = await supabase.functions.invoke("resend-invite", {
         body: { employee_ids: employeeIds },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       if (data?.error) throw new Error(data.error);
       return data as {
         results: Array<{

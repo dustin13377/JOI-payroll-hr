@@ -36,6 +36,9 @@ export interface EditPunchDialogProps {
     break1_end: string | null;
     break2_start: string | null;
     break2_end: string | null;
+    lunch_late_reason?: string | null;
+    break1_late_reason?: string | null;
+    break2_late_reason?: string | null;
   };
 }
 
@@ -197,6 +200,15 @@ export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, 
                   <Input id="b2e" type="time" value={break2End} onChange={(e) => setBreak2End(e.target.value)} />
                 </div>
               </div>
+
+              {(existing?.lunch_late_reason || existing?.break1_late_reason || existing?.break2_late_reason) && (
+                <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                  <p className="font-semibold">Late-return reasons given by the employee:</p>
+                  {existing?.lunch_late_reason && <p>Lunch: {existing.lunch_late_reason}</p>}
+                  {existing?.break1_late_reason && <p>Break 1: {existing.break1_late_reason}</p>}
+                  {existing?.break2_late_reason && <p>Break 2: {existing.break2_late_reason}</p>}
+                </div>
+              )}
             </div>
           )}
 

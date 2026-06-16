@@ -6,7 +6,10 @@
  *
  * Auth model:
  *   - owner / admin / manager: can edit anyone in their org
- *   - team_lead: can edit only agents on the SAME campaign_id as the TL
+ *   - team_lead: can edit any agent in their org (campaign scoping removed
+ *     2026-06-16 per D — weekday campaigns had no TL assigned, leaving agents
+ *     uneditable. Cross-org edits are still blocked, and every edit is recorded
+ *     in time_clock_audit with edited_by + reason.)
  *
  * Body:
  *   {
@@ -98,7 +101,6 @@ Deno.serve(async (req: Request) => {
       .single();
     const callerRole = callerProfile?.role;
     const callerOrgId = callerProfile?.organization_id;
-    const callerEmployeeId = callerProfile?.employee_id;
     if (!callerRole || !["owner", "admin", "manager", "team_lead"].includes(callerRole)) {
       return json({ error: "Forbidden: leadership or team lead only" }, 403);
     }
@@ -150,17 +152,9 @@ Deno.serve(async (req: Request) => {
     if (target.organization_id !== callerOrgId) {
       return json({ error: "Cross-org edit blocked" }, 403);
     }
-    if (callerRole === "team_lead") {
-      // TL must share a campaign with the target.
-      const { data: tlEmp } = await adminClient
-        .from("employees")
-        .select("campaign_id")
-        .eq("id", callerEmployeeId)
-        .single();
-      if (!tlEmp?.campaign_id || tlEmp.campaign_id !== target.campaign_id) {
-        return json({ error: "TLs can only edit punches for their own campaign" }, 403);
-      }
-    }
+    // Same-org check above is the only scope guard. Team leads may edit any
+    // agent in their org (campaign restriction removed 2026-06-16). The audit
+    // row below captures who made the edit and why.
 
     // ---- Load existing row (if any) for audit before/after ----
     const { data: existing } = await adminClient

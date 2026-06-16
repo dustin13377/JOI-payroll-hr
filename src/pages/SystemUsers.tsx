@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,7 +94,7 @@ export default function SystemUsers() {
       const { data, error } = await supabase.functions.invoke("resend-invite", {
         body: { employee_ids: [user.id] },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       const result = (data as { results?: Array<{ status: string; message?: string; email?: string | null }> })?.results?.[0];
       if (!result) throw new Error("No result returned from resend-invite");
       return result;
@@ -272,7 +273,7 @@ function AddSystemUserDialog({ onClose, onSuccess }: { onClose: () => void; onSu
           campaign_id: null,
         },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorMessage(error));
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
 
       // Step 2: flip is_system_user=true and stash the notes on termination_notes

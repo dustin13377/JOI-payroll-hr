@@ -7,6 +7,16 @@ import { formatDateMX, formatDateMXLong } from "@/lib/localDate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import {
   Table,
@@ -56,6 +66,9 @@ interface TimeClockEntry {
   break1_end: string | null;
   break2_start: string | null;
   break2_end: string | null;
+  lunch_late_reason: string | null;
+  break1_late_reason: string | null;
+  break2_late_reason: string | null;
   shift_end_expected: string | null;
   auto_clocked_out: boolean;
   eod_completed: boolean;
@@ -69,6 +82,7 @@ interface ShiftSettings {
   start_time: string; // "HH:MM:SS"
   end_time: string;   // "HH:MM:SS"
   grace_minutes: number;
+  break_grace_minutes: number | null; // minutes over cap before a late-return reason is required (0 = any minute over)
   days_of_week: number[];
 }
 
@@ -127,6 +141,9 @@ export default function Timeclock() {
   const { employeeId, loading: authLoading } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [eodDialogOpen, setEodDialogOpen] = useState(false);
+  // When ending a break that ran over its cap, we collect a reason first.
+  const [lateDialog, setLateDialog] = useState<BreakKind | null>(null);
+  const [lateReason, setLateReason] = useState("");
   // Confirmation dialog for Clock In. Added 2026-06-03 after Julia Nuñez
   // double-tapped: the Clock In button rendered into a red Clock Out button
   // ~300ms later, and her second tap fired the clock-out flow. A modal
@@ -348,12 +365,20 @@ export default function Timeclock() {
   });
 
   const endBreakMutation = useMutation({
-    mutationFn: async (kind: BreakKind) => {
+    mutationFn: async ({ kind, reason }: { kind: BreakKind; reason?: string }) => {
       if (!todayEntry) throw new Error("Not clocked in");
-      const col = kind === "lunch" ? "lunch_end" : kind === "break1" ? "break1_end" : "break2_end";
-      return updateEntry({ [col]: new Date().toISOString() });
+      const endCol = kind === "lunch" ? "lunch_end" : kind === "break1" ? "break1_end" : "break2_end";
+      const reasonCol =
+        kind === "lunch" ? "lunch_late_reason" : kind === "break1" ? "break1_late_reason" : "break2_late_reason";
+      const patch: Record<string, unknown> = { [endCol]: new Date().toISOString() };
+      if (reason && reason.trim()) patch[reasonCol] = reason.trim();
+      return updateEntry(patch);
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setLateDialog(null);
+      setLateReason("");
+      invalidate();
+    },
   });
 
   // Clock Out — accepts optional early_release flag (set from the EOD dialog
@@ -473,6 +498,12 @@ export default function Timeclock() {
       : 0;
   const overCap = activeBreakRemainingMs < 0;
 
+  // Grace (minutes over cap) before a late-return reason is required. Defaults
+  // to 0 = any minute over. Configurable per campaign via shift_settings so it
+  // can be loosened later without a code change.
+  const breakGraceMin = shiftSettings?.break_grace_minutes ?? 0;
+  const lateNeedsReason = !!activeBreakStartIso && activeBreakElapsedMin > activeBreakCapMin + breakGraceMin;
+
   // Past breaks summary (when clocked in but not on break)
   const lunchTaken = !!(todayEntry?.lunch_start && todayEntry?.lunch_end);
   const lunchInProgress = !!(todayEntry?.lunch_start && !todayEntry?.lunch_end);
@@ -497,6 +528,15 @@ export default function Timeclock() {
       ? diffMinutes(todayEntry.break2_start, currentTime)
       : durationMinutes(todayEntry.break2_start, todayEntry.break2_end)
     : 0;
+
+  // Breaks are mandatory: lunch + both 15-min breaks must be taken AND ended
+  // before an employee can clock out. Auto-clock-out (server cron at shift end)
+  // and the admin "edit punch" dialog are the safety nets for forgotten breaks.
+  const allBreaksDone = lunchTaken && break1Taken && break2Taken;
+  const pendingBreaks: string[] = [];
+  if (!lunchTaken) pendingBreaks.push("Lunch");
+  if (!break1Taken) pendingBreaks.push("Break 1");
+  if (!break2Taken) pendingBreaks.push("Break 2");
 
   return (
     <div className="space-y-6">
@@ -642,13 +682,22 @@ export default function Timeclock() {
                   {overCap && (
                     <div className="text-sm text-red-700 mb-3">
                       You've exceeded the {activeBreakCapMin}-min cap by {Math.floor((activeBreakElapsedMin - activeBreakCapMin))}m.
-                      End the break now — extra time may be deducted.
+                      {lateNeedsReason
+                        ? " You'll need to give a reason for coming back late."
+                        : " End the break now — extra time may be deducted."}
                     </div>
                   )}
                   <Button
                     size="lg"
                     className="w-full h-11"
-                    onClick={() => endBreakMutation.mutate(activeBreak)}
+                    onClick={() => {
+                      if (lateNeedsReason) {
+                        setLateReason("");
+                        setLateDialog(activeBreak);
+                      } else {
+                        endBreakMutation.mutate({ kind: activeBreak });
+                      }
+                    }}
                     disabled={endBreakMutation.isPending}
                   >
                     End {activeBreak === "lunch" ? "Lunch" : activeBreak === "break1" ? "Break 1" : "Break 2"}
@@ -689,6 +738,18 @@ export default function Timeclock() {
                     </Button>
                   </div>
 
+                  {!allBreaksDone && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-amber-900 font-semibold mb-1">
+                        <Coffee className="h-4 w-4" />
+                        Finish your breaks before clocking out
+                      </div>
+                      <p className="text-sm text-amber-800">
+                        Still required: {pendingBreaks.join(", ")}. Each must be started and ended.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Anti-double-tap guard: hide the red Clock Out button
                       for the first 10 seconds after clock-in so a second
                       stray tap on the now-empty position can't fire it.
@@ -710,6 +771,7 @@ export default function Timeclock() {
                         size="lg"
                         className="w-full h-12 bg-red-600 hover:bg-red-700 text-white text-lg"
                         onClick={() => {
+                          if (!allBreaksDone) return;
                           // Need EOD first? Open the dialog. It calls back to clock out on submit.
                           // Skip (silent) if no KPI fields configured or already submitted today.
                           if (kpiFields.length > 0 && !todayEodLog && employee?.campaign_id) {
@@ -718,7 +780,7 @@ export default function Timeclock() {
                             clockOutMutation.mutate();
                           }
                         }}
-                        disabled={clockOutMutation.isPending}
+                        disabled={clockOutMutation.isPending || !allBreaksDone}
                       >
                         <LogOut className="mr-2 h-5 w-5" />
                         {clockOutMutation.isPending ? "Processing..." : "Clock Out"}
@@ -799,8 +861,11 @@ export default function Timeclock() {
                         </TableCell>
                         <TableCell>
                           {lunchMin > 0 ? (
-                            <span className={lunchMin > LUNCH_CAP_MIN ? "text-red-600 font-semibold" : ""}>
-                              {lunchMin.toFixed(0)}m
+                            <span
+                              className={lunchMin > LUNCH_CAP_MIN ? "text-red-600 font-semibold" : ""}
+                              title={entry.lunch_late_reason ? `Late reason: ${entry.lunch_late_reason}` : undefined}
+                            >
+                              {lunchMin.toFixed(0)}m{entry.lunch_late_reason ? " *" : ""}
                             </span>
                           ) : (
                             "-"
@@ -808,8 +873,18 @@ export default function Timeclock() {
                         </TableCell>
                         <TableCell>
                           {b1 > 0 || b2 > 0 ? (
-                            <span>
-                              {b1 > 0 ? `${b1.toFixed(0)}m` : "-"} / {b2 > 0 ? `${b2.toFixed(0)}m` : "-"}
+                            <span
+                              title={
+                                [
+                                  entry.break1_late_reason ? `Break 1: ${entry.break1_late_reason}` : null,
+                                  entry.break2_late_reason ? `Break 2: ${entry.break2_late_reason}` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" | ") || undefined
+                              }
+                            >
+                              {b1 > 0 ? `${b1.toFixed(0)}m${entry.break1_late_reason ? " *" : ""}` : "-"} /{" "}
+                              {b2 > 0 ? `${b2.toFixed(0)}m${entry.break2_late_reason ? " *" : ""}` : "-"}
                             </span>
                           ) : (
                             "-"
@@ -903,6 +978,49 @@ export default function Timeclock() {
           }}
         />
       )}
+
+      {/* Late-return reason — required to end a break that went over its cap */}
+      <Dialog open={lateDialog !== null} onOpenChange={(o) => { if (!o) setLateDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              You're back late from {lateDialog === "lunch" ? "lunch" : lateDialog === "break1" ? "break 1" : "break 2"}
+            </DialogTitle>
+            <DialogDescription>
+              Tell us why so we can end your break. This is recorded for your supervisor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="late-reason">
+              Reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="late-reason"
+              value={lateReason}
+              onChange={(e) => setLateReason(e.target.value)}
+              placeholder="e.g. Long line at the cafeteria"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">Required — at least 3 characters.</p>
+          </div>
+          {endBreakMutation.error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+              {(endBreakMutation.error as Error).message}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLateDialog(null)} disabled={endBreakMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => lateDialog && endBreakMutation.mutate({ kind: lateDialog, reason: lateReason })}
+              disabled={endBreakMutation.isPending || lateReason.trim().length < 3}
+            >
+              {endBreakMutation.isPending ? "Saving..." : "End break"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
