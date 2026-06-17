@@ -1,4 +1,4 @@
-import { useEmployees, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates, formatPeriodLabel, recordToConfig, useUpsertPayrollRecord } from "@/hooks/useSupabasePayroll";
+import { useEmployees, useActivePeriod, usePayrollRecords, useCreatePeriod, getCurrentPeriodDates, formatPeriodLabel, recordToConfig } from "@/hooks/useSupabasePayroll";
 import { calcularNomina } from "@/types/payroll";
 import { useCurrentPayPeriod, useCurrentPeriodTotal } from "@/hooks/usePayroll";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,6 @@ export default function Dashboard() {
   const { data: currentPeriodTotal } = useCurrentPeriodTotal();
   const createPeriod = useCreatePeriod();
   const { data: records = [] } = usePayrollRecords(activePeriod?.id);
-  const upsertPayrollRecord = useUpsertPayrollRecord();
 
   // ========== State for Payroll Cutoff ==========
   const [cutoffInfo, setCutoffInfo] = useState<PayrollCutoffInfo | null>(null);
@@ -202,28 +201,19 @@ export default function Dashboard() {
   };
 
   const handleConfirmSpiff = async () => {
-    if (!activePeriod) return;
-
-    setIsApplyingSpiff(true);
-    try {
-      for (const item of spiffPreviewData) {
-        if (item.matchedEmployee) {
-          const emp = employees.find((e) => e.nombre === item.matchedEmployee);
-          if (emp) {
-            await upsertPayrollRecord.mutateAsync({
-              employee_id: emp._uuid,
-              period_id: activePeriod.id,
-              additional_bonuses: item.amount,
-            });
-          }
-        }
-      }
-      setSpiffPreviewOpen(false);
-      setSpiffPreviewData([]);
-      setSpiffCampaignName("");
-    } finally {
-      setIsApplyingSpiff(false);
-    }
+    // DISABLED 2026-06-17 — SPIFF apply via the legacy path is broken against the
+    // live schema. useUpsertPayrollRecord writes { period_id, additional_bonuses }
+    // with onConflict "employee_id,period_id" — none of which exist on the current
+    // payroll_records table (keyed by week_id; bonuses live in extra_bonus). It used
+    // to early-return on the always-null activePeriod, silently dropping bonuses.
+    // Now it fails loudly so nobody believes the import worked. Real rewire (write by
+    // week_id into extra_bonus) belongs to Joe's rework — see docs/payroll-rework.md.
+    toast.error(
+      "SPIFF import is temporarily disabled while payroll is being reworked. No bonuses were applied — apply these manually for now."
+    );
+    setSpiffPreviewOpen(false);
+    setSpiffPreviewData([]);
+    setSpiffCampaignName("");
   };
 
   const handleSpiffFileClick = () => {
