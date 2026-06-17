@@ -542,19 +542,30 @@ export function useActivePeriod() {
   });
 }
 
+/**
+ * DISABLED 2026-06-17 — legacy period-creation path (no-op).
+ *
+ * The Phase 1 rework made period_code/year/month/half NOT NULL on payroll_periods,
+ * but this insert only supplied start_date/end_date/period_type, so every call hit:
+ *   null value in column "period_code" of relation "payroll_periods"
+ *   violates not-null constraint
+ *
+ * Three screens (Dashboard, EmpleadoPerfil, PayrollRun) call this from an
+ * auto-create useEffect on mount, and useActivePeriod() queries the old lowercase
+ * status "open" (live system uses "OPEN"), so it never finds a period and the
+ * broken insert fired on every visit. The whole legacy period system is dead.
+ *
+ * Neutered to a no-op so the dead effects can't reach the DB. Proper retirement of
+ * the legacy period flow is Task 3 in docs/payroll-rework.md (Joe's rework).
+ */
 export function useCreatePeriod() {
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (period: { start_date: string; end_date: string; period_type: string }) => {
-      const { data, error } = await supabase
-        .from("payroll_periods")
-        .insert(period)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+    mutationFn: async (_period: { start_date: string; end_date: string; period_type: string }) => {
+      console.warn(
+        "[useCreatePeriod] Legacy period-creation is disabled (no-op). See docs/payroll-rework.md Task 3."
+      );
+      return null;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["activePeriod"] }),
   });
 }
 
