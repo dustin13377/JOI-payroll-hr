@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -103,7 +104,7 @@ export default function ProvisionOrg() {
       });
 
       if (error) {
-        setErrors({ general: "Something went wrong, please try again." });
+        setErrors({ general: await edgeErrorMessage(error) });
         return;
       }
 

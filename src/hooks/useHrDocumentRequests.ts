@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import type {
   HrDocumentRequest,
   HrDocumentRequestType,
@@ -778,7 +779,7 @@ export async function issueHrDocumentSignedUrl(
     "get-hr-document-signed-url",
     { body: { finalizationId, type, fileType } },
   );
-  if (error) throw error;
+  if (error) throw new Error(await edgeErrorMessage(error));
   if (!data?.signedUrl) throw new Error("No signed URL returned");
   return data.signedUrl as string;
 }

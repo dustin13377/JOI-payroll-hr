@@ -4,6 +4,7 @@ import { ChangeRoleDialog } from "@/components/ChangeRoleDialog";
 import { EditNameDialog } from "@/components/EditNameDialog";
 import { ClientCampaignPicker } from "@/components/ClientCampaignPicker";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeErrorMessage } from "@/lib/edge";
 import { useAuth } from "@/hooks/useAuth";
 // EMPTY_PAYROLL_RESULT retired in Phase 4c — payroll card now reads from records directly
 import type { EmployeeWithMeta } from "@/types/payroll";
@@ -335,21 +336,9 @@ export default function EmpleadoPerfil() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.error) {
-        // supabase-js wraps non-2xx responses in res.error and leaves res.data null.
-        // The function's real error message lives in res.error.context (the Response).
-        // Try to read it so the dialog shows what actually broke instead of the
-        // generic "Edge Function returned a non-2xx status code".
-        let realMsg = res.error.message ?? "Unknown error";
-        try {
-          const ctx = (res.error as { context?: Response }).context;
-          if (ctx && typeof ctx.json === "function") {
-            const errBody = await ctx.clone().json();
-            if (errBody?.error) realMsg = String(errBody.error);
-          }
-        } catch {
-          // fall back to the generic message
-        }
-        throw new Error(realMsg);
+        // supabase-js wraps non-2xx responses in res.error and leaves res.data null;
+        // edgeErrorMessage digs the real reason out of res.error.context.
+        throw new Error(await edgeErrorMessage(res.error));
       }
       const body = res.data as { ok?: boolean; error?: string };
       if (body?.error) throw new Error(body.error);
