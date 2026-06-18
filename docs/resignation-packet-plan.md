@@ -16,6 +16,8 @@ Reference template: `docs/reference/resignation-packet-template.pdf`. Reference 
 
 - **Initiator:** TL or HR, same pattern as carta/acta. New `request_type = 'renuncia'` on `hr_document_requests`.
 - **Scope:** Voluntary resignation only. Termination letters would be a separate feature.
+
+> **Update 2026-06-18 — Encuesta now rides every baja.** The Encuesta de Salida is no longer renuncia-only. The survey renderer was extracted to `src/lib/pdf/drawEncuesta.ts` (single source of truth) and is now appended to both termination documents as well: `rescision_prueba` (`generateRescisionPdf`) and `rescision_desempeno` (`generateRescisionDesempenoPdf`). It renders on its own page after the signature section. Renuncia output is unchanged. Open follow-up: the survey intro reads "lamentamos su renuncia," which is awkward on an involuntary termination — left as-is per request, flag for a future copy tweak.
 - **Finiquito math:** App auto-calculates per LFT; HR can override any line item. Default values appear pre-filled, HR can edit before saving the draft.
 - **Encuesta de Salida:** Paper only for v1. PDF generates the blank survey as pages 3–4; employee fills with pen; HR scans the completed packet back. No digital form UI, no response tracking in DB. If HR wants trend reporting later, upgrade to a digital form as a followup.
 

@@ -51,6 +51,7 @@ import {
   MARGIN_TOP,
   CONTENT_WIDTH,
 } from "./pdfHelpers";
+import { drawEncuestaDeSalida } from "./drawEncuesta";
 
 function fmtMoney(n: number | null | undefined): string {
   if (n == null) return "$ 0.00";
@@ -587,6 +588,15 @@ export function generateRescisionDesempenoPdf(
     10.3,
     { align: "center" },
   );
+
+  // ── Encuesta de Salida ─────────────────────────────────────────────
+  // Appended to every baja (quit OR termination). Shared renderer — see
+  // drawEncuesta.ts. Added on its own page after the signature section.
+  drawEncuestaDeSalida(doc, {
+    trabajador,
+    puesto,
+    fechaLong: terminationDate,
+  });
 
   drawFooters(doc, draft.docRef ?? "");
 
