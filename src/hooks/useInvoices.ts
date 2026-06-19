@@ -191,6 +191,14 @@ export interface WeeklyPreviewRow {
   existing_invoice_id: string | null;
   is_flat_bill: boolean;
   flat_amount: number;
+  is_gap_warning: boolean;
+  gap_dates: string[] | null;
+}
+
+export interface GapWarning {
+  employee_id: string;
+  employee_name: string;
+  gap_dates: string[];
 }
 
 export interface ClientPreview {
@@ -203,6 +211,7 @@ export interface ClientPreview {
   total_days: number;
   total_amount: number;
   missing_rate_count: number;
+  gap_warnings: GapWarning[];
 }
 
 export function useWeeklyPreview(monday: string | null, sunday: string | null) {
@@ -215,14 +224,15 @@ export function useWeeklyPreview(monday: string | null, sunday: string | null) {
         p_sunday: sunday!,
       });
       if (error) throw error;
-      const rawRows = (data || []) as WeeklyPreviewRow[];
       // Filter out test / mock campaigns — they shouldn't appear in real invoice
       // generation. Filter is on campaign_name with the DEV_MOCK_ prefix; keep
       // it client-side so the RPC stays general-purpose (other consumers may
       // want to see all campaigns).
-      const rows = rawRows.filter(
+      const allRows = (data as WeeklyPreviewRow[] || []).filter(
         (r) => !(r.campaign_name ?? "").toUpperCase().startsWith("DEV_MOCK"),
       );
+      const gapRows = allRows.filter((r) => r.is_gap_warning);
+      const rows = allRows.filter((r) => !r.is_gap_warning);
       const byClient = new Map<string, ClientPreview>();
       for (const r of rows) {
         let bucket = byClient.get(r.client_id);
@@ -237,6 +247,13 @@ export function useWeeklyPreview(monday: string | null, sunday: string | null) {
             total_days: 0,
             total_amount: 0,
             missing_rate_count: 0,
+            gap_warnings: gapRows
+              .filter((g) => g.client_id === r.client_id)
+              .map((g) => ({
+                employee_id: g.employee_id,
+                employee_name: g.employee_name,
+                gap_dates: g.gap_dates ?? [],
+              })),
           };
           byClient.set(r.client_id, bucket);
         }

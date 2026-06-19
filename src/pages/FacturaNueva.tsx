@@ -369,6 +369,24 @@ function ClientPreviewCard({
 
         {expanded && (
           <div className="border-t">
+            {preview.gap_warnings.length > 0 && (
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2 mb-1.5 text-amber-800 font-medium text-sm">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Unmatched punches — fix assignments before generating
+                </div>
+                <ul className="space-y-0.5 pl-6 text-xs text-amber-700 list-disc">
+                  {preview.gap_warnings.map((w) => (
+                    <li key={w.employee_id}>
+                      <span className="font-medium">{w.employee_name}</span> punched on{" "}
+                      {w.gap_dates.join(", ")} but has no assignment covering{" "}
+                      {w.gap_dates.length === 1 ? "that day" : "those days"} — these will be{" "}
+                      <span className="font-semibold">silently dropped</span> if you generate now.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
