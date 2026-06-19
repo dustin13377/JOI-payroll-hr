@@ -8,7 +8,7 @@
  * and hard-locked once paid.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useInvoice,
@@ -17,6 +17,8 @@ import {
   useUpdateInvoiceLine,
   useDeleteInvoiceLine,
   useAddInvoiceLine,
+  useAttachSpiffs,
+  useDetachSpiffs,
   fmtUSD,
   type InvoiceLine,
 } from "@/hooks/useInvoices";
@@ -52,12 +54,14 @@ const statusLabels: Record<string, string> = {
   draft: "Draft",
   sent: "Sent",
   paid: "Paid",
+  paid_monthly: "Paid Monthly",
 };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   sent: "bg-primary/15 text-primary",
   paid: "bg-green-100 text-green-700",
+  paid_monthly: "bg-teal-100 text-teal-700",
 };
 
 export default function FacturaDetalle() {
@@ -65,6 +69,31 @@ export default function FacturaDetalle() {
   const navigate = useNavigate();
   const { data: invoice, isLoading } = useInvoice(id);
   const updateStatus = useUpdateInvoiceStatus();
+  const attachSpiffs = useAttachSpiffs();
+  const detachSpiffs = useDetachSpiffs();
+
+  // Auto-attach pending spiffs whenever a draft invoice loads.
+  // Idempotent — re-running is safe. Only fires once per invoice.id.
+  const attachedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!invoice || invoice.status !== "draft") return;
+    if (attachedForRef.current === invoice.id) return;
+    attachedForRef.current = invoice.id;
+    attachSpiffs.mutate(invoice.id, {
+      onSuccess: (result) => {
+        if (result.attached_count > 0) {
+          toast.success(
+            `${result.attached_count} spiff${result.attached_count !== 1 ? "s" : ""} attached ($${Number(result.attached_total_usd).toFixed(2)})`
+          );
+        }
+        if (result.orphan_count > 0) {
+          toast.warning(
+            `${result.orphan_count} pending spiff${result.orphan_count !== 1 ? "s" : ""} couldn't be matched — the agent may not have a line on this invoice`
+          );
+        }
+      },
+    });
+  }, [invoice?.id, invoice?.status]);
 
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [showAddMisc, setShowAddMisc] = useState(false);
@@ -110,8 +139,10 @@ export default function FacturaDetalle() {
   // Lock state — drives whether editors render or just show values.
   // "sent" can be unlocked back to draft; "paid" is hard-locked.
   const isPaid = invoice.status === "paid";
+  const isPaidMonthly = invoice.status === "paid_monthly";
+  const isTerminal = isPaid || isPaidMonthly; // closed out — hard-locked, no unlock
   const isSent = invoice.status === "sent";
-  const isLocked = isPaid || isSent;
+  const isLocked = isTerminal || isSent;
 
   // Compute invoice-days vs punch-days mismatches across all punch-billed
   // lines. Used by the download flow.
@@ -166,6 +197,7 @@ export default function FacturaDetalle() {
         onSuccess: () => {
           if (status === "sent") toast.success("Invoice marked as sent");
           else if (status === "paid") toast.success("Invoice marked as paid");
+          else if (status === "paid_monthly") toast.success("Invoice marked as paid (monthly)");
           else if (status === "draft") toast.success("Invoice unlocked for editing");
         },
         onError: (err: any) => toast.error(err.message),
@@ -205,6 +237,13 @@ export default function FacturaDetalle() {
               >
                 <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleStatusChange("paid_monthly")}
+                disabled={updateStatus.isPending}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid (Monthly)
+              </Button>
             </>
           )}
           <Button
@@ -227,14 +266,14 @@ export default function FacturaDetalle() {
       {isLocked && (
         <div
           className={`flex items-center gap-2 rounded-md border p-3 text-sm print:hidden ${
-            isPaid
+            isTerminal
               ? "border-green-200 bg-green-50 text-green-900"
               : "border-amber-200 bg-amber-50 text-amber-900"
           }`}
         >
           <Lock className="h-4 w-4 shrink-0" />
-          {isPaid ? (
-            <span>This invoice is marked <strong>paid</strong> and can no longer be edited.</span>
+          {isTerminal ? (
+            <span>This invoice is marked <strong>{isPaidMonthly ? "paid (monthly)" : "paid"}</strong> and can no longer be edited.</span>
           ) : (
             <span>
               This invoice has been <strong>sent</strong> to the client. Click{" "}
@@ -337,12 +376,20 @@ export default function FacturaDetalle() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await detachSpiffs.mutateAsync(invoice.id);
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : "Failed to detach spiffs");
+                  setShowUnlockConfirm(false);
+                  return;
+                }
                 handleStatusChange("draft");
                 setShowUnlockConfirm(false);
               }}
+              disabled={detachSpiffs.isPending}
             >
-              Unlock
+              {detachSpiffs.isPending ? "Detaching…" : "Unlock"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

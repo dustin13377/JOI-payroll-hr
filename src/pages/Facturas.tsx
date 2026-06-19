@@ -14,12 +14,14 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   sent: "bg-primary/15 text-primary",
   paid: "bg-green-100 text-green-700",
+  paid_monthly: "bg-teal-100 text-teal-700",
 };
 
 const statusLabels: Record<string, string> = {
   draft: "Draft",
   sent: "Sent",
   paid: "Paid",
+  paid_monthly: "Paid Monthly",
 };
 
 type InvoiceRow = ReturnType<typeof useInvoices>["data"] extends (infer T)[] | undefined
@@ -99,12 +101,12 @@ export default function Facturas() {
     clientId: clientFilter !== "all" ? clientFilter : undefined,
   });
 
-  // Active = draft + sent (still in motion). History = paid (closed out).
+  // Active = draft + sent (still in motion). History = paid / paid monthly (closed out).
   const { active, history } = useMemo(() => {
     const active: InvoiceRow[] = [];
     const history: InvoiceRow[] = [];
     for (const inv of invoices) {
-      if (inv.status === "paid") history.push(inv);
+      if (inv.status === "paid" || inv.status === "paid_monthly") history.push(inv);
       else active.push(inv);
     }
     return { active, history };

@@ -1,4 +1,11 @@
 /**
+ * @deprecated No longer used. Spiffs are now entered via /spiffs (TL entry)
+ * and attached to invoices automatically via attach_pending_spiffs().
+ * The import-spiffs edge function this called is also retired (still deployed
+ * but no longer invoked). Delete this file in a follow-up cleanup.
+ */
+
+/**
  * Bulk spiff CSV upload — accepts one or many CSV files, parses each, fuzzy-matches
  * agent names against every line on every active (draft + sent) invoice, and applies
  * the spiff amount to the matching line's `spiffs` field.
