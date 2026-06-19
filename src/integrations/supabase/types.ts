@@ -12,41 +12,33 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
-      uptraining_documents: {
-        Row: {
-          id: string
-          employee_id: string
-          organization_id: string
-          file_path: string
-          original_filename: string | null
-          note: string | null
-          uploaded_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          employee_id: string
-          organization_id?: string
-          file_path: string
-          original_filename?: string | null
-          note?: string | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          employee_id?: string
-          organization_id?: string
-          file_path?: string
-          original_filename?: string | null
-          note?: string | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       _legacy_time_off_requests: {
         Row: {
           created_at: string | null
@@ -684,6 +676,7 @@ export type Database = {
           expires_at: string | null
           id: string
           is_published: boolean
+          organization_id: string
           published_at: string | null
           recognized_employee_id: string | null
           requires_ack: boolean
@@ -699,6 +692,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_published?: boolean
+          organization_id?: string
           published_at?: string | null
           recognized_employee_id?: string | null
           requires_ack?: boolean
@@ -714,6 +708,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_published?: boolean
+          organization_id?: string
           published_at?: string | null
           recognized_employee_id?: string | null
           requires_ack?: boolean
@@ -748,6 +743,13 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bulletin_posts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
@@ -1027,10 +1029,12 @@ export type Database = {
       campaigns: {
         Row: {
           client_id: string
+          clock_in_alert_enabled: boolean
           created_at: string | null
           early_release_criteria: string | null
           early_release_enabled: boolean
           eod_digest_cutoff_time: string | null
+          eod_digest_enabled: boolean
           eod_digest_timezone: string
           eod_morning_bundle_time: string | null
           eod_reply_to_email: string | null
@@ -1044,10 +1048,12 @@ export type Database = {
         }
         Insert: {
           client_id: string
+          clock_in_alert_enabled?: boolean
           created_at?: string | null
           early_release_criteria?: string | null
           early_release_enabled?: boolean
           eod_digest_cutoff_time?: string | null
+          eod_digest_enabled?: boolean
           eod_digest_timezone?: string
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
@@ -1061,10 +1067,12 @@ export type Database = {
         }
         Update: {
           client_id?: string
+          clock_in_alert_enabled?: boolean
           created_at?: string | null
           early_release_criteria?: string | null
           early_release_enabled?: boolean
           eod_digest_cutoff_time?: string | null
+          eod_digest_enabled?: boolean
           eod_digest_timezone?: string
           eod_morning_bundle_time?: string | null
           eod_reply_to_email?: string | null
@@ -1271,6 +1279,56 @@ export type Database = {
           },
         ]
       }
+      client_recurring_deductions: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          label_prefix: string
+          next_counter_start: number
+          notes: string | null
+          organization_id: string
+          prepaid_amount: number
+          total_amount: number
+          weekly_amount: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label_prefix: string
+          next_counter_start?: number
+          notes?: string | null
+          organization_id: string
+          prepaid_amount?: number
+          total_amount: number
+          weekly_amount: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label_prefix?: string
+          next_counter_start?: number
+          notes?: string | null
+          organization_id?: string
+          prepaid_amount?: number
+          total_amount?: number
+          weekly_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_recurring_deductions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           aliases: string[]
@@ -1317,6 +1375,56 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clock_in_alert_log: {
+        Row: {
+          alert_date: string
+          campaign_id: string
+          dry_run: boolean
+          error: string | null
+          id: string
+          missing_agents: Json | null
+          missing_count: number
+          recipient_count: number
+          sent_at: string
+          smtp_message_id: string | null
+          stage: string
+        }
+        Insert: {
+          alert_date: string
+          campaign_id: string
+          dry_run?: boolean
+          error?: string | null
+          id?: string
+          missing_agents?: Json | null
+          missing_count?: number
+          recipient_count?: number
+          sent_at?: string
+          smtp_message_id?: string | null
+          stage: string
+        }
+        Update: {
+          alert_date?: string
+          campaign_id?: string
+          dry_run?: boolean
+          error?: string | null
+          id?: string
+          missing_agents?: Json | null
+          missing_count?: number
+          recipient_count?: number
+          sent_at?: string
+          smtp_message_id?: string | null
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clock_in_alert_log_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
             referencedColumns: ["id"]
           },
         ]
@@ -1620,13 +1728,12 @@ export type Database = {
           flat_bill_client_id: string | null
           flat_weekly_bill_amount: number | null
           full_name: string
-          intro_recording_url: string | null
-          recruited_from_candidate_id: string | null
           goal_prompt_dismissed: boolean
           goal_set_at: string | null
           goal_visible_to_tl: boolean
           hire_date: string | null
           id: string
+          intro_recording_url: string | null
           invited_at: string | null
           is_active: boolean | null
           is_system_user: boolean
@@ -1640,6 +1747,7 @@ export type Database = {
           personal_email: string | null
           personal_goal: string | null
           phone: string | null
+          recruited_from_candidate_id: string | null
           rehire_eligible: boolean | null
           reports_to: string | null
           rfc: string | null
@@ -1671,7 +1779,7 @@ export type Database = {
           department_id?: string | null
           email?: string | null
           emergency_contact?: string | null
-          employee_id?: string
+          employee_id: string
           employment_status?: Database["public"]["Enums"]["employment_status"]
           flat_bill_client_id?: string | null
           flat_weekly_bill_amount?: number | null
@@ -1794,6 +1902,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_recruited_from_candidate_id_fkey"
+            columns: ["recruited_from_candidate_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_candidates"
             referencedColumns: ["id"]
           },
           {
@@ -2196,6 +2311,7 @@ export type Database = {
           fulfilled_acta_id: string | null
           fulfilled_carta_id: string | null
           fulfilled_renuncia_id: string | null
+          fulfilled_rescision_desempeno_id: string | null
           fulfilled_rescision_id: string | null
           id: string
           incident_date: string
@@ -2214,6 +2330,7 @@ export type Database = {
           fulfilled_acta_id?: string | null
           fulfilled_carta_id?: string | null
           fulfilled_renuncia_id?: string | null
+          fulfilled_rescision_desempeno_id?: string | null
           fulfilled_rescision_id?: string | null
           id?: string
           incident_date: string
@@ -2232,6 +2349,7 @@ export type Database = {
           fulfilled_acta_id?: string | null
           fulfilled_carta_id?: string | null
           fulfilled_renuncia_id?: string | null
+          fulfilled_rescision_desempeno_id?: string | null
           fulfilled_rescision_id?: string | null
           id?: string
           incident_date?: string
@@ -2303,6 +2421,20 @@ export type Database = {
             columns: ["fulfilled_renuncia_id"]
             isOneToOne: false
             referencedRelation: "resignation_packets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_document_requests_fulfilled_rescision_desempeno_id_fkey"
+            columns: ["fulfilled_rescision_desempeno_id"]
+            isOneToOne: false
+            referencedRelation: "rescision_desempeno_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_document_requests_fulfilled_rescision_id_fkey"
+            columns: ["fulfilled_rescision_id"]
+            isOneToOne: false
+            referencedRelation: "rescision_prueba_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -3163,8 +3295,8 @@ export type Database = {
           presentation_url: string | null
           qualified_for_roles: string[]
           raw_email_body: string | null
-          recruiter_notes: string | null
           raw_email_received_at: string | null
+          recruiter_notes: string | null
           referral_source: string | null
           role_interest: string | null
           source: string
@@ -3419,6 +3551,7 @@ export type Database = {
           request_id: string | null
           rfc_snapshot: string | null
           salario_diario_snapshot: number | null
+          salarios_devengados_monto: number | null
           signed_at: string | null
           signed_scan_path: string | null
           supervisor_name_snapshot: string | null
@@ -3451,6 +3584,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           supervisor_name_snapshot?: string | null
@@ -3483,6 +3617,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           supervisor_name_snapshot?: string | null
@@ -3493,7 +3628,57 @@ export type Database = {
           updated_at?: string
           vacaciones_monto?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rescision_desempeno_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_desempeno_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "hr_document_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rescision_prueba_documents: {
         Row: {
@@ -3518,6 +3703,7 @@ export type Database = {
           request_id: string | null
           rfc_snapshot: string | null
           salario_diario_snapshot: number | null
+          salarios_devengados_monto: number | null
           signed_at: string | null
           signed_scan_path: string | null
           supervisor_name_snapshot: string | null
@@ -3550,6 +3736,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           supervisor_name_snapshot?: string | null
@@ -3582,6 +3769,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           supervisor_name_snapshot?: string | null
@@ -3592,7 +3780,57 @@ export type Database = {
           updated_at?: string
           vacaciones_monto?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rescision_prueba_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rescision_prueba_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "hr_document_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       resignation_packets: {
         Row: {
@@ -3616,6 +3854,7 @@ export type Database = {
           request_id: string | null
           rfc_snapshot: string | null
           salario_diario_snapshot: number | null
+          salarios_devengados_monto: number | null
           signed_at: string | null
           signed_scan_path: string | null
           total_en_letras: string | null
@@ -3645,6 +3884,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           total_en_letras?: string | null
@@ -3674,6 +3914,7 @@ export type Database = {
           request_id?: string | null
           rfc_snapshot?: string | null
           salario_diario_snapshot?: number | null
+          salarios_devengados_monto?: number | null
           signed_at?: string | null
           signed_scan_path?: string | null
           total_en_letras?: string | null
@@ -3734,8 +3975,95 @@ export type Database = {
           },
         ]
       }
+      sensitive_data_acknowledgments: {
+        Row: {
+          acknowledged_at: string
+          acknowledged_by: string
+          acknowledged_by_user_id: string | null
+          acknowledgment_text: string
+          context: string
+          hr_document_request_id: string | null
+          id: string
+          organization_id: string
+          subject_employee_id: string | null
+        }
+        Insert: {
+          acknowledged_at?: string
+          acknowledged_by: string
+          acknowledged_by_user_id?: string | null
+          acknowledgment_text: string
+          context: string
+          hr_document_request_id?: string | null
+          id?: string
+          organization_id: string
+          subject_employee_id?: string | null
+        }
+        Update: {
+          acknowledged_at?: string
+          acknowledged_by?: string
+          acknowledged_by_user_id?: string | null
+          acknowledgment_text?: string
+          context?: string
+          hr_document_request_id?: string | null
+          id?: string
+          organization_id?: string
+          subject_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_subject_employee_id_fkey"
+            columns: ["subject_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_subject_employee_id_fkey"
+            columns: ["subject_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sensitive_data_acknowledgments_subject_employee_id_fkey"
+            columns: ["subject_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shift_settings: {
         Row: {
+          break_grace_minutes: number
           campaign_id: string
           days_of_week: number[] | null
           end_time: string
@@ -3747,6 +4075,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          break_grace_minutes?: number
           campaign_id: string
           days_of_week?: number[] | null
           end_time: string
@@ -3758,6 +4087,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          break_grace_minutes?: number
           campaign_id?: string
           days_of_week?: number[] | null
           end_time?: string
@@ -3819,6 +4149,145 @@ export type Database = {
           },
         ]
       }
+      spiff_import_log: {
+        Row: {
+          amount: number
+          applied_at: string
+          id: string
+          invoice_id: string
+          invoice_line_id: string
+          raw_row: Json | null
+          signature: string
+          source: string
+        }
+        Insert: {
+          amount: number
+          applied_at?: string
+          id?: string
+          invoice_id: string
+          invoice_line_id: string
+          raw_row?: Json | null
+          signature: string
+          source?: string
+        }
+        Update: {
+          amount?: number
+          applied_at?: string
+          id?: string
+          invoice_id?: string
+          invoice_line_id?: string
+          raw_row?: Json | null
+          signature?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spiff_import_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiff_import_log_invoice_line_id_fkey"
+            columns: ["invoice_line_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spiffs: {
+        Row: {
+          amount_usd: number
+          billed_at: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          invoice_line_id: string | null
+          organization_id: string
+          reason: string
+          source: string
+          spiff_date: string
+          status: string
+        }
+        Insert: {
+          amount_usd: number
+          billed_at?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          invoice_line_id?: string | null
+          organization_id?: string
+          reason: string
+          source?: string
+          spiff_date: string
+          status?: string
+        }
+        Update: {
+          amount_usd?: number
+          billed_at?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          invoice_line_id?: string | null
+          organization_id?: string
+          reason?: string
+          source?: string
+          spiff_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spiffs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiffs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiffs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiffs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiffs_invoice_line_id_fkey"
+            columns: ["invoice_line_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spiffs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_lead_campaigns: {
         Row: {
           campaign_id: string
@@ -3873,8 +4342,10 @@ export type Database = {
         Row: {
           auto_clocked_out: boolean
           break1_end: string | null
+          break1_late_reason: string | null
           break1_start: string | null
           break2_end: string | null
+          break2_late_reason: string | null
           break2_start: string | null
           clock_in: string
           clock_out: string | null
@@ -3887,6 +4358,7 @@ export type Database = {
           is_late: boolean | null
           late_minutes: number | null
           lunch_end: string | null
+          lunch_late_reason: string | null
           lunch_start: string | null
           shift_end_expected: string | null
           total_hours: number | null
@@ -3894,8 +4366,10 @@ export type Database = {
         Insert: {
           auto_clocked_out?: boolean
           break1_end?: string | null
+          break1_late_reason?: string | null
           break1_start?: string | null
           break2_end?: string | null
+          break2_late_reason?: string | null
           break2_start?: string | null
           clock_in: string
           clock_out?: string | null
@@ -3908,6 +4382,7 @@ export type Database = {
           is_late?: boolean | null
           late_minutes?: number | null
           lunch_end?: string | null
+          lunch_late_reason?: string | null
           lunch_start?: string | null
           shift_end_expected?: string | null
           total_hours?: number | null
@@ -3915,8 +4390,10 @@ export type Database = {
         Update: {
           auto_clocked_out?: boolean
           break1_end?: string | null
+          break1_late_reason?: string | null
           break1_start?: string | null
           break2_end?: string | null
+          break2_late_reason?: string | null
           break2_start?: string | null
           clock_in?: string
           clock_out?: string | null
@@ -3929,6 +4406,7 @@ export type Database = {
           is_late?: boolean | null
           late_minutes?: number | null
           lunch_end?: string | null
+          lunch_late_reason?: string | null
           lunch_start?: string | null
           shift_end_expected?: string | null
           total_hours?: number | null
@@ -4086,6 +4564,82 @@ export type Database = {
           {
             foreignKeyName: "tl_nudges_nudged_by_fkey"
             columns: ["nudged_by"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uptraining_documents: {
+        Row: {
+          created_at: string
+          employee_id: string
+          file_path: string
+          id: string
+          note: string | null
+          organization_id: string
+          original_filename: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          file_path: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          original_filename?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          file_path?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          original_filename?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uptraining_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uptraining_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uptraining_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees_no_pay"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uptraining_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uptraining_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "employees_client_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uptraining_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "employees_no_pay"
             referencedColumns: ["id"]
@@ -4451,6 +5005,18 @@ export type Database = {
           scheduled_end: string
         }[]
       }
+      campaigns_clock_in_alert_times: {
+        Args: never
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          earliest_shift_start: string
+          escalation_fire_time: string
+          grace_minutes: number
+          initial_fire_time: string
+          tz: string
+        }[]
+      }
       campaigns_digest_fire_times: {
         Args: never
         Returns: {
@@ -4642,6 +5208,7 @@ export type Database = {
       is_client: { Args: never; Returns: boolean }
       is_leadership: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
+      is_owner_or_admin: { Args: never; Returns: boolean }
       is_team_lead: { Args: never; Returns: boolean }
       mark_review_notification_sent: {
         Args: {
@@ -4752,6 +5319,7 @@ export type Database = {
         Args: { p_employee_id: string }
         Returns: boolean
       }
+      unaccent: { Args: { "": string }; Returns: string }
       update_employee_personal_info: {
         Args: {
           p_address?: string
@@ -4932,6 +5500,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       employment_status: ["active", "terminated", "resigned", "on_leave"],

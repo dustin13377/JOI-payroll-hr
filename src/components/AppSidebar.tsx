@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Megaphone,
   UserPlus,
+  Banknote,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,6 +53,7 @@ const leadershipItems = [
   { title: "Payroll", url: "/admin/payroll", icon: DollarSign },
   { title: "Payroll History", url: "/historial", icon: History },
   { title: "Invoices (USD)", url: "/facturas", icon: FileText },
+  { title: "Spiffs", url: "/spiffs", icon: Banknote },
   { title: "Campaigns", url: "/campaigns", icon: Building2 },
   { title: "Recruiting", url: "/recruiting", icon: UserPlus },
   { title: "My Policies", url: "/policies", icon: ScrollText },
@@ -80,6 +82,7 @@ const teamLeadItems = [
   { title: "Home", url: "/", icon: LayoutDashboard },
   { title: "My Team", url: "/asistencia", icon: Users },
   { title: "30-Day Reviews", url: "/reviews", icon: ClipboardEdit },
+  { title: "Spiffs", url: "/spiffs", icon: Banknote },
   // TLs approve their team's pending time-off in the Approvals card on Home.
   // "Request Time Off" below is for the TL's own submissions (TLs are still
   // employees who can request leave like anyone else).
