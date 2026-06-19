@@ -440,3 +440,62 @@ export function useUpdateBillRate() {
 
 export const fmtUSD = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+/* ----------------------------------------------------------------- */
+/*  Spiff attachment / detachment                                      */
+/* ----------------------------------------------------------------- */
+
+export interface AttachSpiffsResult {
+  attached_count: number;
+  attached_total_usd: number;
+  orphan_count: number;
+}
+
+export interface DetachSpiffsResult {
+  detached_count: number;
+  detached_total_usd: number;
+}
+
+/**
+ * Attach pending spiffs for a draft invoice's client + week to
+ * the matching agent lines. Idempotent — safe to call any time.
+ * Invalidates ["invoice", invoiceId] on success.
+ */
+export function useAttachSpiffs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (invoiceId: string): Promise<AttachSpiffsResult> => {
+      const { data, error } = await supabase.rpc("attach_pending_spiffs", {
+        p_invoice_id: invoiceId,
+      });
+      if (error) throw error;
+      // RPC returns a set-returning function; result is an array with one row.
+      return (data as AttachSpiffsResult[])[0] ?? { attached_count: 0, attached_total_usd: 0, orphan_count: 0 };
+    },
+    onSuccess: (_result, invoiceId) => {
+      qc.invalidateQueries({ queryKey: ["invoice", invoiceId] });
+    },
+  });
+}
+
+/**
+ * Detach all billed spiffs from an invoice's lines, resetting them
+ * to 'pending'. Called before unlocking a sent invoice to draft.
+ * Guards server-side against paid invoices.
+ */
+export function useDetachSpiffs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (invoiceId: string): Promise<DetachSpiffsResult> => {
+      const { data, error } = await supabase.rpc("detach_invoice_spiffs", {
+        p_invoice_id: invoiceId,
+      });
+      if (error) throw error;
+      return (data as DetachSpiffsResult[])[0] ?? { detached_count: 0, detached_total_usd: 0 };
+    },
+    onSuccess: (_result, invoiceId) => {
+      qc.invalidateQueries({ queryKey: ["invoice", invoiceId] });
+      qc.invalidateQueries({ queryKey: ["spiffs-week"] });
+    },
+  });
+}

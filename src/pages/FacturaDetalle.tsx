@@ -8,7 +8,7 @@
  * and hard-locked once paid.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useInvoice,
@@ -17,6 +17,8 @@ import {
   useUpdateInvoiceLine,
   useDeleteInvoiceLine,
   useAddInvoiceLine,
+  useAttachSpiffs,
+  useDetachSpiffs,
   fmtUSD,
   type InvoiceLine,
 } from "@/hooks/useInvoices";
@@ -67,6 +69,31 @@ export default function FacturaDetalle() {
   const navigate = useNavigate();
   const { data: invoice, isLoading } = useInvoice(id);
   const updateStatus = useUpdateInvoiceStatus();
+  const attachSpiffs = useAttachSpiffs();
+  const detachSpiffs = useDetachSpiffs();
+
+  // Auto-attach pending spiffs whenever a draft invoice loads.
+  // Idempotent — re-running is safe. Only fires once per invoice.id.
+  const attachedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!invoice || invoice.status !== "draft") return;
+    if (attachedForRef.current === invoice.id) return;
+    attachedForRef.current = invoice.id;
+    attachSpiffs.mutate(invoice.id, {
+      onSuccess: (result) => {
+        if (result.attached_count > 0) {
+          toast.success(
+            `${result.attached_count} spiff${result.attached_count !== 1 ? "s" : ""} attached ($${Number(result.attached_total_usd).toFixed(2)})`
+          );
+        }
+        if (result.orphan_count > 0) {
+          toast.warning(
+            `${result.orphan_count} pending spiff${result.orphan_count !== 1 ? "s" : ""} couldn't be matched — the agent may not have a line on this invoice`
+          );
+        }
+      },
+    });
+  }, [invoice?.id, invoice?.status]);
 
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [showAddMisc, setShowAddMisc] = useState(false);
@@ -349,12 +376,20 @@ export default function FacturaDetalle() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await detachSpiffs.mutateAsync(invoice.id);
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : "Failed to detach spiffs");
+                  setShowUnlockConfirm(false);
+                  return;
+                }
                 handleStatusChange("draft");
                 setShowUnlockConfirm(false);
               }}
+              disabled={detachSpiffs.isPending}
             >
-              Unlock
+              {detachSpiffs.isPending ? "Detaching…" : "Unlock"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

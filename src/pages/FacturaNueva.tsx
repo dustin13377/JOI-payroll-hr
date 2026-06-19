@@ -6,7 +6,7 @@
  * that already have an invoice for the chosen week are skipped automatically.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   useWeeklyPreview,
@@ -17,7 +17,6 @@ import {
 } from "@/hooks/useInvoices";
 import { supabase } from "@/integrations/supabase/client";
 import { lastCompletedWeek, parseLocalDate, getWeekRange, todayLocal } from "@/lib/localDate";
-import { PreviewSpiffUploadDialog } from "@/components/PreviewSpiffUploadDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,10 +45,6 @@ export default function FacturaNueva() {
   const { data: preview = [], isLoading, error, refetch, isFetching } = useWeeklyPreview(monday, sunday);
   const generate = useGenerateWeekly();
 
-  // Spiffs staged in memory before generation. Keyed by employees.id (UUID).
-  // Applied to invoice lines AFTER the generate RPC creates them.
-  const [stagedSpiffs, setStagedSpiffs] = useState<Map<string, number>>(new Map());
-
   // Employees the user has chosen to exclude from this week's invoices.
   // Lines get created by the RPC regardless (it doesn't take an exclusion list),
   // then we delete the skipped ones immediately after generation. If a client
@@ -64,36 +59,26 @@ export default function FacturaNueva() {
     });
   }
 
-  // When the week changes, the staged spiffs no longer apply.
-  function clearSpiffsOnWeekChange() {
-    if (stagedSpiffs.size > 0) {
-      setStagedSpiffs(new Map());
-      toast.info("Cleared staged spiffs (week changed).");
-    }
-    if (skippedEmployeeIds.size > 0) setSkippedEmployeeIds(new Set());
-  }
-
   function shiftWeek(direction: -1 | 1) {
-    clearSpiffsOnWeekChange();
+    if (skippedEmployeeIds.size > 0) setSkippedEmployeeIds(new Set());
     const m = parseLocalDate(monday);
     m.setDate(m.getDate() + 7 * direction);
     setMonday(getWeekRange(m).monday);
   }
 
   function jumpToToday() {
-    clearSpiffsOnWeekChange();
+    if (skippedEmployeeIds.size > 0) setSkippedEmployeeIds(new Set());
     setMonday(lastCompletedWeek().monday);
   }
 
   function onPickDate(d: string) {
     if (!d) return;
-    clearSpiffsOnWeekChange();
+    if (skippedEmployeeIds.size > 0) setSkippedEmployeeIds(new Set());
     setMonday(getWeekRange(d).monday);
   }
 
   const eligible = preview.filter((c) => !c.existing_invoice_id);
   const alreadyDone = preview.filter((c) => c.existing_invoice_id);
-  const stagedSpiffsTotal = Array.from(stagedSpiffs.values()).reduce((s, v) => s + v, 0);
   // Subtract the projected value of any rows the user has skipped — so the
   // summary chip reflects what'll actually post.
   const skippedAmount = eligible.reduce((sum, c) => {
@@ -103,7 +88,7 @@ export default function FacturaNueva() {
       return s + Number(l.days_worked) * Number(l.daily_bill_rate);
     }, 0);
   }, 0);
-  const totalAcrossEligible = eligible.reduce((s, c) => s + c.total_amount, 0) + stagedSpiffsTotal - skippedAmount;
+  const totalAcrossEligible = eligible.reduce((s, c) => s + c.total_amount, 0) - skippedAmount;
   const totalLines = eligible.reduce(
     (s, c) => s + c.lines.filter((l) => !skippedEmployeeIds.has(l.employee_id)).length,
     0,
@@ -147,43 +132,9 @@ export default function FacturaNueva() {
         }
       }
 
-      // Apply any staged spiffs to the newly-created invoice lines.
-      let spiffsApplied = 0;
-      if (result.length > 0 && stagedSpiffs.size > 0) {
-        const invoiceIds = result.map((r) => r.invoice_id);
-        const { data: lines, error: linesErr } = await supabase
-          .from("invoice_lines")
-          .select("id, employee_id, days_worked, holiday_days, unit_price, is_flat_total, total_price")
-          .in("invoice_id", invoiceIds);
-        if (linesErr) throw linesErr;
-
-        for (const line of lines || []) {
-          // Skip lines the user excluded — they were already deleted above, but
-          // the in-flight `lines` list is from before the delete, so guard here too.
-          if (line.employee_id && skippedEmployeeIds.has(line.employee_id)) continue;
-          const spiff = line.employee_id ? stagedSpiffs.get(line.employee_id) : undefined;
-          if (!spiff || spiff <= 0) continue;
-          const days = Number(line.days_worked);
-          const holiday = Number(line.holiday_days);
-          const unit = Number(line.unit_price);
-          // `days` already includes holiday days; holiday adds 2× premium on top.
-          const total = (days * unit) + (holiday * unit * 2);
-          const total_price = line.is_flat_total
-            ? Number(line.total_price)
-            : total + spiff;
-          const { error: updErr } = await supabase
-            .from("invoice_lines")
-            .update({ spiffs: spiff, total, total_price })
-            .eq("id", line.id);
-          if (updErr) throw updErr;
-          spiffsApplied++;
-        }
-      }
-
-      const totalDollars = result.reduce((s, r) => s + Number(r.total_amount), 0) + stagedSpiffsTotal - skippedAmount;
+      const totalDollars = result.reduce((s, r) => s + Number(r.total_amount), 0) - skippedAmount;
       const draftsRemaining = result.length - emptyInvoicesDeleted;
       const extras: string[] = [];
-      if (spiffsApplied > 0) extras.push(`${spiffsApplied} with spiffs`);
       if (skippedDeleted > 0) extras.push(`${skippedDeleted} line${skippedDeleted === 1 ? "" : "s"} skipped`);
       if (emptyInvoicesDeleted > 0) extras.push(`${emptyInvoicesDeleted} empty draft${emptyInvoicesDeleted === 1 ? "" : "s"} removed`);
       const extrasStr = extras.length > 0 ? `, ${extras.join(", ")}` : "";
@@ -192,7 +143,6 @@ export default function FacturaNueva() {
           ? "Nothing to generate — all clients already have invoices for this week."
           : `Generated ${draftsRemaining} ${draftsRemaining === 1 ? "draft" : "drafts"} (${totalDollars.toLocaleString("en-US", { style: "currency", currency: "USD" })} total)${extrasStr}. Review and send.`
       );
-      setStagedSpiffs(new Map());
       setSkippedEmployeeIds(new Set());
       navigate("/facturas");
     } catch (e) {
@@ -206,23 +156,12 @@ export default function FacturaNueva() {
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices
       </Button>
 
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-2xl font-bold">Generate week</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Pulls days worked from the time clock and bill rates from each employee's profile.
-            One draft per client. Edit anything before sending.
-          </p>
-        </div>
-        {preview.length > 0 && eligible.length > 0 && (
-          <PreviewSpiffUploadDialog
-            preview={preview}
-            weekStart={monday}
-            weekEnd={sunday}
-            stagedSpiffs={stagedSpiffs}
-            onApply={setStagedSpiffs}
-          />
-        )}
+      <div>
+        <h2 className="text-2xl font-bold">Generate week</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Pulls days worked from the time clock and bill rates from each employee's profile.
+          One draft per client. Edit anything before sending.
+        </p>
       </div>
 
       {/* Week picker */}
@@ -293,10 +232,6 @@ export default function FacturaNueva() {
             <CardContent className="py-4 grid grid-cols-2 md:grid-cols-5 gap-4">
               <Stat label="Clients ready" value={eligible.length.toString()} />
               <Stat label="Total lines" value={totalLines.toString()} />
-              <Stat
-                label="Staged spiffs"
-                value={stagedSpiffs.size > 0 ? `${stagedSpiffs.size} · ${fmtUSD(stagedSpiffsTotal)}` : "—"}
-              />
               <Stat label="Projected total" value={fmtUSD(totalAcrossEligible)} accent />
               <Stat label="Skipped (already invoiced)" value={alreadyDone.length.toString()} />
             </CardContent>
@@ -308,15 +243,6 @@ export default function FacturaNueva() {
               <ClientPreviewCard
                 key={c.client_id}
                 preview={c}
-                stagedSpiffs={stagedSpiffs}
-                onUpdateSpiff={(empId, amount) => {
-                  setStagedSpiffs((prev) => {
-                    const next = new Map(prev);
-                    if (amount > 0) next.set(empId, amount);
-                    else next.delete(empId);
-                    return next;
-                  });
-                }}
                 skippedEmployeeIds={skippedEmployeeIds}
                 onToggleSkip={toggleSkip}
               />
@@ -366,14 +292,10 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 function ClientPreviewCard({
   preview,
-  stagedSpiffs,
-  onUpdateSpiff,
   skippedEmployeeIds,
   onToggleSkip,
 }: {
   preview: ClientPreview;
-  stagedSpiffs: Map<string, number>;
-  onUpdateSpiff: (employeeId: string, amount: number) => void;
   skippedEmployeeIds: Set<string>;
   onToggleSkip: (empId: string) => void;
 }) {
@@ -381,19 +303,6 @@ function ClientPreviewCard({
   const navigate = useNavigate();
 
   const alreadyExists = !!preview.existing_invoice_id;
-
-  // Spiffs that match an employee on this client's lines (skipped ones excluded —
-  // a skipped row's spiff money won't apply either).
-  const clientSpiffs = useMemo(() => {
-    const out = new Map<string, number>();
-    for (const l of preview.lines) {
-      if (skippedEmployeeIds.has(l.employee_id)) continue;
-      const s = stagedSpiffs.get(l.employee_id);
-      if (s && s > 0) out.set(l.employee_id, s);
-    }
-    return out;
-  }, [preview.lines, stagedSpiffs, skippedEmployeeIds]);
-  const clientSpiffsTotal = Array.from(clientSpiffs.values()).reduce((s, v) => s + v, 0);
 
   // Per-client subtotal excluding skipped lines.
   const skippedAmountForClient = useMemo(() => {
@@ -403,7 +312,7 @@ function ClientPreviewCard({
       return sum + Number(l.days_worked) * Number(l.daily_bill_rate);
     }, 0);
   }, [preview.lines, skippedEmployeeIds]);
-  const projectedClientTotal = preview.total_amount + clientSpiffsTotal - skippedAmountForClient;
+  const projectedClientTotal = preview.total_amount - skippedAmountForClient;
   const skippedCount = preview.lines.filter((l) => skippedEmployeeIds.has(l.employee_id)).length;
 
   return (
@@ -438,19 +347,11 @@ function ClientPreviewCard({
               </div>
               <p className="text-xs text-muted-foreground">
                 {preview.line_count} agent{preview.line_count === 1 ? "" : "s"} · {preview.total_days} day{preview.total_days === 1 ? "" : "s"}
-                {clientSpiffsTotal > 0 && (
-                  <> · <span className="text-green-700">+{fmtUSD(clientSpiffsTotal)} spiffs</span></>
-                )}
               </p>
             </div>
           </div>
           <div className="text-right">
             <p className="font-semibold text-lg">{fmtUSD(projectedClientTotal)}</p>
-            {clientSpiffsTotal > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {fmtUSD(preview.total_amount)} + {fmtUSD(clientSpiffsTotal)}
-              </p>
-            )}
             {alreadyExists && (
               <button
                 type="button"
@@ -475,7 +376,6 @@ function ClientPreviewCard({
                   <TableHead>Campaign</TableHead>
                   <TableHead className="text-right">Days</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Spiff</TableHead>
                   <TableHead className="text-right">Subtotal</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
@@ -483,7 +383,6 @@ function ClientPreviewCard({
               <TableBody>
                 {preview.lines.map((l) => {
                   const isSkipped = skippedEmployeeIds.has(l.employee_id);
-                  const spiff = clientSpiffs.get(l.employee_id) ?? 0;
                   const SkipButton = (
                     <button
                       type="button"
@@ -516,22 +415,18 @@ function ClientPreviewCard({
                         <TableCell><span className="text-xs italic text-muted-foreground">flat bill</span></TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right text-muted-foreground">—</TableCell>
-                        <TableCell className="text-right text-muted-foreground">—</TableCell>
                         <TableCell className="text-right font-medium">{fmtUSD(l.flat_amount)}</TableCell>
                         <TableCell className="text-right no-underline">{SkipButton}</TableCell>
                       </TableRow>
                     );
                   }
-                  const base = l.days_worked * l.daily_bill_rate;
-                  const subtotal = base + spiff;
+                  const subtotal = l.days_worked * l.daily_bill_rate;
                   const isMissingRate = l.daily_bill_rate === 0;
                   const rowClass = isSkipped
                     ? "bg-muted/40 opacity-50 line-through"
                     : isMissingRate
                       ? "bg-amber-100 hover:bg-amber-200/80 border-l-4 border-amber-500"
-                      : spiff > 0
-                        ? "bg-green-50/40"
-                        : "";
+                      : "";
                   return (
                     <TableRow key={l.employee_id} className={rowClass}>
                       <TableCell className={isSkipped ? "font-medium" : isMissingRate ? "font-semibold text-amber-900" : "font-medium"}>
@@ -561,15 +456,6 @@ function ClientPreviewCard({
                           employeeId={l.employee_id}
                           employeeName={l.employee_name}
                           currentRate={l.daily_bill_rate}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <InlineSpiffEditor
-                          employeeId={l.employee_id}
-                          employeeName={l.employee_name}
-                          currentSpiff={spiff}
-                          disabled={isSkipped}
-                          onChange={onUpdateSpiff}
                         />
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -678,80 +564,3 @@ function InlineRateEditor({
   );
 }
 
-/**
- * Editable spiff cell. Writes to the in-memory stagedSpiffs map on the parent
- * page — nothing hits the DB until "Generate all drafts" runs (same path as
- * the CSV uploader uses). Empty / 0 clears the spiff for that employee.
- */
-function InlineSpiffEditor({
-  employeeId,
-  employeeName,
-  currentSpiff,
-  disabled,
-  onChange,
-}: {
-  employeeId: string;
-  employeeName: string;
-  currentSpiff: number;
-  disabled?: boolean;
-  onChange: (employeeId: string, amount: number) => void;
-}) {
-  const [value, setValue] = useState(currentSpiff > 0 ? String(currentSpiff) : "");
-
-  // If the parent's stagedSpiffs map changes from elsewhere (CSV upload, week
-  // change, skip toggle), keep the input in sync.
-  const lastSeen = useRef(currentSpiff);
-  if (lastSeen.current !== currentSpiff) {
-    lastSeen.current = currentSpiff;
-    const synced = currentSpiff > 0 ? String(currentSpiff) : "";
-    if (synced !== value) setValue(synced);
-  }
-
-  const commit = () => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      if (currentSpiff > 0) {
-        onChange(employeeId, 0);
-        toast.success(`Cleared spiff for ${employeeName}`);
-      }
-      return;
-    }
-    const n = Number(trimmed);
-    if (Number.isNaN(n) || n < 0) {
-      toast.error("Spiff must be 0 or a positive number");
-      setValue(currentSpiff > 0 ? String(currentSpiff) : "");
-      return;
-    }
-    if (n === currentSpiff) return;
-    onChange(employeeId, n);
-    if (n > 0) toast.success(`Set ${employeeName}'s spiff to ${fmtUSD(n)}`);
-  };
-
-  return (
-    <div className="flex items-center justify-end gap-1">
-      <span className={`text-sm ${currentSpiff > 0 ? "text-green-700 font-medium" : "text-muted-foreground"}`}>$</span>
-      <Input
-        type="number"
-        min={0}
-        step="any"
-        placeholder="0"
-        value={value}
-        disabled={disabled}
-        onChange={(e) => setValue(e.currentTarget.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.currentTarget.blur();
-          } else if (e.key === "Escape") {
-            setValue(currentSpiff > 0 ? String(currentSpiff) : "");
-            e.currentTarget.blur();
-          }
-        }}
-        onClick={(e) => e.stopPropagation()}
-        className={`h-7 w-24 text-right text-sm ${
-          currentSpiff > 0 ? "border-green-400 focus-visible:ring-green-500" : ""
-        }`}
-      />
-    </div>
-  );
-}

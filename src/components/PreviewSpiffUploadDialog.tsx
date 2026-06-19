@@ -1,4 +1,9 @@
 /**
+ * @deprecated No longer used. See BulkSpiffUploadDialog for context.
+ * Delete this file in a follow-up cleanup.
+ */
+
+/**
  * Preview-mode spiff upload. Used on /facturas/nueva BEFORE invoices are
  * generated. CSV rows match against the in-memory preview lines (one row per
  * employee per client) and feed back into the parent's staged-spiffs Map.
