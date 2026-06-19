@@ -54,6 +54,7 @@ import PayrollAgent from "@/pages/admin/PayrollAgent";
 import PayrollHolidays from "@/pages/admin/PayrollHolidays";
 import ClientHolidays from "@/pages/admin/ClientHolidays";
 import PayrollPeriods from "@/pages/admin/PayrollPeriods";
+import Spiffs from "@/pages/Spiffs";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
@@ -158,6 +159,7 @@ const App = () => (
                         (Missing Yesterday, Submit-for-agent) moved into
                         TodaysRosterCard on the TL home. */}
                     <Route path="/reviews" element={<RequireTeamLeadOrAbove><AgentReviews /></RequireTeamLeadOrAbove>} />
+                    <Route path="/spiffs" element={<RequireTeamLeadOrAbove><Spiffs /></RequireTeamLeadOrAbove>} />
                     <Route path="/settings/shifts" element={<RequireTeamLeadOrAbove><ShiftSettings /></RequireTeamLeadOrAbove>} />
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
                     <Route path="/recruiting" element={<RequireLeadership><Recruiting /></RequireLeadership>} />
