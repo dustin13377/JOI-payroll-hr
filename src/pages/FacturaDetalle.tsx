@@ -52,12 +52,14 @@ const statusLabels: Record<string, string> = {
   draft: "Draft",
   sent: "Sent",
   paid: "Paid",
+  paid_monthly: "Paid Monthly",
 };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   sent: "bg-primary/15 text-primary",
   paid: "bg-green-100 text-green-700",
+  paid_monthly: "bg-teal-100 text-teal-700",
 };
 
 export default function FacturaDetalle() {
@@ -110,8 +112,10 @@ export default function FacturaDetalle() {
   // Lock state — drives whether editors render or just show values.
   // "sent" can be unlocked back to draft; "paid" is hard-locked.
   const isPaid = invoice.status === "paid";
+  const isPaidMonthly = invoice.status === "paid_monthly";
+  const isTerminal = isPaid || isPaidMonthly; // closed out — hard-locked, no unlock
   const isSent = invoice.status === "sent";
-  const isLocked = isPaid || isSent;
+  const isLocked = isTerminal || isSent;
 
   // Compute invoice-days vs punch-days mismatches across all punch-billed
   // lines. Used by the download flow.
@@ -166,6 +170,7 @@ export default function FacturaDetalle() {
         onSuccess: () => {
           if (status === "sent") toast.success("Invoice marked as sent");
           else if (status === "paid") toast.success("Invoice marked as paid");
+          else if (status === "paid_monthly") toast.success("Invoice marked as paid (monthly)");
           else if (status === "draft") toast.success("Invoice unlocked for editing");
         },
         onError: (err: any) => toast.error(err.message),
@@ -205,6 +210,13 @@ export default function FacturaDetalle() {
               >
                 <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleStatusChange("paid_monthly")}
+                disabled={updateStatus.isPending}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid (Monthly)
+              </Button>
             </>
           )}
           <Button
@@ -227,14 +239,14 @@ export default function FacturaDetalle() {
       {isLocked && (
         <div
           className={`flex items-center gap-2 rounded-md border p-3 text-sm print:hidden ${
-            isPaid
+            isTerminal
               ? "border-green-200 bg-green-50 text-green-900"
               : "border-amber-200 bg-amber-50 text-amber-900"
           }`}
         >
           <Lock className="h-4 w-4 shrink-0" />
-          {isPaid ? (
-            <span>This invoice is marked <strong>paid</strong> and can no longer be edited.</span>
+          {isTerminal ? (
+            <span>This invoice is marked <strong>{isPaidMonthly ? "paid (monthly)" : "paid"}</strong> and can no longer be edited.</span>
           ) : (
             <span>
               This invoice has been <strong>sent</strong> to the client. Click{" "}
