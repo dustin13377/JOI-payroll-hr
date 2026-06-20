@@ -76,3 +76,34 @@ the live Spiffs page). Help me: apply migrations, reconcile spiffs, deploy the e
 function + set PAYSTUB_SMTP=gmail, verify one quincena, then retire the legacy
 weekly payroll. Don't drop anything destructive without confirming with me first.
 ```
+
+---
+
+## Deployment status — D, 2026-06-19 (post-merge)
+
+PRs **#93** (base monthly/2) and **#102** (this rebuild) merged to `main`. Verified
+against live prod `joi-hr` (`jpaihltkrohdqkqlbqkf`) and deployed the safe pieces:
+
+**Applied / deployed:**
+- `20260619000001_prepay_lines_snapshot.sql` — applied (RLS on, owner/admin policy,
+  index present). New Pre-Payroll screen + history are fully functional.
+- `send-paystubs` edge function — deployed (v2, JWT-verified) and **tested live**:
+  a throwaway locked `2099-12-TEST` period sent one paystub successfully, then was
+  torn down. `PAYSTUB_SMTP=gmail` secret is set, so real sends are active.
+
+**Intentionally NOT applied (held until cutover):**
+- `20260618000001_payroll_quincenal_base.sql` — the new screen computes base in TS
+  (`payrollEngine.ts`), so it does NOT need this. Its only effect is changing the
+  **legacy weekly** `_calc_pay_components` from monthly/4 → monthly/2. Apply this
+  only when retiring the legacy weekly screen, so old/new don't show conflicting math.
+- `20260619000002_spiffs.sql` — **skipped on purpose.** Prod already has a `spiffs`
+  table (from the live Spiffs page) whose columns satisfy the payroll read query.
+  The migration is `CREATE TABLE IF NOT EXISTS` = a no-op on prod. Do NOT drop/
+  recreate the prod table.
+
+**Integration note:** legacy and new payroll share `payroll_periods` but use different
+status vocab (legacy: OPEN/PAID; new: OPEN/LOCKED). While both screens coexist, avoid
+closing periods via the legacy screen mid-cycle — it can confuse the new screen's
+"current period" lookup.
+
+**Still open:** retire the legacy weekly payroll (destructive — its own reviewed step).
