@@ -323,14 +323,6 @@ export default function HrDocumentDraft() {
     if (formDirty.current) return;
     if (draft) {
       const state = draftToFormState(draft);
-      // Auto-seed reincidencia if draft has none but a prior carta exists
-      if (
-        draft.type === "acta" &&
-        !state.reincidenciaPriorCartaId &&
-        priorCarta
-      ) {
-        state.reincidenciaPriorCartaId = priorCarta.id;
-      }
       // Backfill any empty snapshot fields from live employee/company data
       if (snapshotSeed) {
         if (!state.trabajadorNameSnapshot) state.trabajadorNameSnapshot = snapshotSeed.trabajadorNameSnapshot;
