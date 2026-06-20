@@ -54,6 +54,8 @@ import PayrollAgent from "@/pages/admin/PayrollAgent";
 import PayrollHolidays from "@/pages/admin/PayrollHolidays";
 import ClientHolidays from "@/pages/admin/ClientHolidays";
 import PayrollPeriods from "@/pages/admin/PayrollPeriods";
+import PrePayroll from "@/pages/admin/PrePayroll";
+import PrepayHistory from "@/pages/admin/PrepayHistory";
 import Spiffs from "@/pages/Spiffs";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -182,6 +184,8 @@ const App = () => (
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
                     {/* Payroll — owner-only. RLS also locked to is_owner() on payroll_* tables. */}
                     <Route path="/admin/payroll" element={<RequireOwner><Payroll /></RequireOwner>} />
+                    <Route path="/admin/payroll/prepay" element={<RequireOwner><PrePayroll /></RequireOwner>} />
+                    <Route path="/admin/payroll/prepay/history" element={<RequireOwner><PrepayHistory /></RequireOwner>} />
                     <Route path="/admin/payroll/week/:weekId" element={<RequireOwner><PayrollWeek /></RequireOwner>} />
                     <Route path="/admin/payroll/rates" element={<RequireOwner><PayrollRates /></RequireOwner>} />
                     <Route path="/admin/payroll/agent/:id" element={<RequireOwner><PayrollAgent /></RequireOwner>} />

@@ -13,7 +13,19 @@ export interface ComputedPayroll {
   sundayPremiumEarned: boolean;
   holidayDaysWorked: number;
   extraDaysWorked: number;
+  sundaysWorked: number;
+  timeOffDays: number;
+  days: { date: string; dow: number; status: PayrollDayStatus }[];
 }
+
+export type PayrollDayStatus =
+  | "off"
+  | "worked"
+  | "missed"
+  | "vacation"
+  | "holiday"
+  | "holiday_worked"
+  | "extra";
 
 /** Format a Date as "YYYY-MM-DD" without UTC shift. */
 function fmtDate(d: Date): string {
@@ -215,6 +227,26 @@ export function usePayrollComputed(
           if (!scheduledDays.has(d) && !holidaySet.has(d)) extraDaysWorked++;
         }
 
+        // Sundays actually worked (count, for prima dominical)
+        let sundaysWorked = 0;
+        for (const d of clocked) {
+          if (parseDate(d).getDay() === 0) sundaysWorked++;
+        }
+
+        // Per-day statuses for the calendar bar
+        const days = allDates.map((d) => {
+          const dow = parseDate(d).getDay();
+          let status: PayrollDayStatus;
+          if (holidaySet.has(d)) {
+            status = clocked.has(d) ? "holiday_worked" : "holiday";
+          } else if (scheduledDays.has(d)) {
+            status = clocked.has(d) ? "worked" : timeOff.has(d) ? "vacation" : "missed";
+          } else {
+            status = clocked.has(d) ? "extra" : timeOff.has(d) ? "vacation" : "off";
+          }
+          return { date: d, dow, status };
+        });
+
         const campaignObj = emp.campaigns as { name: string } | null;
 
         return {
@@ -229,6 +261,9 @@ export function usePayrollComputed(
           sundayPremiumEarned,
           holidayDaysWorked,
           extraDaysWorked,
+          sundaysWorked,
+          timeOffDays: timeOff.size,
+          days,
         };
       });
 
