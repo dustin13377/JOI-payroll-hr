@@ -22,7 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "MXN" });
 
-const PAGE_OPTIONS = [15, 30, 60, 100];
+const PAGE_OPTIONS = [15, 50, 100];
 
 // Anyone with a hire_date within this window is considered a "New Hire"
 // and shows up in the New Hires tab. After day 30 they auto-move to Active.

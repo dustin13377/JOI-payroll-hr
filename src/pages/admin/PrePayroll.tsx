@@ -24,7 +24,11 @@ import {
   Gift,
   Undo2,
   Lock,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentPayPeriod } from "@/hooks/usePayroll";
 import { usePayrollComputed } from "@/hooks/usePayrollComputed";
 import { usePrepayLock } from "@/hooks/usePrepayLock";
@@ -111,9 +115,13 @@ function Chip({ icon, label, value, sign = "", sub }: ChipProps) {
   );
 }
 
+const PAGE_OPTIONS = [15, 50, 100];
+
 export default function PrePayroll() {
   const { data: period, isLoading: periodLoading, error: periodError } = useCurrentPayPeriod();
   const [half, setHalf] = useState<"pp1" | "pp2" | null>(null);
+  const [pageSize, setPageSize] = useState(15);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const monthInfo = useMemo(() => {
     if (!period) return null;
@@ -199,6 +207,10 @@ export default function PrePayroll() {
   }, [computed, spiffUsdByEmp]);
 
   const grand = rows.reduce((s, x) => s + x.r.net, 0);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   async function handleLock() {
     if (!period || !sel || !monthInfo) return;
@@ -303,7 +315,7 @@ export default function PrePayroll() {
         {(["pp1", "pp2"] as const).map((h) => (
           <button
             key={h}
-            onClick={() => setHalf(h)}
+            onClick={() => { setHalf(h); setCurrentPage(1); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               activeHalf === h ? "bg-background shadow-sm font-medium" : "text-muted-foreground"
             }`}
@@ -352,7 +364,7 @@ export default function PrePayroll() {
         </div>
       ) : (
         <div className="space-y-3">
-          {rows.map(({ c, r, makeupDays, overtimeDays, bar, spiffUsd }) => (
+          {paginatedRows.map(({ c, r, makeupDays, overtimeDays, bar, spiffUsd }) => (
             <div key={c.employeeId} className="bg-card border rounded-xl p-4">
               <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
                 <div>
@@ -398,6 +410,44 @@ export default function PrePayroll() {
           )}
         </div>
       )}
+
+      {/* Pagination — client-side slice of already-loaded rows */}
+      {/* TODO: switch to server-side .range() if this exceeds ~2k rows */}
+      {!computedLoading && rows.length > 0 && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, rows.length)} of {rows.length}
+            </span>
+            <span className="mx-2">|</span>
+            <span>Rows per page:</span>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[70px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <Button key={p} variant={p === safePage ? "default" : "outline"} size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p)}>
+                {p}
+              </Button>
+            ))}
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
