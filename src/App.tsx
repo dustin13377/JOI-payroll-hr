@@ -26,7 +26,6 @@ import ShiftSettings from "@/pages/ShiftSettings";
 import Campaigns from "@/pages/Campaigns";
 import Recruiting from "@/pages/Recruiting";
 import CampaignDetail from "@/pages/CampaignDetail";
-import PayrollRun from "@/pages/PayrollRun";
 import TeamLeadHome from "@/pages/TeamLeadHome";
 import Account from "@/pages/Account";
 import DocumentTypes from "@/pages/DocumentTypes";
@@ -47,13 +46,10 @@ import ProvisionOrg from "@/pages/ProvisionOrg";
 import AgentReviews from "@/pages/AgentReviews";
 import SystemUsers from "@/pages/SystemUsers";
 import Comunicados from "@/pages/Comunicados";
-import Payroll from "@/pages/admin/Payroll";
-import PayrollWeek from "@/pages/admin/PayrollWeek";
 import PayrollRates from "@/pages/admin/PayrollRates";
 import PayrollAgent from "@/pages/admin/PayrollAgent";
 import PayrollHolidays from "@/pages/admin/PayrollHolidays";
 import ClientHolidays from "@/pages/admin/ClientHolidays";
-import PayrollPeriods from "@/pages/admin/PayrollPeriods";
 import PrePayroll from "@/pages/admin/PrePayroll";
 import PrepayHistory from "@/pages/admin/PrepayHistory";
 import Spiffs from "@/pages/Spiffs";
@@ -166,8 +162,6 @@ const App = () => (
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
                     <Route path="/recruiting" element={<RequireLeadership><Recruiting /></RequireLeadership>} />
                     <Route path="/campaigns/:id" element={<RequireLeadership><CampaignDetail /></RequireLeadership>} />
-                    {/* Legacy payroll run — owner-only (kept accessible until Phase 4c cleanup). */}
-                    <Route path="/payroll-run" element={<RequireOwner><PayrollRun /></RequireOwner>} />
                     <Route path="/settings/document-types" element={<RequireLeadership><DocumentTypes /></RequireLeadership>} />
                     <Route path="/settings/departments" element={<RequireLeadership><Departments /></RequireLeadership>} />
                     <Route path="/settings/policies" element={<RequireLeadership><Policies /></RequireLeadership>} />
@@ -182,16 +176,14 @@ const App = () => (
                     <Route path="/comunicados" element={<Comunicados />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
-                    {/* Payroll — owner-only. RLS also locked to is_owner() on payroll_* tables. */}
-                    <Route path="/admin/payroll" element={<RequireOwner><Payroll /></RequireOwner>} />
+                    {/* Payroll — owner-only. Entry point is Pre-Payroll (quincenal). */}
+                    <Route path="/admin/payroll" element={<Navigate to="/admin/payroll/prepay" replace />} />
                     <Route path="/admin/payroll/prepay" element={<RequireOwner><PrePayroll /></RequireOwner>} />
                     <Route path="/admin/payroll/prepay/history" element={<RequireOwner><PrepayHistory /></RequireOwner>} />
-                    <Route path="/admin/payroll/week/:weekId" element={<RequireOwner><PayrollWeek /></RequireOwner>} />
                     <Route path="/admin/payroll/rates" element={<RequireOwner><PayrollRates /></RequireOwner>} />
                     <Route path="/admin/payroll/agent/:id" element={<RequireOwner><PayrollAgent /></RequireOwner>} />
                     <Route path="/admin/payroll/holidays" element={<RequireOwner><PayrollHolidays /></RequireOwner>} />
                     <Route path="/admin/payroll/client-holidays" element={<RequireOwner><ClientHolidays /></RequireOwner>} />
-                    <Route path="/admin/payroll/periods" element={<RequireOwner><PayrollPeriods /></RequireOwner>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </AppLayout>
