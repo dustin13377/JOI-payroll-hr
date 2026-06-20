@@ -21,7 +21,7 @@ export type EmpTitle = 'owner' | 'admin' | 'manager' | 'team_lead' | 'agent';
 
 /** Minimal employee shape needed by the calc engine (mirrors employees table).
  *  Phase 4b simplification: only monthly_base_salary + kpi_bonus_amount are
- *  read by the calc. Daily = monthly / 30 (LFT convention), weekly = monthly / 4.
+ *  read by the calc. Daily = monthly / 30 (LFT convention); quincena base = monthly / 2.
  *  Legacy fields kept optional for compatibility; calc ignores them. */
 export interface PayEmployee {
   id: string;
@@ -116,8 +116,10 @@ export function previewPay(inputs: PayInputs, emp: PayEmployee): PayComponents {
     };
   }
 
-  // Branch D: full week
-  const weekly_base      = r2(monthly / 4);
+  // Branch D: full period
+  // Quincenal base = monthly / 2 (Task 1: cadence fix; everyone is paid 1st–15th
+  // and 16th–end). Must match _calc_pay_components in the SQL migration.
+  const weekly_base      = r2(monthly / 2);
   const missed_deduction = r2(inputs.missed_days * daily);
   const total_pay        = r2(weekly_base - missed_deduction - custom_ded
                                + kpi_bonus + overtime_pay + sunday_pay

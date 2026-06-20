@@ -171,7 +171,7 @@ function EditableCell({
 
 // Phase 4b simplification: only kpi_bonus_amount is editable here.
 // monthly_base_salary lives on the employee profile (HR sets it on hire).
-// Everything else is derived: weekly = monthly/4, daily = monthly/30,
+// Everything else is derived: quincena = monthly/2, daily = monthly/30,
 // sunday-bonus-per-day = daily × 0.25.
 const BULK_FIELDS: { value: EditableRateField; label: string; step: string; min?: number; isPct?: boolean }[] = [
   { value: "kpi_bonus_amount", label: "KPI bonus", step: "1" },
@@ -423,7 +423,7 @@ export default function PayrollRates() {
           <h1 className="text-2xl font-bold">Pay Rates</h1>
           <p className="text-muted-foreground text-sm">
             Monthly salary is set on the employee profile. Edit KPI bonus here. Everything else
-            (weekly, daily, Sunday premium, holiday pay) is derived automatically.
+            (quincena, daily, Sunday premium, holiday pay) is derived automatically.
           </p>
         </div>
 
@@ -584,8 +584,8 @@ export default function PayrollRates() {
       <p className="text-xs text-muted-foreground">
         Tip: click the KPI cell to edit. Press <kbd className="border rounded px-1">Enter</kbd> to save,{" "}
         <kbd className="border rounded px-1">Esc</kbd> to cancel. Monthly salary is set on the employee
-        profile page — it's read-only here. Weekly / Daily / Sunday Premium / Holiday Pay are derived
-        automatically from monthly (weekly = monthly/4, daily = monthly/30, Sunday premium = daily × 25%,
+        profile page — it's read-only here. Quincena / Daily / Sunday Premium / Holiday Pay are derived
+        automatically from monthly (quincena = monthly/2, daily = monthly/30, Sunday premium = daily × 25%,
         holiday = daily × 2 per LFT Art. 75).
       </p>
 
@@ -615,7 +615,7 @@ function RateRow({ row, selected, onToggle, onSave }: RateRowProps) {
   const missingRate = monthly <= 0;
 
   // Derived values for display
-  const weekly = monthly / 4;
+  const weekly = monthly / 2; // quincena base (Task 1: cadence fix)
   const daily = monthly / 30;
   const sundayPerDay = daily * 0.25;
   const showsSunday = shiftIncludesSunday(row.shift_type);
@@ -680,7 +680,7 @@ function RateRow({ row, selected, onToggle, onSave }: RateRowProps) {
           <span className="italic">set monthly first</span>
         ) : (
           <div className="space-y-0.5 font-mono">
-            <div>Wk: <span className="text-foreground">{formatMXN(weekly)}</span></div>
+            <div>Qna: <span className="text-foreground">{formatMXN(weekly)}</span></div>
             <div>Day: <span className="text-foreground">{formatMXN(daily)}</span></div>
             {showsSunday ? (
               <div>Sun/day: <span className="text-foreground">{formatMXN(sundayPerDay)}</span></div>
