@@ -8,10 +8,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Lock, Mail } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Mail, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatMXN } from "@/lib/formatCurrency";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const PAGE_OPTIONS = [15, 50, 100];
 
 interface LockedPeriod {
   id: string;
@@ -37,6 +41,8 @@ interface LineRow {
 export default function PrepayHistory() {
   const [selected, setSelected] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(15);
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
 
   async function sendPaystubs(periodId: string) {
@@ -103,6 +109,11 @@ export default function PrepayHistory() {
 
   const periodTotal = lines.reduce((s, l) => s + Number(l.net), 0);
 
+  // TODO: switch to server-side .range() if this exceeds ~2k rows
+  const totalPages = Math.max(1, Math.ceil(periods.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedPeriods = periods.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   return (
     <div className="p-6 max-w-4xl space-y-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -125,7 +136,7 @@ export default function PrepayHistory() {
         </div>
       ) : (
         <div className="space-y-2">
-          {periods.map((p) => (
+          {paginatedPeriods.map((p) => (
             <div key={p.id} className="border rounded-xl overflow-hidden">
               <button
                 onClick={() => setSelected(selected === p.id ? null : p.id)}
@@ -197,6 +208,41 @@ export default function PrepayHistory() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {!isLoading && periods.length > pageSize && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, periods.length)} of {periods.length}
+            </span>
+            <span className="mx-2">|</span>
+            <span>Rows per page:</span>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[70px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <Button key={p} variant={p === safePage ? "default" : "outline"} size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p)}>
+                {p}
+              </Button>
+            ))}
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
