@@ -431,14 +431,13 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           Upload CSV
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl w-[95vw] overflow-hidden">
+        <DialogHeader className="pr-8">
           <DialogTitle>Upload spiffs from CSV</DialogTitle>
           <DialogDescription>
-            Same format as your tracker sheet (Date, Agent, Charge to Client, Client).
-            Check each row against your master sheet and click the green check to{" "}
-            <strong>lock it in</strong> — locked rows go live (invoice + agent pay).
-            Anything you leave unlocked is parked as unverified for later.
+            Check each row against your master sheet, then{" "}
+            <strong>lock it in</strong>. Locked rows go live (invoice + agent pay);
+            unlocked rows are parked as unverified for later.
           </DialogDescription>
         </DialogHeader>
 
@@ -469,22 +468,26 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
         ) : (
           <div className="space-y-3">
             {/* Summary */}
-            <div className="flex items-center gap-2 flex-wrap text-sm">
-              <span className="text-muted-foreground truncate max-w-[220px]">{fileName}</span>
-              <Badge variant="outline" className="border-green-500 text-green-700">
-                {lockedCount} locked
-              </Badge>
-              {parkedCount > 0 && (
-                <Badge variant="outline" className="border-amber-400 text-amber-700">
-                  {parkedCount} unlocked
+            <div className="flex items-center gap-2 flex-wrap justify-between text-sm">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="text-muted-foreground truncate max-w-[200px]">
+                  {fileName}
+                </span>
+                <Badge variant="outline" className="border-green-500 text-green-700">
+                  {lockedCount} locked
                 </Badge>
-              )}
-              {blockedCount > 0 && (
-                <Badge variant="outline" className="border-red-400 text-red-700">
-                  {blockedCount} need fixing
-                </Badge>
-              )}
-              <div className="ml-auto flex items-center gap-2">
+                {parkedCount > 0 && (
+                  <Badge variant="outline" className="border-amber-400 text-amber-700">
+                    {parkedCount} unlocked
+                  </Badge>
+                )}
+                {blockedCount > 0 && (
+                  <Badge variant="outline" className="border-red-400 text-red-700">
+                    {blockedCount} need fixing
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
@@ -509,8 +512,8 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                     <th className="text-left font-medium p-2 min-w-[130px]">Date</th>
                     <th className="text-left font-medium p-2 min-w-[100px]">Amount</th>
                     <th className="text-left font-medium p-2 min-w-[150px]">Reason</th>
-                    <th className="text-left font-medium p-2 min-w-[180px]">Flags</th>
-                    <th className="p-2 w-20 text-center">Lock</th>
+                    <th className="text-left font-medium p-2 min-w-[170px]">Flags</th>
+                    <th className="p-2 w-[150px] text-right">Lock in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -626,37 +629,40 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
 
                         {/* Lock in / remove */}
                         <td className="p-2 align-top">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-end gap-3">
                             <Button
                               type="button"
                               variant={row.locked ? "default" : "outline"}
-                              size="icon"
+                              size="sm"
                               title={
-                                hasError
-                                  ? "Fix the red flags before locking"
-                                  : row.locked
-                                  ? "Locked in — click to unlock"
-                                  : "Lock in (verified against sheet)"
+                                hasError ? "Fix the red flags before locking" : undefined
                               }
-                              className={`h-7 w-7 ${
+                              className={`h-8 px-2.5 ${
                                 row.locked
                                   ? "bg-green-600 hover:bg-green-700 text-white border-green-600"
-                                  : "text-green-700 border-green-400 hover:bg-green-50"
+                                  : "text-green-700 border-green-500 hover:bg-green-50"
                               }`}
                               disabled={hasError}
                               onClick={() => toggleLock(row.localId)}
                             >
                               {row.locked ? (
-                                <Lock className="h-3.5 w-3.5" />
+                                <>
+                                  <Lock className="h-3.5 w-3.5 mr-1" />
+                                  Locked
+                                </>
                               ) : (
-                                <Check className="h-4 w-4" />
+                                <>
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Lock
+                                </>
                               )}
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              title="Remove row"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
                               onClick={() => removeRow(row.localId)}
                             >
                               <X className="h-4 w-4" />
