@@ -27,7 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -35,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, AlertTriangle, FileSpreadsheet, X } from "lucide-react";
+import { Upload, AlertTriangle, FileSpreadsheet, X, Check, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCreateSpiffs, type SpiffAgent } from "@/hooks/useSpiffs";
@@ -213,6 +212,7 @@ interface ReviewRow {
   spiff_date: string;
   amount_usd: number;
   reason: string;
+  locked: boolean; // manager confirmed this row against the master sheet → goes live
 }
 
 interface Flag {
@@ -238,6 +238,19 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
   // Existing (already-in-DB) spiff signatures covering the dates in this file,
   // for duplicate detection across any week (status != void).
   const [dbKeys, setDbKeys] = useState<Set<string>>(new Set());
+  // Post-upload spot-check list — what actually went in, in CSV order.
+  const [result, setResult] = useState<{
+    rows: {
+      name: string;
+      client: string;
+      date: string;
+      amount: number;
+      reason: string;
+      live: boolean;
+    }[];
+    liveN: number;
+    parkN: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = useBulkCreateSpiffs();
@@ -248,6 +261,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
     setFileName(null);
     setRows([]);
     setDbKeys(new Set());
+    setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -281,6 +295,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           spiff_date: p.date ?? "",
           amount_usd: p.amount,
           reason: p.reason,
+          locked: false,
         };
       });
       setFileName(file.name);
@@ -314,6 +329,12 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
 
   function removeRow(localId: number) {
     setRows((prev) => prev.filter((r) => r.localId !== localId));
+  }
+
+  function toggleLock(localId: number) {
+    setRows((prev) =>
+      prev.map((r) => (r.localId === localId ? { ...r, locked: !r.locked } : r))
+    );
   }
 
   // Batch median (for outlier detection) over positive amounts.
@@ -353,17 +374,30 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
     return flags;
   }
 
-  const rowsWithFlags = rows.map((r) => ({ row: r, flags: flagsFor(r) }));
-  const blockedCount = rowsWithFlags.filter((r) =>
-    r.flags.some((f) => f.level === "error")
-  ).length;
-  const warnCount = rowsWithFlags.filter((r) =>
-    r.flags.some((f) => f.level === "warn")
-  ).length;
+  const rowsWithFlags = rows.map((r) => {
+    const flags = flagsFor(r);
+    return { row: r, flags, hasError: flags.some((f) => f.level === "error") };
+  });
+  const blockedCount = rowsWithFlags.filter((r) => r.hasError).length;
   const okCount = rows.length - blockedCount;
+  const lockedCount = rows.filter((r) => r.locked).length;
+  const parkedCount = okCount - lockedCount; // valid but not locked → upload as unverified
+
+  // "Lock all" locks every error-free row; if all are already locked, unlock all.
+  const allValidLocked = okCount > 0 && lockedCount === okCount;
+  function toggleLockAll() {
+    setRows((prev) => {
+      const lockTarget = !allValidLocked;
+      return prev.map((r) => {
+        const hasError = flagsFor(r).some((f) => f.level === "error");
+        if (hasError) return { ...r, locked: false };
+        return { ...r, locked: lockTarget };
+      });
+    });
+  }
 
   async function handleSave() {
-    const saveable = rowsWithFlags.filter((r) => !r.flags.some((f) => f.level === "error"));
+    const saveable = rowsWithFlags.filter((r) => !r.hasError);
     if (saveable.length === 0) {
       toast.error("No rows are ready to save — resolve the red flags first.");
       return;
@@ -379,14 +413,30 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
             spiff_date: row.spiff_date,
             amount_usd: row.amount_usd,
             reason: row.reason.trim() || "Spiff (CSV import)",
+            verified: row.locked, // locked = confirmed against the sheet → live
           };
         }),
       });
+      // Build the spot-check list (CSV order preserved).
+      const summaryRows = saveable.map(({ row }) => {
+        const agent = agentMap.get(row.employee_id)!;
+        return {
+          name: agent.display_name,
+          client: agent.client_name,
+          date: row.spiff_date,
+          amount: row.amount_usd,
+          reason: row.reason.trim() || "Spiff (CSV import)",
+          live: row.locked,
+        };
+      });
+      const liveN = summaryRows.filter((r) => r.live).length;
+      const parkN = summaryRows.length - liveN;
       toast.success(
-        `${saveable.length} spiff${saveable.length !== 1 ? "s" : ""} uploaded — pending verification`
+        parkN > 0
+          ? `${liveN} verified (live), ${parkN} parked as unverified`
+          : `${liveN} spiff${liveN !== 1 ? "s" : ""} verified and live`
       );
-      reset();
-      setOpen(false);
+      setResult({ rows: summaryRows, liveN, parkN });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
@@ -406,17 +456,101 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           Upload CSV
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl w-[95vw] overflow-hidden">
+        <DialogHeader className="pr-8">
           <DialogTitle>Upload spiffs from CSV</DialogTitle>
           <DialogDescription>
-            Same format as your tracker sheet (Date, Agent, Charge to Client, Client).
-            Uploaded rows stay <strong>unverified</strong> — they don't count toward pay
-            or billing until you verify them against your sheet.
+            Check each row against your master sheet, then{" "}
+            <strong>lock it in</strong>. Locked rows go live (invoice + agent pay);
+            unlocked rows are parked as unverified for later.
           </DialogDescription>
         </DialogHeader>
 
-        {rows.length === 0 ? (
+        {result ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <Badge variant="outline" className="border-green-500 text-green-700">
+                {result.liveN} live
+              </Badge>
+              {result.parkN > 0 && (
+                <Badge variant="outline" className="border-amber-400 text-amber-700">
+                  {result.parkN} parked
+                </Badge>
+              )}
+              <span className="text-muted-foreground">
+                — spot-check these against your sheet
+              </span>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto border rounded-md">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-background border-b">
+                  <tr className="text-muted-foreground text-xs uppercase tracking-wide">
+                    <th className="text-left font-medium p-2">Agent</th>
+                    <th className="text-left font-medium p-2">Date</th>
+                    <th className="text-right font-medium p-2">Amount</th>
+                    <th className="text-left font-medium p-2">Reason</th>
+                    <th className="text-left font-medium p-2">Client</th>
+                    <th className="text-left font-medium p-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {result.rows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="p-2 font-medium">{r.name}</td>
+                      <td className="p-2">
+                        {new Date(r.date + "T00:00:00").toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </td>
+                      <td className="p-2 text-right">
+                        ${r.amount.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="p-2">{r.reason}</td>
+                      <td className="p-2">{r.client}</td>
+                      <td className="p-2">
+                        {r.live ? (
+                          <Badge
+                            variant="outline"
+                            className="border-green-500 text-green-700"
+                          >
+                            Live
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-400 text-amber-700"
+                          >
+                            Parked
+                          </Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="sticky bottom-0 bg-background border-t">
+                  <tr className="font-medium">
+                    <td className="p-2" colSpan={2}>
+                      Total ({result.rows.length})
+                    </td>
+                    <td className="p-2 text-right">
+                      ${result.rows
+                        .reduce((s, r) => s + r.amount, 0)
+                        .toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        ) : rows.length === 0 ? (
           <div className="py-8">
             <label
               htmlFor="spiff-csv-input"
@@ -443,32 +577,43 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
         ) : (
           <div className="space-y-3">
             {/* Summary */}
-            <div className="flex items-center gap-2 flex-wrap text-sm">
-              <span className="text-muted-foreground">{fileName}</span>
-              <Badge variant="outline" className="border-green-400 text-green-700">
-                {okCount} ready
-              </Badge>
-              {warnCount > 0 && (
-                <Badge variant="outline" className="border-amber-400 text-amber-700">
-                  {warnCount} flagged
+            <div className="flex items-center gap-2 flex-wrap justify-between text-sm">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="text-muted-foreground truncate max-w-[200px]">
+                  {fileName}
+                </span>
+                <Badge variant="outline" className="border-green-500 text-green-700">
+                  {lockedCount} locked
                 </Badge>
-              )}
-              {blockedCount > 0 && (
-                <Badge variant="outline" className="border-red-400 text-red-700">
-                  {blockedCount} need fixing
-                </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-7 text-xs"
-                onClick={reset}
-              >
-                Choose a different file
-              </Button>
+                {parkedCount > 0 && (
+                  <Badge variant="outline" className="border-amber-400 text-amber-700">
+                    {parkedCount} unlocked
+                  </Badge>
+                )}
+                {blockedCount > 0 && (
+                  <Badge variant="outline" className="border-red-400 text-red-700">
+                    {blockedCount} need fixing
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={okCount === 0}
+                  onClick={toggleLockAll}
+                >
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                  {allValidLocked ? "Unlock all" : "Lock all"}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={reset}>
+                  Different file
+                </Button>
+              </div>
             </div>
 
-            <ScrollArea className="max-h-[50vh] border rounded-md">
+            <div className="max-h-[55vh] overflow-y-auto overflow-x-auto border rounded-md">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-background border-b">
                   <tr className="text-muted-foreground text-xs uppercase tracking-wide">
@@ -476,22 +621,28 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                     <th className="text-left font-medium p-2 min-w-[130px]">Date</th>
                     <th className="text-left font-medium p-2 min-w-[100px]">Amount</th>
                     <th className="text-left font-medium p-2 min-w-[150px]">Reason</th>
-                    <th className="text-left font-medium p-2 min-w-[180px]">Flags</th>
-                    <th className="p-2 w-8" />
+                    <th className="text-left font-medium p-2 min-w-[170px]">Flags</th>
+                    <th className="p-2 w-[150px] text-right">Lock in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {rowsWithFlags.map(({ row, flags }) => {
-                    const hasError = flags.some((f) => f.level === "error");
+                  {rowsWithFlags.map(({ row, flags, hasError }) => {
                     return (
                       <tr
                         key={row.localId}
-                        className={hasError ? "bg-red-50/50" : undefined}
+                        className={
+                          row.locked
+                            ? "bg-green-50/60"
+                            : hasError
+                            ? "bg-red-50/50"
+                            : undefined
+                        }
                       >
                         {/* Agent (matched label or override picker) */}
                         <td className="p-2 align-top">
                           <Select
                             value={row.employee_id || undefined}
+                            disabled={row.locked}
                             onValueChange={(v) => updateRow(row.localId, { employee_id: v })}
                           >
                             <SelectTrigger className="h-8 text-sm">
@@ -525,6 +676,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                             type="date"
                             className="h-8 text-sm"
                             value={row.spiff_date}
+                            disabled={row.locked}
                             onChange={(e) =>
                               updateRow(row.localId, { spiff_date: e.target.value })
                             }
@@ -539,6 +691,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                             min="0.01"
                             className="h-8 text-sm"
                             value={row.amount_usd}
+                            disabled={row.locked}
                             onChange={(e) =>
                               updateRow(row.localId, {
                                 amount_usd: Number(e.target.value),
@@ -553,6 +706,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                             className="h-8 text-sm"
                             placeholder="e.g. PB 6, 1ST PLACE"
                             value={row.reason}
+                            disabled={row.locked}
                             onChange={(e) =>
                               updateRow(row.localId, { reason: e.target.value })
                             }
@@ -582,44 +736,85 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                           </div>
                         </td>
 
-                        {/* Remove */}
+                        {/* Lock in / remove */}
                         <td className="p-2 align-top">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => removeRow(row.localId)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-3">
+                            <Button
+                              type="button"
+                              variant={row.locked ? "default" : "outline"}
+                              size="sm"
+                              title={
+                                hasError ? "Fix the red flags before locking" : undefined
+                              }
+                              className={`h-8 px-2.5 ${
+                                row.locked
+                                  ? "bg-green-600 hover:bg-green-700 text-white border-green-600"
+                                  : "text-green-700 border-green-500 hover:bg-green-50"
+                              }`}
+                              disabled={hasError}
+                              onClick={() => toggleLock(row.localId)}
+                            >
+                              {row.locked ? (
+                                <>
+                                  <Lock className="h-3.5 w-3.5 mr-1" />
+                                  Locked
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Lock
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              title="Remove row"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeRow(row.localId)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </ScrollArea>
+            </div>
           </div>
         )}
 
-        {rows.length > 0 && (
+        {result ? (
           <DialogFooter className="gap-2">
-            {blockedCount > 0 && (
-              <span className="text-xs text-muted-foreground mr-auto self-center">
-                {blockedCount} row{blockedCount !== 1 ? "s" : ""} with red flags will be
-                skipped.
-              </span>
-            )}
+            <Button variant="outline" onClick={reset}>
+              Upload another file
+            </Button>
+            <Button
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        ) : rows.length > 0 ? (
+          <DialogFooter className="gap-2">
+            <span className="text-xs text-muted-foreground mr-auto self-center">
+              {lockedCount} go live · {parkedCount} parked
+              {blockedCount > 0 ? ` · ${blockedCount} skipped (red flags)` : ""}
+            </span>
             <Button
               onClick={handleSave}
               disabled={bulkCreate.isPending || okCount === 0}
             >
-              {bulkCreate.isPending
-                ? "Uploading…"
-                : `Upload ${okCount} as unverified`}
+              {bulkCreate.isPending ? "Uploading…" : `Upload ${okCount}`}
             </Button>
           </DialogFooter>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );
