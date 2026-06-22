@@ -4212,6 +4212,8 @@ export type Database = {
           source: string
           spiff_date: string
           status: string
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           amount_usd: number
@@ -4227,6 +4229,8 @@ export type Database = {
           source?: string
           spiff_date: string
           status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           amount_usd?: number
@@ -4242,6 +4246,8 @@ export type Database = {
           source?: string
           spiff_date?: string
           status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {

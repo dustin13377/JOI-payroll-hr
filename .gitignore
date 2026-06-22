@@ -35,3 +35,6 @@ graphify-out/
 *.sw?
 .claude/settings.local.json
 supabase/.temp/
+
+# TypeScript build info
+*.tsbuildinfo
