@@ -140,6 +140,22 @@ export default function SpiffCsvBatchesDialog() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="sticky bottom-0 bg-background border-t">
+                  <tr className="font-medium">
+                    <td className="p-2" colSpan={2}>
+                      Total ({selected.rows.length})
+                    </td>
+                    <td className="p-2 text-right">
+                      ${selected.rows
+                        .reduce((s, r) => s + r.amount_usd, 0)
+                        .toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>

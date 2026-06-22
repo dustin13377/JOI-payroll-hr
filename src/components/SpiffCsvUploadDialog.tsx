@@ -531,6 +531,22 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="sticky bottom-0 bg-background border-t">
+                  <tr className="font-medium">
+                    <td className="p-2" colSpan={2}>
+                      Total ({result.rows.length})
+                    </td>
+                    <td className="p-2 text-right">
+                      ${result.rows
+                        .reduce((s, r) => s + r.amount, 0)
+                        .toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
