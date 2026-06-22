@@ -292,13 +292,6 @@ export default function Spiffs() {
             <CardTitle className="text-lg">New Spiff Entries</CardTitle>
             {isLeadership && (
               <SpiffCsvUploadDialog agents={allAgents} createdBy={employeeId} />
-              <SpiffCsvUploadDialog
-                agents={allAgents}
-                weekStart={weekStart}
-                weekEnd={weekEnd}
-                existing={spiffs}
-                createdBy={employeeId}
-              />
             )}
           </div>
         </CardHeader>

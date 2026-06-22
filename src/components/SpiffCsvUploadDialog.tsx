@@ -39,11 +39,6 @@ import { Upload, AlertTriangle, FileSpreadsheet, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBulkCreateSpiffs, type SpiffAgent } from "@/hooks/useSpiffs";
-import {
-  useBulkCreateSpiffs,
-  type SpiffAgent,
-  type SpiffRow,
-} from "@/hooks/useSpiffs";
 
 /* ------------------------------------------------------------------ */
 /*  Tunables                                                           */
@@ -243,22 +238,6 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
   // Existing (already-in-DB) spiff signatures covering the dates in this file,
   // for duplicate detection across any week (status != void).
   const [dbKeys, setDbKeys] = useState<Set<string>>(new Set());
-  weekStart: string;
-  weekEnd: string;
-  existing: SpiffRow[]; // this week's spiffs, for duplicate detection
-  createdBy: string;
-}
-
-export default function SpiffCsvUploadDialog({
-  agents,
-  weekStart,
-  weekEnd,
-  existing,
-  createdBy,
-}: Props) {
-  const [open, setOpen] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [rows, setRows] = useState<ReviewRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = useBulkCreateSpiffs();
@@ -275,7 +254,6 @@ export default function SpiffCsvUploadDialog({
   function handleFile(file: File) {
     const reader = new FileReader();
     reader.onload = async (e) => {
-    reader.onload = (e) => {
       const text = String(e.target?.result ?? "");
       const parsed = parseCsvText(text);
       if (parsed.length === 0) {
@@ -292,10 +270,6 @@ export default function SpiffCsvUploadDialog({
             scoreMatch(p.rawName, a.display_name),
             a.full_name ? scoreMatch(p.rawName, a.full_name) : 0
           );
-        // Best agent match by name.
-        let best: { id: string; score: number } | null = null;
-        for (const a of agents) {
-          const s = scoreMatch(p.rawName, a.display_name);
           if (s > 0 && (!best || s > best.score)) best = { id: a.id, score: s };
         }
         const matched = best && best.score >= 30 ? best : null;
@@ -350,12 +324,6 @@ export default function SpiffCsvUploadDialog({
     return amts.length % 2 ? amts[mid] : (amts[mid - 1] + amts[mid]) / 2;
   }, [rows]);
 
-  // Existing (already-in-DB) signatures for this week, for duplicate detection.
-  const existingKeys = useMemo(
-    () => new Set(existing.map((s) => `${s.employee_id}|${s.spiff_date}|${s.amount_usd}`)),
-    [existing]
-  );
-
   function flagsFor(row: ReviewRow): Flag[] {
     const flags: Flag[] = [];
     if (!row.employee_id) flags.push({ level: "error", label: "No agent — pick one" });
@@ -364,15 +332,12 @@ export default function SpiffCsvUploadDialog({
     if (!row.spiff_date) flags.push({ level: "error", label: "No date" });
     if (!(row.amount_usd > 0)) flags.push({ level: "error", label: "Bad amount" });
 
-    if (row.spiff_date && (row.spiff_date < weekStart || row.spiff_date > weekEnd))
-      flags.push({ level: "warn", label: "Date outside this week" });
     if (row.amount_usd > HIGH_AMOUNT_USD)
       flags.push({ level: "warn", label: "Unusually high" });
     if (median > 0 && row.amount_usd >= 100 && row.amount_usd > median * OUTLIER_MULTIPLE)
       flags.push({ level: "warn", label: "Far above the rest — extra zero?" });
 
     // Duplicate within this batch, or already in the database for that day.
-    // Duplicate within this batch.
     if (row.employee_id && row.spiff_date) {
       const dupInBatch = rows.some(
         (o) =>
@@ -384,8 +349,6 @@ export default function SpiffCsvUploadDialog({
       if (dupInBatch) flags.push({ level: "warn", label: "Duplicate in this file" });
       if (dbKeys.has(`${row.employee_id}|${row.spiff_date}|${row.amount_usd}`))
         flags.push({ level: "warn", label: "Already in the system" });
-      if (existingKeys.has(`${row.employee_id}|${row.spiff_date}|${row.amount_usd}`))
-        flags.push({ level: "warn", label: "Already entered this week" });
     }
     return flags;
   }
