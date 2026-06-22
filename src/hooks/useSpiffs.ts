@@ -50,13 +50,15 @@ export interface CreateSpiffInput {
   created_by: string;
 }
 
-/** One parsed + matched CSV row, ready to insert as an unverified spiff. */
+/** One parsed + matched CSV row, ready to insert. `verified` rows (locked in
+ *  by the manager against the master sheet) go in live; the rest stay parked. */
 export interface BulkSpiffInput {
   employee_id: string;
   client_id: string;
   spiff_date: string;
   amount_usd: number;
   reason: string;
+  verified: boolean;
 }
 
 /* ================================================================== */
@@ -367,6 +369,7 @@ export function useBulkCreateSpiffs() {
   return useMutation({
     mutationFn: async (input: { rows: BulkSpiffInput[]; created_by: string }) => {
       if (input.rows.length === 0) return;
+      const now = new Date().toISOString();
       const payload = input.rows.map((r) => ({
         employee_id: r.employee_id,
         client_id: r.client_id,
@@ -375,7 +378,10 @@ export function useBulkCreateSpiffs() {
         reason: r.reason,
         created_by: input.created_by,
         source: "csv_import",
-        status: "unverified",
+        // Locked-in rows go live (counts toward invoice + pay); the rest park.
+        status: r.verified ? "pending" : "unverified",
+        verified_at: r.verified ? now : null,
+        verified_by: r.verified ? input.created_by : null,
       }));
       const { error } = await supabase.from("spiffs").insert(payload);
       if (error) throw error;
