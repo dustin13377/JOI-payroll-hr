@@ -308,6 +308,109 @@ export function useSpiffsForWeek(weekStart: string, weekEnd: string) {
 }
 
 /* ================================================================== */
+/*  Hook 3b – useCsvSpiffBatches                                       */
+/*  All CSV-uploaded spiffs, grouped into batches by upload time, so a */
+/*  manager can re-open any past upload and spot-check it against the   */
+/*  sheet after the upload dialog has closed. Rows in one insert share  */
+/*  the same created_at, which is the batch key.                       */
+/* ================================================================== */
+
+export interface CsvSpiffBatchRow {
+  id: string;
+  name: string;
+  client: string;
+  spiff_date: string;
+  amount_usd: number;
+  reason: string;
+  status: SpiffRow["status"];
+}
+
+export interface CsvSpiffBatch {
+  key: string; // created_at of the insert
+  uploaded_at: string;
+  count: number;
+  liveCount: number; // pending + billed
+  parkedCount: number; // unverified
+  rows: CsvSpiffBatchRow[];
+}
+
+export function useCsvSpiffBatches(enabled = true) {
+  return useQuery({
+    queryKey: ["csv-spiff-batches"],
+    enabled,
+    queryFn: async (): Promise<CsvSpiffBatch[]> => {
+      const { data, error } = await supabase
+        .from("spiffs")
+        .select(
+          "id, employee_id, client_id, spiff_date, amount_usd, reason, status, created_at"
+        )
+        .eq("source", "csv_import")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+
+      const rows = (data ?? []) as {
+        id: string;
+        employee_id: string;
+        client_id: string;
+        spiff_date: string;
+        amount_usd: number;
+        reason: string;
+        status: SpiffRow["status"];
+        created_at: string;
+      }[];
+      if (rows.length === 0) return [];
+
+      const empIds = [...new Set(rows.map((r) => r.employee_id))];
+      const clientIds = [...new Set(rows.map((r) => r.client_id))];
+      const [empRes, clientRes] = await Promise.all([
+        supabase.from("employees_no_pay").select("id, full_name, work_name").in("id", empIds),
+        supabase.from("clients").select("id, name").in("id", clientIds),
+      ]);
+      if (empRes.error) throw empRes.error;
+      if (clientRes.error) throw clientRes.error;
+      const empMap = new Map(
+        ((empRes.data ?? []) as { id: string; full_name: string; work_name: string | null }[]).map(
+          (e) => [e.id, e.work_name ?? e.full_name]
+        )
+      );
+      const clientMap = new Map(
+        ((clientRes.data ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name])
+      );
+
+      const byKey = new Map<string, CsvSpiffBatch>();
+      for (const r of rows) {
+        let b = byKey.get(r.created_at);
+        if (!b) {
+          b = {
+            key: r.created_at,
+            uploaded_at: r.created_at,
+            count: 0,
+            liveCount: 0,
+            parkedCount: 0,
+            rows: [],
+          };
+          byKey.set(r.created_at, b);
+        }
+        b.rows.push({
+          id: r.id,
+          name: empMap.get(r.employee_id) ?? "",
+          client: clientMap.get(r.client_id) ?? "",
+          spiff_date: r.spiff_date,
+          amount_usd: Number(r.amount_usd),
+          reason: r.reason,
+          status: r.status,
+        });
+        b.count += 1;
+        if (r.status === "pending" || r.status === "billed") b.liveCount += 1;
+        else if (r.status === "unverified") b.parkedCount += 1;
+      }
+      return Array.from(byKey.values());
+    },
+  });
+}
+
+/* ================================================================== */
 /*  Hook 4 – useCreateSpiff                                            */
 /*  Insert one spiff row with source='app' and status='pending'.       */
 /* ================================================================== */

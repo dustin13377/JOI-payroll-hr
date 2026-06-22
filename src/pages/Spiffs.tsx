@@ -12,6 +12,7 @@ import {
   type SpiffCampaign,
 } from "@/hooks/useSpiffs";
 import SpiffCsvUploadDialog from "@/components/SpiffCsvUploadDialog";
+import SpiffCsvBatchesDialog from "@/components/SpiffCsvBatchesDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -291,7 +292,10 @@ export default function Spiffs() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-lg">New Spiff Entries</CardTitle>
             {isLeadership && (
-              <SpiffCsvUploadDialog agents={allAgents} createdBy={employeeId} />
+              <div className="flex items-center gap-2">
+                <SpiffCsvBatchesDialog />
+                <SpiffCsvUploadDialog agents={allAgents} createdBy={employeeId} />
+              </div>
             )}
           </div>
         </CardHeader>
