@@ -291,6 +291,7 @@ export default function Spiffs() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-lg">New Spiff Entries</CardTitle>
             {isLeadership && (
+              <SpiffCsvUploadDialog agents={allAgents} createdBy={employeeId} />
               <SpiffCsvUploadDialog
                 agents={allAgents}
                 weekStart={weekStart}

@@ -35,6 +35,7 @@ export interface SpiffCampaign {
 export interface SpiffAgent {
   id: string;
   display_name: string;
+  full_name?: string; // legal name — used as an extra match target for CSV uploads
   campaign_id: string;
   client_id: string;
   client_name: string;
@@ -231,6 +232,7 @@ export function useAllSpiffAgents(enabled = true) {
           return {
             id: r.id,
             display_name: r.work_name ?? r.full_name,
+            full_name: r.full_name,
             campaign_id: r.campaign_id!,
             client_id: clientId,
             client_name: clientMap.get(clientId) ?? "",
