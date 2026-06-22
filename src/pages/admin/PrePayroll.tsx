@@ -167,7 +167,9 @@ export default function PrePayroll() {
         .select("employee_id, amount_usd")
         .gte("spiff_date", sel!.start)
         .lte("spiff_date", sel!.end)
-        .neq("status", "void");
+        // Only live spiffs count toward pay. 'unverified' (CSV-uploaded, not yet
+        // cross-referenced by a manager) and 'void' are excluded.
+        .in("status", ["pending", "billed"]);
       if (error) throw error;
       return (data ?? []) as { employee_id: string; amount_usd: number }[];
     },

@@ -4,11 +4,14 @@ import {
   useTLCampaignsWithClient,
   useTLCampaignAgents,
   useSpiffsForWeek,
+  useAllSpiffAgents,
   useCreateSpiff,
   useVoidSpiff,
+  useVerifySpiffs,
   type SpiffAgent,
   type SpiffCampaign,
 } from "@/hooks/useSpiffs";
+import SpiffCsvUploadDialog from "@/components/SpiffCsvUploadDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Banknote, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, Plus, Trash2, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 import { todayLocal } from "@/lib/localDate";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -88,7 +91,14 @@ function makeEmptyDraft(defaultDate: string): SpiffDraft {
 /*  Status badge                                                        */
 /* ------------------------------------------------------------------ */
 
-function StatusBadge({ status }: { status: "pending" | "billed" | "void" }) {
+function StatusBadge({ status }: { status: "unverified" | "pending" | "billed" | "void" }) {
+  if (status === "unverified") {
+    return (
+      <Badge variant="outline" className="border-orange-400 text-orange-700 bg-orange-50">
+        Unverified
+      </Badge>
+    );
+  }
   if (status === "pending") {
     return (
       <Badge variant="outline" className="border-amber-400 text-amber-700">
@@ -115,7 +125,7 @@ function StatusBadge({ status }: { status: "pending" | "billed" | "void" }) {
 /* ------------------------------------------------------------------ */
 
 export default function Spiffs() {
-  const { employeeId } = useAuth();
+  const { employeeId, isLeadership } = useAuth();
 
   const [weekOffset, setWeekOffset] = useState(0);
   const { weekStart, weekEnd } = getWeekBounds(weekOffset);
@@ -137,10 +147,15 @@ export default function Spiffs() {
   const agentsQuery = useTLCampaignAgents(campaigns);
   const agents: SpiffAgent[] = agentsQuery.data ?? [];
 
+  // Org-wide agent list (leadership only) used by the CSV upload matcher.
+  const allAgentsQuery = useAllSpiffAgents(isLeadership);
+  const allAgents: SpiffAgent[] = allAgentsQuery.data ?? [];
+
   const spiffsQuery = useSpiffsForWeek(weekStart, weekEnd);
 
   const createSpiff = useCreateSpiff();
   const voidSpiff = useVoidSpiff();
+  const verifySpiffs = useVerifySpiffs();
 
   // Build agent map for quick lookups
   const agentMap = new Map(agents.map((a) => [a.id, a]));
@@ -240,9 +255,25 @@ export default function Spiffs() {
     }
   }
 
+  /* -- Verify -- */
+  async function handleVerify(ids: string[]) {
+    if (!employeeId || ids.length === 0) return;
+    try {
+      await verifySpiffs.mutateAsync({ ids, verified_by: employeeId });
+      toast.success(
+        ids.length === 1 ? "Spiff verified" : `${ids.length} spiffs verified`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const campaignsLoading = campaignsQuery.isLoading || agentsQuery.isLoading;
   const spiffsLoading = spiffsQuery.isLoading;
   const spiffs = spiffsQuery.data ?? [];
+
+  // Unverified rows for this week (CSV uploads awaiting a manager's check).
+  const unverifiedIds = spiffs.filter((s) => s.status === "unverified").map((s) => s.id);
 
   return (
     <div className="space-y-6">
@@ -257,7 +288,18 @@ export default function Spiffs() {
       {/* ============================================================ */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">New Spiff Entries</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-lg">New Spiff Entries</CardTitle>
+            {isLeadership && (
+              <SpiffCsvUploadDialog
+                agents={allAgents}
+                weekStart={weekStart}
+                weekEnd={weekEnd}
+                existing={spiffs}
+                createdBy={employeeId}
+              />
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {campaignsLoading ? (
@@ -427,7 +469,21 @@ export default function Spiffs() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <CardTitle className="text-lg">Week Ledger</CardTitle>
+            <div className="flex items-center gap-3 flex-wrap">
+              <CardTitle className="text-lg">Week Ledger</CardTitle>
+              {isLeadership && unverifiedIds.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-orange-400 text-orange-700 hover:bg-orange-50"
+                  disabled={verifySpiffs.isPending}
+                  onClick={() => handleVerify(unverifiedIds)}
+                >
+                  <BadgeCheck className="h-4 w-4 mr-1" />
+                  Verify all ({unverifiedIds.length})
+                </Button>
+              )}
+            </div>
 
             {/* Week navigation */}
             <div className="flex items-center gap-2">
@@ -507,17 +563,31 @@ export default function Spiffs() {
                       <StatusBadge status={s.status} />
                     </TableCell>
                     <TableCell>
-                      {s.status === "pending" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                          disabled={voidSpiff.isPending}
-                          onClick={() => handleVoid(s.id)}
-                        >
-                          Void
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {s.status === "unverified" && isLeadership && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-orange-700 hover:text-orange-800 hover:bg-orange-50"
+                            disabled={verifySpiffs.isPending}
+                            onClick={() => handleVerify([s.id])}
+                          >
+                            <BadgeCheck className="h-3.5 w-3.5 mr-1" />
+                            Verify
+                          </Button>
+                        )}
+                        {(s.status === "pending" || s.status === "unverified") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                            disabled={voidSpiff.isPending}
+                            onClick={() => handleVoid(s.id)}
+                          >
+                            Void
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
