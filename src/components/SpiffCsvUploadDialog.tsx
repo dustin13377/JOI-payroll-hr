@@ -238,6 +238,19 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
   // Existing (already-in-DB) spiff signatures covering the dates in this file,
   // for duplicate detection across any week (status != void).
   const [dbKeys, setDbKeys] = useState<Set<string>>(new Set());
+  // Post-upload spot-check list — what actually went in, in CSV order.
+  const [result, setResult] = useState<{
+    rows: {
+      name: string;
+      client: string;
+      date: string;
+      amount: number;
+      reason: string;
+      live: boolean;
+    }[];
+    liveN: number;
+    parkN: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = useBulkCreateSpiffs();
@@ -248,6 +261,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
     setFileName(null);
     setRows([]);
     setDbKeys(new Set());
+    setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -403,15 +417,26 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           };
         }),
       });
-      const liveN = saveable.filter(({ row }) => row.locked).length;
-      const parkN = saveable.length - liveN;
+      // Build the spot-check list (CSV order preserved).
+      const summaryRows = saveable.map(({ row }) => {
+        const agent = agentMap.get(row.employee_id)!;
+        return {
+          name: agent.display_name,
+          client: agent.client_name,
+          date: row.spiff_date,
+          amount: row.amount_usd,
+          reason: row.reason.trim() || "Spiff (CSV import)",
+          live: row.locked,
+        };
+      });
+      const liveN = summaryRows.filter((r) => r.live).length;
+      const parkN = summaryRows.length - liveN;
       toast.success(
         parkN > 0
           ? `${liveN} verified (live), ${parkN} parked as unverified`
           : `${liveN} spiff${liveN !== 1 ? "s" : ""} verified and live`
       );
-      reset();
-      setOpen(false);
+      setResult({ rows: summaryRows, liveN, parkN });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
@@ -441,7 +466,75 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        {rows.length === 0 ? (
+        {result ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <Badge variant="outline" className="border-green-500 text-green-700">
+                {result.liveN} live
+              </Badge>
+              {result.parkN > 0 && (
+                <Badge variant="outline" className="border-amber-400 text-amber-700">
+                  {result.parkN} parked
+                </Badge>
+              )}
+              <span className="text-muted-foreground">
+                — spot-check these against your sheet
+              </span>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto border rounded-md">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-background border-b">
+                  <tr className="text-muted-foreground text-xs uppercase tracking-wide">
+                    <th className="text-left font-medium p-2">Agent</th>
+                    <th className="text-left font-medium p-2">Date</th>
+                    <th className="text-right font-medium p-2">Amount</th>
+                    <th className="text-left font-medium p-2">Reason</th>
+                    <th className="text-left font-medium p-2">Client</th>
+                    <th className="text-left font-medium p-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {result.rows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="p-2 font-medium">{r.name}</td>
+                      <td className="p-2">
+                        {new Date(r.date + "T00:00:00").toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </td>
+                      <td className="p-2 text-right">
+                        ${r.amount.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="p-2">{r.reason}</td>
+                      <td className="p-2">{r.client}</td>
+                      <td className="p-2">
+                        {r.live ? (
+                          <Badge
+                            variant="outline"
+                            className="border-green-500 text-green-700"
+                          >
+                            Live
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-400 text-amber-700"
+                          >
+                            Parked
+                          </Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : rows.length === 0 ? (
           <div className="py-8">
             <label
               htmlFor="spiff-csv-input"
@@ -678,7 +771,21 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           </div>
         )}
 
-        {rows.length > 0 && (
+        {result ? (
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={reset}>
+              Upload another file
+            </Button>
+            <Button
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        ) : rows.length > 0 ? (
           <DialogFooter className="gap-2">
             <span className="text-xs text-muted-foreground mr-auto self-center">
               {lockedCount} go live · {parkedCount} parked
@@ -691,7 +798,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
               {bulkCreate.isPending ? "Uploading…" : `Upload ${okCount}`}
             </Button>
           </DialogFooter>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );
