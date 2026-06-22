@@ -1,47 +1,54 @@
 # Session Handoff
 
-**Saved:** 2026-06-01T15:11:00-06:00
-**Machine:** Diomedess-Mac-mini (Mac mini)
-**Branch:** main
-**Last commit:** 6d12545 session-handoff: EOD digest 401 fix + RLS gotcha + auto-clockout EOD bug discovered (SESSION.md)
+**Saved:** 2026-06-22 (Cowork session)
+**Machine:** admins-MacBook-Air (MacBook Air)
+**Branch:** main — up to date with origin/main (nothing to push for code)
+**Last commit:** 1fb543e chore: remove stale payroll-run / Phase 4c comments from sidebar (#107)
 
 ## What we were doing
 
-Prepping the HFB May 2026 invoice. HFB pays in advance, so D needed an accurate count of missed days to deduct. We merged the dialer "TimeSheetStandard" CSV (pre-cutover system) with JOI's `time_clock` data, identified real absences vs. data divergences, and backfilled JOI with the pre-May 11 attendance the CSV held. HFB sign-off on the numbers is pending before D sends the invoice.
+Reconstructed from git history because the previous SESSION.md was stale (June 1). Last week was a payroll / spiffs / invoicing overhaul, all merged to `main` via PRs #102–#107 and already pushed. **No feature work is currently in flight** — the working tree only holds stray docs and build artifacts.
 
-Side work: rotated the apex MCP API key (old one was partially exposed in chat). Set up a dual Supabase MCP config — one server per org — so JOI and personal projects are both reachable in the same session.
+## Shipped last week (all on main, pushed)
 
-## Files in flight
+- **Payroll rebuild (#102):** quincenal pre-payroll, lock + history, spiffs, paystubs — `payrollEngine` + tests, `PrePayroll`, `PrepayHistory`, `send-paystubs` edge fn
+- **Deploy status (#103):** `prepay_lines` + `send-paystubs` live; base/spiffs migrations held back
+- **Retired legacy weekly payroll UI (#104)** — prepay is the only entry point
+- **Pagination (#105):** 15/50/100 on PrePayroll, PrepayHistory, Empleados
+- **Reincidencia unlink fix (#106)** on acta drafts
+- **Sidebar cleanup (#107)**
+- **Earlier in week:** Spiffs v2 (first-class `spiffs` table, TL entry page, invoicing attach/detach RPCs, retired Sheet importer); invoice "Paid Monthly" status; invoice vacation billing + out-of-window punch-gap detection (`clients.bill_vacation`, Torro=true); clock-in alert emails (TL + manager + escalation)
 
-- `HFB_BACKFILL_2026-05_TIMECLOCK.sql` — 36-row backfill into `time_clock` covering May 1–8 for 8 HFB agents (Diego, Francisco, Ivana, Lucia, Marisol, Sebastian, Sofia, Ubaldo). Already executed against prod JOI; file kept for audit. Times converted from Mexico Central (UTC-6) to UTC.
-- `~/Library/Application Support/Claude/claude_desktop_config.json` (local-only, NOT in repo) — now has `apex` (rotated key), `supabase-joi` (sandoval-art org token), `supabase-personal` (other org token).
+## Recruiting subsystem (shipped May 28 – June 11, not last week)
 
-## Decisions made this session
+A full recruiting MVP is on `main` in this repo. MVP merged **May 28–29**; polish through **June 11** (latest: position-fit tags + recruiter notes). Nothing in the last 7 days — last week was payroll/spiffs/invoices only. The "layout" work D half-remembers is most likely the June 10–11 recruiting-page polish (Calendly link, HR calendar card, dropdown roles, position-fit tags).
+- Data model: `recruiting_candidates / _messages / _interviews` tables + RLS, SECURITY DEFINER trigger fns, CURP column + dedup index
+- Inbound pipeline: `inbound-application` edge fn (Postmark webhook → DB upsert), TDD email parser, CSV backfill from Gmail, one-off Postmark replay script
+- UI: `/recruiting` route (leadership only), candidate table with stage badges + search/filter, candidate detail drawer + stage selector, sidebar entry
+- Outreach/scheduling: WhatsApp interview invite (US/intl phone handling) + Contacted stage, Calendly booking link, HR interview calendar card + `hr-calendar` edge fn, interview reminder banner, position-fit tags + recruiter notes
+- Live cutover recorded (real Postmark address + Gmail backlog note)
 
-- **JOI is source of truth from May 11+** for HFB attendance. CSV used only for May 1–8 (pre-cutover).
-- **MX mandatory holidays bill at standard rate** when unworked (e.g., May 1 Labor Day). Worked holidays still 3× per LFT Art. 75. Don't deduct holidays from missed-day count.
-- **Sebastian's May 1 work was a different campaign**, not HFB — dropped from backfill so HFB isn't charged.
-- **Aldo, Mauro, Gibran** are HFB agents not in the dialer CSV. Decided to use JOI alone for them; pre-May 11 assumed present.
-- **Wendy Mena** has `daily_bill_rate = 0` (internal/training) — skip on invoice.
-- **Final missed-day deductions:** Sebastian 2 days ($160), Francisco 4 ($320), Ivana 6 ($480), Aldo 4 ($320), Mauro 4 ($320), Gibran 4 ($320), Diego/Lucia/Marisol/Sofia/Ubaldo 0. Total $1,920 across ~24 days. **Not yet confirmed with HFB.**
+## Working tree right now (uncommitted)
+
+- `modified: .claude/settings.local.json` — local-only, **do not commit**
+- Untracked docs (worth committing): `docs/collaborator-access.md`, `docs/superpowers/plans/2026-06-19-invoice-generator-vacation-gaps.md`, `docs/superpowers/plans/2026-06-19-spiffs-invoicing-link.md`, `docs/superpowers/plans/2026-06-19-spiffs-tl-entry.md`
+- `generate_seed.sql` — untracked; decide whether it belongs in the repo (may hold seed data) or stays local
+- Build artifacts: `tsconfig.app.tsbuildinfo`, `tsconfig.node.tsbuildinfo` — should be **gitignored**, never committed
 
 ## Open todos
 
-- [ ] Wait for HFB to confirm the missed-day handling and final numbers
-- [ ] Send the HFB May invoice once confirmed
-- [ ] Investigate Sofia Corrales May 25–29 divergence — CSV said absent, JOI shows full 7.6–8 hr shifts. Possible work-not-done issue (clocked in but not productive on HFB tasks) — worth flagging to her TL
-- [ ] Investigate Francisco May 25 + May 28 — JOI clock_in/out exist but `total_hours` is null and times look manually entered (identical 13:50→23:20 both days)
-- [ ] Aldo + Mauro both went silent May 25–28 (no JOI rows) — confirm reason
-- [ ] If laptop is the next machine: update `claude_desktop_config.json` with the new apex key, add `supabase-personal` block if you want both orgs reachable
+- [ ] Commit the 4 untracked docs (or .gitignore them if intentionally local)
+- [ ] Add `*.tsbuildinfo` to `.gitignore`
+- [ ] Decide on `generate_seed.sql` (commit vs. keep local)
+- [ ] Recruiting MVP shipped May 28 – June 11 (see section above), already on `main` — no open recruiting work from last week
+- [ ] Payroll: base/spiffs migrations still held (not deployed) per #103 — confirm before next payroll run
 
 ## Next step when you come back
 
-Once HFB confirms, generate and send the May invoice via the existing invoice flow (`FacturaNueva` / `generate_weekly_invoices` RPC — but note HFB is monthly, not weekly). Cross-reference the deduction table from this session before sending.
+Nothing blocking — `main` is clean and pushed. Triage the untracked files (commit docs, gitignore build artifacts), then continue the payroll rework with Joe (finish quincenal base + lock periods) per `docs/payroll-rework.md`.
 
 ## Watch out for
 
-- **Apex MCP will fail on the laptop** until you update `~/Library/Application Support/Claude/claude_desktop_config.json` with the rotated key (old `apex_3d0457ca...` was revoked). Same goes for the dual Supabase setup if you want both orgs on the laptop.
-- **Three new memory entries** I wrote (HFB JOI cutover date, MX holidays paid standard rule, dual-Supabase reference) live in this Mac mini's Cowork memory space — they won't appear in long-term memory on the laptop.
-- **`time_clock` has no UNIQUE constraint** on `(employee_id, date)`. Re-running `HFB_BACKFILL_2026-05_TIMECLOCK.sql` would create duplicates. Treat the file as a one-shot artifact.
-- **2 commits ahead of origin before this save** (the earlier session-handoff commits `6dfa2d6` + `6d12545` were never pushed). After this save, you'll be 3 commits ahead — push needs to go through.
-- Sandbox couldn't run `git add/commit/push` (hard rule). Commands are below for you to paste in terminal.
+- `main` already matches `origin` — no code push needed. Only SESSION.md + any doc commits below.
+- Never commit `.claude/settings.local.json` or `*.tsbuildinfo`.
+- The Cowork shell can't run git against this repo — use the paste-ready commands provided in chat.
