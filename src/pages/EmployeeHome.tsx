@@ -41,6 +41,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { usePublishedPosts, useMyAcks } from "@/hooks/useBulletin";
+import { AnnouncementAckBanner } from "@/components/AnnouncementAckBanner";
 import { useEmployeeDocuments, useUploadDocument } from "@/hooks/useEmployeeDocuments";
 import { useMyGoal } from "@/hooks/useSupabasePayroll";
 import { GoalPromptDialog } from "@/components/GoalPromptDialog";
@@ -498,6 +499,13 @@ export default function EmployeeHome() {
           {statusBadge.label}
         </Badge>
       </div>
+
+      {/* Announcements needing acknowledgment — sits at the top so it can't be
+          missed; each card clears itself once acknowledged. */}
+      <AnnouncementAckBanner
+        employeeId={employeeId}
+        campaignId={employee?.campaign_id ?? null}
+      />
 
       {/* Personal goal reminder — shows only once the agent has set one.
           Small, subtle, encouraging. NOT shown every clock-in (that's the
