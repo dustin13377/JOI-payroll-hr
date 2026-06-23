@@ -50,6 +50,7 @@ import {
 import { toast } from "sonner";
 import { usePublishedPosts, useMyAcks } from "@/hooks/useBulletin";
 import { ScheduleBanner } from "@/components/ScheduleBanner";
+import { AnnouncementAckBanner } from "@/components/AnnouncementAckBanner";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -330,6 +331,9 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
           {statusBadge.label}
         </Badge>
       </div>
+
+      {/* Announcements needing acknowledgment — clears as each is acknowledged. */}
+      <AnnouncementAckBanner employeeId={employeeId} campaignId={campaignId} />
 
       {/* Today + Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
