@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { todayLocal } from "@/lib/localDate";
+import { ScheduleBanner } from "@/components/ScheduleBanner";
 import { formatMinutesVerbose } from "@/lib/formatDuration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -160,11 +161,11 @@ export default function EmployeeHome() {
       if (!employeeId) return null;
       const { data, error } = await supabase
         .from("employees")
-        .select("id, full_name, campaign_id, title, work_name")
+        .select("id, full_name, campaign_id, title, work_name, employee_id")
         .eq("id", employeeId)
         .single();
       if (error) throw error;
-      return data as { id: string; full_name: string; campaign_id: string; title: string; work_name: string | null };
+      return data as { id: string; full_name: string; campaign_id: string; title: string; work_name: string | null; employee_id: string };
     },
     enabled: !!employeeId,
   });
@@ -657,6 +658,10 @@ export default function EmployeeHome() {
                   >
                     {clockInMutation.isPending ? "Clocking in..." : "Clock In"}
                   </Button>
+                </div>
+                {/* Small one-line schedule reminder under the Clock In button */}
+                <div className="mt-4">
+                  <ScheduleBanner employeeId={employee?.employee_id} variant="compact" />
                 </div>
               </div>
             )}

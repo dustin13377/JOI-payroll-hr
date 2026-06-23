@@ -36,6 +36,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { ClockOutEODDialog, type KPIField } from "@/components/ClockOutEODDialog";
+import { ScheduleBanner } from "@/components/ScheduleBanner";
 import { todayLocal, parseLocalDate } from "@/lib/localDate";
 import { useComplianceStatus } from "@/hooks/useComplianceStatus";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -89,6 +90,7 @@ interface ShiftSettings {
 interface Employee {
   id: string;
   campaign_id: string;
+  employee_id: string;
 }
 
 // Cap durations (in minutes)
@@ -164,7 +166,7 @@ export default function Timeclock() {
       if (!employeeId) return null;
       const { data, error } = await supabase
         .from("employees")
-        .select("id, campaign_id")
+        .select("id, campaign_id, employee_id")
         .eq("id", employeeId)
         .single();
       if (error) throw error;
@@ -815,6 +817,10 @@ export default function Timeclock() {
           )}
         </CardContent>
       </Card>
+
+      {/* Full schedule banner — sits between the clock-in card and weekly history.
+          Read-only; data from src/lib/breakSchedules.ts. */}
+      <ScheduleBanner employeeId={employee?.employee_id} />
 
       {/* Weekly History */}
       <Card>

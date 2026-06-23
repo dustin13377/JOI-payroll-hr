@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePublishedPosts, useMyAcks } from "@/hooks/useBulletin";
+import { ScheduleBanner } from "@/components/ScheduleBanner";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -147,6 +148,23 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
     },
     enabled: !!employeeId,
     refetchInterval: 30_000,
+  });
+
+  // ---------- Text employee_id (e.g. "EMP-003") for the schedule banner ----------
+  // The employeeId prop is the UUID (employees.id); the break-schedule lookup
+  // is keyed by the human-facing employees.employee_id, so fetch that here.
+  const { data: employeeCode } = useQuery({
+    queryKey: ["home-hero-employee-code", employeeId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("employee_id")
+        .eq("id", employeeId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.employee_id ?? null;
+    },
+    enabled: !!employeeId,
   });
 
   // ---------- Shift settings (grace period, expected end) ----------
@@ -354,6 +372,10 @@ export function HomeHero({ employeeId, firstName, subtitle, campaignId }: HomeHe
                   >
                     {clockInMutation.isPending ? "Clocking in..." : "Clock In"}
                   </Button>
+                </div>
+                {/* Small one-line schedule reminder under the Clock In button */}
+                <div className="mt-4">
+                  <ScheduleBanner employeeId={employeeCode} variant="compact" />
                 </div>
               </div>
             )}
