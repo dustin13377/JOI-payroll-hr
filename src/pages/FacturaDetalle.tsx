@@ -135,6 +135,8 @@ export default function FacturaDetalle() {
 
   const lines = invoice.lines || [];
   const grandTotal = lines.reduce((sum, l) => sum + Number(l.total_price), 0);
+  // Screen-only spiffs subtotal so D can eyeball it against the spiff tracker.
+  const spiffsTotal = lines.reduce((sum, l) => sum + Number(l.spiffs || 0), 0);
 
   // Lock state — drives whether editors render or just show values.
   // "sent" can be unlocked back to draft; "paid" is hard-locked.
@@ -355,9 +357,16 @@ export default function FacturaDetalle() {
           <Separator className="my-6" />
 
           <div className="flex justify-end">
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Grand Total</p>
-              <p className="text-3xl font-bold text-primary">{fmtUSD(grandTotal)}</p>
+            <div className="text-right space-y-1">
+              {/* Spiffs subtotal — screen only, for eyeballing against the tracker. Not printed. */}
+              <div className="print:hidden">
+                <p className="text-sm text-muted-foreground">Spiffs subtotal</p>
+                <p className="text-lg font-semibold">{fmtUSD(spiffsTotal)}</p>
+              </div>
+              <div className="pt-1">
+                <p className="text-sm text-muted-foreground">Grand Total</p>
+                <p className="text-3xl font-bold text-primary">{fmtUSD(grandTotal)}</p>
+              </div>
             </div>
           </div>
         </CardContent>
