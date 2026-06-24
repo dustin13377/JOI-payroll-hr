@@ -6,8 +6,11 @@
 // is that a human taps send and the message goes from whatever WhatsApp account
 // is on that device.
 
+// Interview booking link sent to candidates. Now a Google Calendar
+// appointment-schedule link (was Calendly); constant name kept to avoid
+// churning importers.
 export const CALENDLY_INTERVIEW_URL =
-  "https://calendly.com/humanresources-justoutsource/30min";
+  "https://calendar.app.google/nw7EubnaE3gGhaaS8";
 
 /** Template key recorded on the recruiting_messages row for this message type. */
 export const INTERVIEW_INVITE_TEMPLATE_KEY = "interview_invite_whatsapp";

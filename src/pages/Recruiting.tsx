@@ -11,7 +11,7 @@ import { STAGES, STAGE_LABELS } from "@/lib/recruiting/stages";
 import { Check, Copy, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
 
-const BOOKING_URL = "https://calendly.com/humanresources-justoutsource/30min";
+const BOOKING_URL = "https://calendar.app.google/nw7EubnaE3gGhaaS8";
 
 const STAGE_FILTER_ACTIVE = "active";
 
