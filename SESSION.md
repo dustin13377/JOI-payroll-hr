@@ -1,39 +1,45 @@
 # Session Handoff
 
-**Saved:** 2026-06-22 (Cowork EOD handoff)
-**Machine:** admins-MacBook-Air (MacBook Air)
-**Branch:** main — clean, up to date with origin/main
-**Last commit:** 53eefc7 docs: session handoff routine + how to set up the 7pm task on other machines
+**Saved:** 2026-06-24 (Cowork EOD handoff)
+**Machine:** built on admins-MacBook-Air, but today's commits came from the **other machine**
+**Branch:** `origin/main` is the source of truth at **6463e1a** — this laptop's local main is behind, fetch only (see Watch out for)
+**Last commit:** 6463e1a `Loosen short-break late-return grace to 30 seconds`
 
 ## What we were doing
 
-Today was housekeeping only — no feature code. Two doc/handoff commits this morning (~08:05 CT): recorded the previous session handoff, formalized the EOD handoff routine, documented how to set up the 7pm scheduled task on other machines, and gitignored the build artifacts that kept showing up as untracked. `main` is clean and pushed.
+Five commits landed on **main today (2026-06-24)**, pushed from the other machine — a batch of small fixes and polish across invoices, spiffs, timeclock, recruiting, and onboarding. No single big feature; this was a clean-up / loose-ends day. Separately, yesterday's banner work (schedule banner + dashboard banners) **did merge** as PRs #110 and #111 — so the "in flight" branch from the earlier draft of this file is now landed; disregard that.
 
-## Shipped / committed today
+## Shipped today (all on main)
 
-- **ff68248** — `session-handoff: last-week payroll/spiffs/invoices recorded; gitignore tsbuildinfo` (closes the prior "*.tsbuildinfo should be gitignored" todo)
-- **53eefc7** — `docs: session handoff routine + how to set up the 7pm task on other machines`
+- **6463e1a** — Loosen short-break late-return grace to **30 seconds** (timeclock break compliance)
+- **4345a88** — Fix ambiguous `invoice_id` in `generate_weekly_invoices` — this was the **Generate button returning 400** (invoice generator bug)
+- **a1c8d18** — Show screen-only spiffs subtotal on invoice detail
+- **6b439d0** — Sync initial campaign assignment `start_date` when `hire_date` is set later (onboarding data integrity)
+- **c22dc46** — Update interview booking link to Google Calendar (recruiting)
 
-No `feat`/`fix` commits today. The substantive work (payroll rebuild #102–#107, spiffs v2, invoice vacation billing + gap detection, clock-in alerts, recruiting MVP) all landed in prior sessions and is already on `main`.
+Yesterday (2026-06-23), for context: **#111** `feat/dashboard banners` (b413c27) and **#110** schedule banner (1b48652) both merged to main.
 
 ## Decisions made
 
-- `*.tsbuildinfo` is now gitignored — stop committing build artifacts.
-- EOD session handoff is now a documented routine driven by a 7pm scheduled task (setup steps captured in the docs commit).
+- Short-break late-return grace is now **30 seconds** (was tighter) — small tolerance so a few seconds over doesn't flag a late return.
+- Spiffs subtotal on the invoice detail is **screen-only** (display, not a billed line).
+- Campaign assignment `start_date` now backfills from `hire_date` when hire_date is filled in after the fact, rather than staying null.
 
 ## Open todos
 
-- [ ] Verify the four prior untracked docs got committed or intentionally gitignored: `docs/collaborator-access.md`, `docs/superpowers/plans/2026-06-19-invoice-generator-vacation-gaps.md`, `2026-06-19-spiffs-invoicing-link.md`, `2026-06-19-spiffs-tl-entry.md`
-- [ ] Decide on `generate_seed.sql` (commit vs. keep local) — still untracked last time it was checked
-- [ ] Payroll: base/spiffs migrations still **held** (not deployed) per #103 — confirm before the next payroll run
-- [ ] Continue payroll rework with Joe — finish quincenal base + lock periods, unify the two payroll screens (`docs/payroll-rework.md`)
+- [ ] Sync this laptop: `git checkout main && git pull`, then delete the now-merged `feat/dashboard-banners` (and stale `feat/timeclock-schedule-banner`) branches.
+- [ ] Payroll: base/spiffs migrations still **held** (not deployed) per #103 — confirm before the next payroll run.
+- [ ] Continue payroll rework with Joe — finish quincenal base + lock periods, unify the two payroll screens (`docs/payroll-rework.md`).
+- [ ] Carry-overs: decide on `generate_seed.sql` (commit vs. keep local); verify the four prior untracked docs (`docs/collaborator-access.md`, the three `2026-06-19-*` plan files) were committed or intentionally gitignored.
 
 ## Next step when you come back
 
-Nothing blocking — `main` is clean and pushed. Pick up the payroll rework with Joe (quincenal base fix + period locking) per `docs/payroll-rework.md`. Before any real payroll run, confirm the held base/spiffs migrations from #103.
+Nothing's blocking on main — today's batch is shipped. First thing: fast-forward this laptop's local main so it isn't stranded behind origin (6463e1a). Then pick the payroll rework with Joe back up per `docs/payroll-rework.md`, and confirm the held #103 migrations before any real payroll run.
 
 ## Watch out for
 
-- Never commit `.claude/settings.local.json` (local-only) or `*.tsbuildinfo` (now gitignored).
+- **This laptop is behind origin.** Today's commits were pushed elsewhere; you've fetched but not pulled. `git checkout main && git pull` before starting new work, or you'll branch off stale code.
+- Today's five commits have **no PR numbers** — they appear to have gone **direct to main**, which is branch-protected. If that's not intended, check the branch protection / who pushed.
+- Never commit `.claude/settings.local.json` (local-only) or `*.tsbuildinfo` (gitignored).
 - The Cowork shell can't run git against this repo — use the paste-ready block below.
-- `main` is branch-protected; pushing SESSION.md straight to main bypasses the PR rule. Fine for a handoff doc, but it does skip review.
+- This handoff is a **draft built from the commit log** — glance over it before committing.
