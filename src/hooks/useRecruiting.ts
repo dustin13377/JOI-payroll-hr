@@ -107,6 +107,37 @@ export function useUpdateCandidate() {
   });
 }
 
+/**
+ * Creates a candidate by hand, tagged source = "referral".
+ *
+ * Used when someone books an interview through a shared link but was never
+ * entered through the application form, so there's no profile to match. We
+ * create a minimal row (just the name) and let the recruiter fill in the rest
+ * on the profile later. Returns the new candidate's id so the caller can
+ * immediately record the interview outcome against it.
+ */
+export function useCreateReferralCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      fullName,
+      stage,
+    }: {
+      fullName: string;
+      stage: Stage;
+    }): Promise<string> => {
+      const { data, error } = await supabase
+        .from("recruiting_candidates")
+        .insert({ full_name: fullName.trim() || null, source: "referral", stage })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return (data as { id: string }).id;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: CANDIDATES_KEY }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Position options (editable dropdown — recruiters add new ones as they go)
 // ---------------------------------------------------------------------------

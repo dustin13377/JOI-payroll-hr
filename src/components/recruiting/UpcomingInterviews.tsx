@@ -21,13 +21,14 @@ import {
 } from "@/components/ui/command";
 import {
   useCandidates,
+  useCreateReferralCandidate,
   useInterviewOutcomes,
   useMarkInterviewOutcome,
   type Candidate,
   type InterviewOutcome,
 } from "@/hooks/useRecruiting";
 import { toast } from "sonner";
-import { Calendar, Check, ChevronDown, ChevronUp, Video, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, ChevronUp, UserPlus, Video, X } from "lucide-react";
 
 const EMBED_URL =
   "https://calendar.google.com/calendar/embed?src=humanresources%40justoutsource.it&ctz=America%2FMexico_City&mode=WEEK";
@@ -131,6 +132,7 @@ export function UpcomingInterviews() {
   const { data: candidates = [] } = useCandidates();
   const { data: outcomes = [] } = useInterviewOutcomes();
   const markOutcome = useMarkInterviewOutcome();
+  const createReferral = useCreateReferralCandidate();
 
   const outcomeByKey = new Map(outcomes.map((o) => [o.event_key, o.outcome]));
 
@@ -161,6 +163,24 @@ export function UpcomingInterviews() {
       setPending({ event, outcome });
     }
   };
+
+  // No matching profile (link handed out, never entered): create the person as
+  // a referral and mark the outcome against the new profile in one click.
+  const addAsReferral = async () => {
+    if (!pending) return;
+    const name = extractEventName(pending.event.summary) ?? "";
+    try {
+      const id = await createReferral.mutateAsync({ fullName: name, stage: "interviewed" });
+      save(pending.event, id, pending.outcome);
+      setPending(null);
+    } catch (e) {
+      toast.error(
+        `Couldn't add referral: ${e instanceof Error ? e.message : "unknown"}`,
+      );
+    }
+  };
+
+  const pendingName = pending ? extractEventName(pending.event.summary) : null;
 
   const events = (data ?? []).slice(0, 10);
 
@@ -326,6 +346,15 @@ export function UpcomingInterviews() {
               </CommandGroup>
             </CommandList>
           </Command>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            disabled={createReferral.isPending || !pendingName}
+            onClick={addAsReferral}
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add{pendingName ? ` “${pendingName}”` : ""} as a referral
+          </Button>
         </DialogContent>
       </Dialog>
     </Card>
