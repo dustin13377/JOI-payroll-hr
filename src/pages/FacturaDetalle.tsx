@@ -19,12 +19,22 @@ import {
   useAddInvoiceLine,
   useAttachSpiffs,
   useDetachSpiffs,
+  useClientContacts,
+  useAddClientContact,
+  useDeleteClientContact,
+  useSendInvoiceEmail,
   fmtUSD,
   type InvoiceLine,
+  type Invoice,
+  type Client,
+  type InvoicePunch,
 } from "@/hooks/useInvoices";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateUSLong } from "@/lib/localDate";
-import { generateInvoiceWithTimesheetPdf } from "@/lib/pdf/generateInvoiceWithTimesheetPdf";
+import {
+  generateInvoiceWithTimesheetPdf,
+  buildInvoiceWithTimesheetPdfBase64,
+} from "@/lib/pdf/generateInvoiceWithTimesheetPdf";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +53,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, Printer, Send, CheckCircle, Trash2, Plus, Lock, Unlock, Loader2, Download, AlertTriangle,
+  ArrowLeft, Printer, Send, CheckCircle, Trash2, Plus, Lock, Unlock, Loader2, Download, AlertTriangle, Mail, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
@@ -98,6 +108,7 @@ export default function FacturaDetalle() {
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [showAddMisc, setShowAddMisc] = useState(false);
   const [showAddAgent, setShowAddAgent] = useState(false);
+  const [showSend, setShowSend] = useState(false);
   const [downloadMismatches, setDownloadMismatches] = useState<MismatchInfo[] | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -214,6 +225,21 @@ export default function FacturaDetalle() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices
         </Button>
         <div className="flex gap-2">
+          {!isTerminal && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (punchesLoading) {
+                  toast.info("Still loading punches — try again in a moment.");
+                  return;
+                }
+                setShowSend(true);
+              }}
+              disabled={punchesLoading}
+            >
+              <Mail className="mr-2 h-4 w-4" /> Send to Client
+            </Button>
+          )}
           {invoice.status === "draft" && (
             <Button
               variant="outline"
@@ -419,6 +445,14 @@ export default function FacturaDetalle() {
         weekStart={invoice.week_start}
         weekEnd={invoice.week_end}
         existingEmployeeIds={lines.map((l) => l.employee_id).filter(Boolean) as string[]}
+      />
+
+      {/* Send invoice to client */}
+      <SendInvoiceDialog
+        open={showSend}
+        onOpenChange={setShowSend}
+        invoice={invoice}
+        punchesByEmployee={punchesByEmployee}
       />
 
       {/* Download mismatch warning */}
@@ -1109,6 +1143,282 @@ function AddAgentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={!selected || add.isPending}>
             {add.isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>) : "Add line"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Send invoice to client — recipients + body, then Postmark send     */
+/* ------------------------------------------------------------------ */
+
+// "6/22" from "2026-06-22" without timezone games.
+function fmtMonthDay(ymd: string): string {
+  const [, m, d] = ymd.split("-").map(Number);
+  return `${m}/${d}`;
+}
+
+function buildDefaultSubject(invoice: Invoice & { client?: Client }): string {
+  const client = invoice.client?.name?.trim() || "Invoice";
+  return `${client} invoice ${fmtMonthDay(invoice.week_start)} - ${fmtMonthDay(invoice.week_end)}`;
+}
+
+function buildDefaultBody(invoice: Invoice): string {
+  const start = formatDateUSLong(invoice.week_start);
+  const end = formatDateUSLong(invoice.week_end);
+  return `Hello, here is the invoice for the week of ${start} – ${end}.
+You will find the invoice and time reports attached to this email.
+
+Please make payment available through wire transfer to the following account:
+
+Company name: JOI LLC
+Address: 5965 South 900 East #300, Salt Lake City, UT 84121
+Bank: Mountain America Credit Union
+Bank Routing Number: 324079555
+Bank account number: 13486233
+Bank address: 9800 S. Monroe St., Sandy, UT 84070
+
+--
+Diomedes D. Sandoval
+Owner of JOI`;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function SendInvoiceDialog({
+  open,
+  onOpenChange,
+  invoice,
+  punchesByEmployee,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  invoice: Invoice & { lines: InvoiceLine[]; client?: Client };
+  punchesByEmployee: Map<string, InvoicePunch[]>;
+}) {
+  // Saved contacts ARE the recipient list — adding persists for next time,
+  // the X deletes it so it stops auto-filling.
+  const { data: contacts = [], isLoading: contactsLoading } = useClientContacts(invoice.client_id);
+  const addContact = useAddClientContact();
+  const delContact = useDeleteClientContact();
+  const send = useSendInvoiceEmail();
+
+  const [newEmail, setNewEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [bccSelf, setBccSelf] = useState(true);
+  const [building, setBuilding] = useState(false);
+
+  const recipients = useMemo(() => contacts.map((c) => c.email), [contacts]);
+
+  // Prefill subject/body once per open. Recipients come live from the query.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      prefilledRef.current = false;
+      return;
+    }
+    if (prefilledRef.current) return;
+    prefilledRef.current = true;
+    setSubject(buildDefaultSubject(invoice));
+    setBody(buildDefaultBody(invoice));
+    setBccSelf(true);
+    setNewEmail("");
+  }, [open]);
+
+  const addEmail = () => {
+    const e = newEmail.trim();
+    if (!e) return;
+    if (!EMAIL_RE.test(e)) {
+      toast.error(`'${e}' is not a valid email address`);
+      return;
+    }
+    if (recipients.some((r) => r.toLowerCase() === e.toLowerCase())) {
+      toast.info("That recipient is already saved");
+      setNewEmail("");
+      return;
+    }
+    addContact.mutate(
+      { client_id: invoice.client_id, email: e },
+      {
+        onSuccess: () => setNewEmail(""),
+        onError: (err: any) => toast.error(`Couldn't save recipient: ${err.message}`),
+      },
+    );
+  };
+
+  const removeContact = (id: string, email: string) => {
+    delContact.mutate(
+      { id, client_id: invoice.client_id },
+      { onError: (err: any) => toast.error(`Couldn't remove ${email}: ${err.message}`) },
+    );
+  };
+
+  const pdfFilename = useMemo(() => {
+    const name = invoice.client?.name?.replace(/[\/\\:*?"<>|]+/g, " ").trim();
+    if (!name) return `${invoice.invoice_number}.pdf`;
+    return `${name} Invoice ${fmtMonthDay(invoice.week_start)} to ${fmtMonthDay(invoice.week_end)}.pdf`;
+  }, [invoice]);
+
+  const handleSend = () => {
+    if (recipients.length === 0) {
+      toast.error("Add at least one recipient");
+      return;
+    }
+    if (!subject.trim()) {
+      toast.error("Subject can't be empty");
+      return;
+    }
+    setBuilding(true);
+    let pdf: { base64: string; filename: string };
+    try {
+      pdf = buildInvoiceWithTimesheetPdfBase64(invoice, punchesByEmployee);
+    } catch (e: any) {
+      toast.error(`Couldn't build the PDF: ${e.message}`);
+      setBuilding(false);
+      return;
+    }
+    send.mutate(
+      {
+        invoice_id: invoice.id,
+        recipients,
+        subject: subject.trim(),
+        body_text: body,
+        pdf_base64: pdf.base64,
+        pdf_filename: pdf.filename,
+        bcc_self: bccSelf,
+      },
+      {
+        onSuccess: (r) => {
+          toast.success(
+            `Invoice emailed to ${r.recipients.length} recipient${r.recipients.length === 1 ? "" : "s"}${r.marked_sent ? " · marked Sent" : ""}`,
+          );
+          onOpenChange(false);
+        },
+        onError: (e: any) => toast.error(e.message),
+        onSettled: () => setBuilding(false),
+      },
+    );
+  };
+
+  const busy = building || send.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Send invoice to client</DialogTitle>
+          <DialogDescription>
+            Emails the invoice + timesheet PDF from accounting@justoutsource.it.
+            Recipients and the message are pre-filled — edit anything before sending.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Recipients — saved per client, auto-filled next time */}
+          <div>
+            <Label>Recipients</Label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Saved for {invoice.client?.name || "this client"} — added here, they auto-fill every week. Click ✕ to remove.
+            </p>
+            {contactsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading saved contacts…
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
+                  {contacts.length === 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      No saved recipients yet — add one below.
+                    </span>
+                  )}
+                  {contacts.map((c) => (
+                    <span
+                      key={c.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-sm"
+                    >
+                      {c.email}
+                      <button
+                        type="button"
+                        onClick={() => removeContact(c.id, c.email)}
+                        disabled={delContact.isPending}
+                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        aria-label={`Remove ${c.email}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="add a recipient email…"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); addEmail(); }
+                    }}
+                    disabled={addContact.isPending}
+                  />
+                  <Button type="button" variant="outline" onClick={addEmail} disabled={addContact.isPending}>
+                    {addContact.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Subject */}
+          <div>
+            <Label htmlFor="send-subject">Subject</Label>
+            <Input
+              id="send-subject"
+              value={subject}
+              onChange={(e) => setSubject(e.currentTarget.value)}
+            />
+          </div>
+
+          {/* Body */}
+          <div>
+            <Label htmlFor="send-body">Message</Label>
+            <Textarea
+              id="send-body"
+              value={body}
+              onChange={(e) => setBody(e.currentTarget.value)}
+              rows={12}
+              className="font-mono text-xs"
+            />
+          </div>
+
+          {/* Attachment + BCC */}
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center gap-2">
+            <Download className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">{pdfFilename}</span>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={bccSelf}
+              onChange={(e) => setBccSelf(e.currentTarget.checked)}
+              className="h-4 w-4"
+            />
+            Send me a copy (BCC accounting@justoutsource.it)
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={handleSend} disabled={busy || recipients.length === 0}>
+            {busy ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</>
+            ) : (
+              <><Mail className="mr-2 h-4 w-4" /> Send invoice</>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

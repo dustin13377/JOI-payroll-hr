@@ -424,14 +424,38 @@ function buildInvoiceFilename(
   return `${clientName} Invoice ${start} to ${end}.pdf`;
 }
 
-// ── Public entry point ──────────────────────────────────────────────
-export function generateInvoiceWithTimesheetPdf(
+// Build the jsPDF doc + its filename. Shared by the download path and the
+// email path so the two never drift.
+function buildInvoiceDoc(
   invoice: Invoice & { lines: InvoiceLine[]; client?: Client },
   punchesByEmployee: Map<string, InvoicePunch[]>,
-): void {
+): { doc: ReturnType<typeof createDoc>; filename: string } {
   const doc = createDoc();
   const invoiceEndY = drawInvoicePage(doc, invoice);
   drawTimesheets(doc, invoice, punchesByEmployee, invoiceEndY);
   drawFooters(doc, invoice.invoice_number);
-  doc.save(buildInvoiceFilename(invoice));
+  return { doc, filename: buildInvoiceFilename(invoice) };
+}
+
+// ── Public entry point — download ───────────────────────────────────
+export function generateInvoiceWithTimesheetPdf(
+  invoice: Invoice & { lines: InvoiceLine[]; client?: Client },
+  punchesByEmployee: Map<string, InvoicePunch[]>,
+): void {
+  const { doc, filename } = buildInvoiceDoc(invoice, punchesByEmployee);
+  doc.save(filename);
+}
+
+// ── Public entry point — email ──────────────────────────────────────
+// Returns the same PDF as a base64 string (no data-URI prefix) plus the
+// filename, ready to hand to the send-invoice-email edge function as a
+// Postmark attachment.
+export function buildInvoiceWithTimesheetPdfBase64(
+  invoice: Invoice & { lines: InvoiceLine[]; client?: Client },
+  punchesByEmployee: Map<string, InvoicePunch[]>,
+): { base64: string; filename: string } {
+  const { doc, filename } = buildInvoiceDoc(invoice, punchesByEmployee);
+  const dataUri = doc.output("datauristring");
+  const base64 = dataUri.substring(dataUri.indexOf(",") + 1);
+  return { base64, filename };
 }
