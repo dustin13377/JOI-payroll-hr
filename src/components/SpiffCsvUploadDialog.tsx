@@ -456,7 +456,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
           Upload CSV
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[85vh] !flex !flex-col overflow-hidden">
         <DialogHeader className="pr-8">
           <DialogTitle>Upload spiffs from CSV</DialogTitle>
           <DialogDescription>
@@ -467,7 +467,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
         </DialogHeader>
 
         {result ? (
-          <div className="space-y-3 flex flex-col min-h-0">
+          <div className="space-y-3 flex flex-col min-h-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap text-sm">
               <Badge variant="outline" className="border-green-500 text-green-700">
                 {result.liveN} live
@@ -575,7 +575,7 @@ export default function SpiffCsvUploadDialog({ agents, createdBy }: Props) {
             />
           </div>
         ) : (
-          <div className="space-y-3 flex flex-col min-h-0">
+          <div className="space-y-3 flex flex-col min-h-0 flex-1">
             {/* Summary */}
             <div className="flex items-center gap-2 flex-wrap justify-between text-sm">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
