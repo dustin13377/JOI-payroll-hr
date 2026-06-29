@@ -459,6 +459,119 @@ export const fmtUSD = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
 /* ----------------------------------------------------------------- */
+/*  Client contacts + invoice email send                               */
+/* ----------------------------------------------------------------- */
+
+export interface ClientContact {
+  id: string;
+  client_id: string;
+  name: string | null;
+  email: string;
+  active: boolean;
+}
+
+/** Active default recipients for a client. Feeds the Send-to-Client dialog. */
+export function useClientContacts(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ["client-contacts", clientId],
+    enabled: !!clientId,
+    queryFn: async (): Promise<ClientContact[]> => {
+      const { data, error } = await supabase
+        .from("client_contacts")
+        .select("id, client_id, name, email, active")
+        .eq("client_id", clientId!)
+        .eq("active", true)
+        .order("name", { nullsFirst: false });
+      if (error) throw error;
+      return (data || []) as ClientContact[];
+    },
+  });
+}
+
+/** Save (or upsert) a recipient for a client so it auto-fills next time. */
+export function useAddClientContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { client_id: string; email: string; name?: string | null }): Promise<ClientContact> => {
+      const { data, error } = await supabase
+        .from("client_contacts")
+        .upsert(
+          { client_id: args.client_id, email: args.email, name: args.name ?? null, active: true },
+          { onConflict: "client_id,email" },
+        )
+        .select("id, client_id, name, email, active")
+        .single();
+      if (error) throw error;
+      return data as ClientContact;
+    },
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({ queryKey: ["client-contacts", args.client_id] });
+    },
+  });
+}
+
+/** Remove a saved recipient so it stops auto-filling. */
+export function useDeleteClientContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { id: string; client_id: string }) => {
+      const { error } = await supabase.from("client_contacts").delete().eq("id", args.id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({ queryKey: ["client-contacts", args.client_id] });
+    },
+  });
+}
+
+export interface SendInvoiceEmailArgs {
+  invoice_id: string;
+  recipients: string[];
+  cc?: string[];
+  subject: string;
+  body_text: string;
+  pdf_base64: string;
+  pdf_filename: string;
+  bcc_self?: boolean;
+}
+
+export interface SendInvoiceEmailResult {
+  status: string;
+  message_id: string;
+  recipients: string[];
+  marked_sent: boolean;
+}
+
+/** Invoke the send-invoice-email edge function with the PDF attachment. */
+export function useSendInvoiceEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: SendInvoiceEmailArgs): Promise<SendInvoiceEmailResult> => {
+      const { data, error } = await supabase.functions.invoke("send-invoice-email", {
+        body: args,
+      });
+      if (error) {
+        // Surface the edge function's JSON { error } message when present.
+        let msg = error.message;
+        try {
+          const ctx = (error as { context?: Response }).context;
+          if (ctx) {
+            const j = await ctx.json();
+            if (j?.error) msg = j.error;
+          }
+        } catch { /* fall back to error.message */ }
+        throw new Error(msg);
+      }
+      return data as SendInvoiceEmailResult;
+    },
+    onSuccess: (_result, args) => {
+      qc.invalidateQueries({ queryKey: ["invoice", args.invoice_id] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
+/* ----------------------------------------------------------------- */
 /*  Spiff attachment / detachment                                      */
 /* ----------------------------------------------------------------- */
 
