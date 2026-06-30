@@ -15,6 +15,10 @@ export interface ComputedPayroll {
   extraDaysWorked: number;
   sundaysWorked: number;
   timeOffDays: number;
+  /** Count of scheduled days punched but worked < 6h (prorated, not full pay). */
+  partialDayCount: number;
+  /** Peso amount docked across those short days (unworked fraction × daily). */
+  partialDayDeduction: number;
   days: { date: string; dow: number; status: PayrollDayStatus }[];
 }
 
@@ -22,10 +26,40 @@ export type PayrollDayStatus =
   | "off"
   | "worked"
   | "missed"
+  | "partial"
   | "vacation"
   | "holiday"
   | "holiday_worked"
   | "extra";
+
+/** A scheduled day with this many net hours or more pays as a full day. */
+const FULL_DAY_MIN_HOURS = 6;
+/** Fallback scheduled shift length when a campaign has no shift_settings row. */
+const DEFAULT_SHIFT_HOURS = 8;
+
+/** Net worked hours for one time_clock row (span minus lunch + breaks).
+ *  Returns null when the punch is incomplete (no clock_out) — we don't dock
+ *  pay on a half-recorded punch. */
+function rowNetHours(row: {
+  clock_in: string | null;
+  clock_out: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  break1_start: string | null;
+  break1_end: string | null;
+  break2_start: string | null;
+  break2_end: string | null;
+}): number | null {
+  if (!row.clock_in || !row.clock_out) return null;
+  const ms = (a: string | null, b: string | null) =>
+    a && b ? new Date(b).getTime() - new Date(a).getTime() : 0;
+  const gross = ms(row.clock_in, row.clock_out);
+  const breaks =
+    ms(row.lunch_start, row.lunch_end) +
+    ms(row.break1_start, row.break1_end) +
+    ms(row.break2_start, row.break2_end);
+  return Math.max(0, (gross - breaks) / 3_600_000);
+}
 
 /** Format a Date as "YYYY-MM-DD" without UTC shift. */
 function fmtDate(d: Date): string {
@@ -93,36 +127,66 @@ export function usePayrollComputed(
         ),
       ];
 
-      // 2. Fetch time_clock entries
+      // 2. Fetch time_clock entries (with punch times so we can measure hours)
       const { data: clockRows, error: clockErr } = await supabase
         .from("time_clock")
-        .select("employee_id, date")
+        .select(
+          "employee_id, date, clock_in, clock_out, lunch_start, lunch_end, break1_start, break1_end, break2_start, break2_end"
+        )
         .gte("date", pStart)
         .lte("date", pEnd);
       if (clockErr) throw clockErr;
 
-      // Build map: employeeUUID -> Set<dateString>
+      // Build maps:
+      //   clockMap  — employeeUUID -> Set<dateString> (did they punch at all)
+      //   hoursMap  — employeeUUID -> Map<dateString, number|null> net hours worked
+      //               (null = at least one incomplete punch that day → treat as full)
       const clockMap = new Map<string, Set<string>>();
+      const hoursMap = new Map<string, Map<string, number | null>>();
       for (const row of clockRows ?? []) {
         const eid = (row as any).employee_id as string;
         const d = (row as any).date as string;
         if (!clockMap.has(eid)) clockMap.set(eid, new Set());
         clockMap.get(eid)!.add(d);
+
+        if (!hoursMap.has(eid)) hoursMap.set(eid, new Map());
+        const dayMap = hoursMap.get(eid)!;
+        const net = rowNetHours(row as any);
+        const prev = dayMap.get(d);
+        if (prev === undefined) {
+          dayMap.set(d, net);
+        } else if (prev === null || net === null) {
+          dayMap.set(d, null); // any incomplete punch poisons the day → full credit
+        } else {
+          dayMap.set(d, prev + net);
+        }
       }
 
       // 3. Fetch shift_settings
       const safeIds = campaignIds.length > 0 ? campaignIds : ["__none__"];
       const { data: shiftRows, error: shiftErr } = await supabase
         .from("shift_settings")
-        .select("campaign_id, days_of_week")
+        .select("campaign_id, days_of_week, start_time, end_time")
         .in("campaign_id", safeIds);
       if (shiftErr) throw shiftErr;
 
       const shiftMap = new Map<string, number[]>();
+      const shiftHoursMap = new Map<string, number>(); // campaign_id -> scheduled day length (h)
       for (const row of shiftRows ?? []) {
         const cid = (row as any).campaign_id as string;
         const dow = (row as any).days_of_week as number[];
         shiftMap.set(cid, dow);
+        // start_time / end_time are "HH:MM:SS"; difference = scheduled shift length.
+        const start = (row as any).start_time as string | null;
+        const end = (row as any).end_time as string | null;
+        if (start && end) {
+          const toH = (t: string) => {
+            const [h, m] = t.split(":").map(Number);
+            return h + (m || 0) / 60;
+          };
+          const len = toH(end) - toH(start);
+          if (len > 0) shiftHoursMap.set(cid, len);
+        }
       }
 
       // 4. Fetch mexican_holidays
@@ -201,12 +265,33 @@ export function usePayrollComputed(
 
         const clocked = clockMap.get(uuid) ?? new Set<string>();
         const timeOff = timeOffMap.get(uuid) ?? new Set<string>();
+        const dayHours = hoursMap.get(uuid) ?? new Map<string, number | null>();
+        const scheduledShiftHours =
+          (campaignId && shiftHoursMap.get(campaignId)) || DEFAULT_SHIFT_HOURS;
+        const dailyRate = (Number(emp.monthly_base_salary) || 0) / 30;
 
         // daysAbsent
         let daysAbsent = 0;
         for (const d of scheduledDays) {
           if (!clocked.has(d) && !timeOff.has(d)) daysAbsent++;
         }
+
+        // Partial days: scheduled days punched but worked < 6h net. The base
+        // already paid the full day, so dock the unworked fraction (0..1) ×
+        // daily. Incomplete punches (null hours) stay full; missed days (no
+        // punch) are counted above, not here.
+        const partialDates = new Set<string>();
+        let partialDayDeduction = 0;
+        for (const d of scheduledDays) {
+          if (!clocked.has(d)) continue;
+          const h = dayHours.get(d);
+          if (h == null || h <= 0 || h >= FULL_DAY_MIN_HOURS) continue;
+          const unworked = Math.min(1, Math.max(0, 1 - h / scheduledShiftHours));
+          partialDayDeduction += unworked * dailyRate;
+          partialDates.add(d);
+        }
+        partialDayDeduction =
+          Math.round((partialDayDeduction + Number.EPSILON) * 100) / 100;
 
         // sundayPremiumEarned
         let sundayPremiumEarned = false;
@@ -242,7 +327,13 @@ export function usePayrollComputed(
           if (holidaySet.has(d)) {
             status = clocked.has(d) ? "holiday_worked" : "holiday";
           } else if (scheduledDays.has(d)) {
-            status = clocked.has(d) ? "worked" : timeOff.has(d) ? "vacation" : "missed";
+            status = clocked.has(d)
+              ? partialDates.has(d)
+                ? "partial"
+                : "worked"
+              : timeOff.has(d)
+              ? "vacation"
+              : "missed";
           } else {
             status = clocked.has(d) ? "extra" : timeOff.has(d) ? "vacation" : "off";
           }
@@ -265,6 +356,8 @@ export function usePayrollComputed(
           extraDaysWorked,
           sundaysWorked,
           timeOffDays: timeOff.size,
+          partialDayCount: partialDates.size,
+          partialDayDeduction,
           days,
         };
       });

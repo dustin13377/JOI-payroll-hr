@@ -19,6 +19,10 @@
  *   spiff           = USD × exchangeRate (spiffs entered in USD, taken at 17 MXN)
  *   kpi bonus       = + amount when achieved
  *   custom deduction= − amount           (manager-entered)
+ *   partial day     = − unworked fraction of a short day. A scheduled day with a
+ *                     punch but < 6h net worked pays only hours worked: the base
+ *                     already paid the full day, so we dock the unworked part.
+ *                     Caller computes the peso amount (see usePayrollComputed).
  */
 
 export const OVERTIME_DAY_PAY = 1000;
@@ -39,6 +43,8 @@ export interface EngineInputs {
   exchangeRate?: number;
   kpiBonus?: number;
   customDeduction?: number;
+  /** Peso amount docked for short (<6h) scheduled days. Caller-computed. */
+  partialDayDeduction?: number;
 }
 
 export interface EngineResult {
@@ -53,6 +59,7 @@ export interface EngineResult {
   spiffMxn: number;
   kpiBonus: number;
   customDeduction: number;
+  partialDayDeduction: number;
   net: number;
 }
 
@@ -91,6 +98,7 @@ export function computeNetPay(i: EngineInputs): EngineResult {
   const spiffMxn = r2((i.spiffUsd ?? 0) * (i.exchangeRate ?? DEFAULT_EXCHANGE_RATE));
   const kpiBonus = r2(i.kpiBonus ?? 0);
   const customDeduction = r2(i.customDeduction ?? 0);
+  const partialDayDeduction = r2(i.partialDayDeduction ?? 0);
 
   const net = r2(
     base -
@@ -102,7 +110,8 @@ export function computeNetPay(i: EngineInputs): EngineResult {
       holidayPay +
       spiffMxn +
       kpiBonus -
-      customDeduction
+      customDeduction -
+      partialDayDeduction
   );
 
   return {
@@ -117,6 +126,7 @@ export function computeNetPay(i: EngineInputs): EngineResult {
     spiffMxn,
     kpiBonus,
     customDeduction,
+    partialDayDeduction,
     net,
   };
 }

@@ -23,6 +23,7 @@ import {
   Clock,
   Gift,
   Target,
+  Timer,
   Undo2,
   Lock,
   ChevronLeft,
@@ -48,6 +49,8 @@ function cellClass(kind: string): string {
       return "bg-emerald-100 text-emerald-700";
     case "missed":
       return "bg-red-100 text-red-700";
+    case "partial":
+      return "bg-orange-100 text-orange-700";
     case "overtime":
       return "bg-amber-100 text-amber-700";
     case "vacation":
@@ -69,6 +72,7 @@ function netTotal(
     sundaysWorked: number;
     timeOffDays: number;
     holidayDaysWorked: number;
+    partialDayDeduction: number;
   }[]
 ): number {
   return (list ?? []).reduce((s, c) => {
@@ -86,6 +90,7 @@ function netTotal(
         // KPI is the MONTHLY amount; paid half per quincena (mirrors base = monthly/2).
         // No achieved-toggle on this screen yet — everyone gets it for now (Part 2 adds the toggle).
         kpiBonus: c.kpiBonusAmount / 2,
+        partialDayDeduction: c.partialDayDeduction,
       }).net
     );
   }, 0);
@@ -202,6 +207,8 @@ export default function PrePayroll() {
           // KPI = monthly amount / 2 (quincenal half, parallels base). Paid to
           // everyone for now; the per-agent achieved toggle is Part 2.
           kpiBonus: c.kpiBonusAmount / 2,
+          // Short scheduled days (<6h worked) pay only hours worked.
+          partialDayDeduction: c.partialDayDeduction,
         });
         let mkLeft = makeupDays;
         const bar = c.days.map((d) => {
@@ -358,6 +365,7 @@ export default function PrePayroll() {
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-muted border" /> off · already paid</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100" /> worked / makeup (↩)</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100" /> missed</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-100" /> short day (&lt;6h · prorated)</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-100" /> overtime +$1,000</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100" /> vacation</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-violet-100" /> holiday</span>
@@ -406,6 +414,7 @@ export default function PrePayroll() {
                 <Chip icon={<Wallet className="h-4 w-4" />} label="Base ½" value={r.base} />
                 <Chip icon={<Target className="h-4 w-4" />} label="KPI ½" value={r.kpiBonus} sign="+" sub={c.kpiBonusAmount ? `${formatMXN(c.kpiBonusAmount)}/mo` : "none"} />
                 <Chip icon={<CalendarMinus className="h-4 w-4" />} label="Missed" value={r.missedDeduction} sign="-" sub={c.daysAbsent ? `${c.daysAbsent} days` : "none"} />
+                <Chip icon={<Timer className="h-4 w-4" />} label="Short days" value={r.partialDayDeduction} sign="-" sub={c.partialDayCount ? `${c.partialDayCount} × <6h` : "none"} />
                 <Chip icon={<Undo2 className="h-4 w-4" />} label="Makeup" value={r.makeupCredit} sign="+" sub={makeupDays ? `${makeupDays} made up` : "none"} />
                 <Chip icon={<Sun className="h-4 w-4" />} label="Sunday" value={r.sundayPay} sign="+" sub={c.sundaysWorked ? `${c.sundaysWorked} Sun` : "none"} />
                 <Chip icon={<Umbrella className="h-4 w-4" />} label="Vacation +25%" value={r.vacationPremium} sign="+" sub={c.timeOffDays ? `${c.timeOffDays} days` : "none"} />
