@@ -22,6 +22,7 @@ import {
   Umbrella,
   Clock,
   Gift,
+  Target,
   Undo2,
   Lock,
   ChevronLeft,
@@ -62,6 +63,7 @@ function cellClass(kind: string): string {
 function netTotal(
   list?: {
     monthlyBaseSalary: number;
+    kpiBonusAmount: number;
     daysAbsent: number;
     extraDaysWorked: number;
     sundaysWorked: number;
@@ -81,6 +83,9 @@ function netTotal(
         sundaysWorked: c.sundaysWorked,
         vacationDays: c.timeOffDays,
         holidayDaysWorked: c.holidayDaysWorked,
+        // KPI is the MONTHLY amount; paid half per quincena (mirrors base = monthly/2).
+        // No achieved-toggle on this screen yet — everyone gets it for now (Part 2 adds the toggle).
+        kpiBonus: c.kpiBonusAmount / 2,
       }).net
     );
   }, 0);
@@ -194,6 +199,9 @@ export default function PrePayroll() {
           vacationDays: c.timeOffDays,
           holidayDaysWorked: c.holidayDaysWorked,
           spiffUsd,
+          // KPI = monthly amount / 2 (quincenal half, parallels base). Paid to
+          // everyone for now; the per-agent achieved toggle is Part 2.
+          kpiBonus: c.kpiBonusAmount / 2,
         });
         let mkLeft = makeupDays;
         const bar = c.days.map((d) => {
@@ -396,6 +404,7 @@ export default function PrePayroll() {
 
               <div className="flex flex-wrap gap-2">
                 <Chip icon={<Wallet className="h-4 w-4" />} label="Base ½" value={r.base} />
+                <Chip icon={<Target className="h-4 w-4" />} label="KPI ½" value={r.kpiBonus} sign="+" sub={c.kpiBonusAmount ? `${formatMXN(c.kpiBonusAmount)}/mo` : "none"} />
                 <Chip icon={<CalendarMinus className="h-4 w-4" />} label="Missed" value={r.missedDeduction} sign="-" sub={c.daysAbsent ? `${c.daysAbsent} days` : "none"} />
                 <Chip icon={<Undo2 className="h-4 w-4" />} label="Makeup" value={r.makeupCredit} sign="+" sub={makeupDays ? `${makeupDays} made up` : "none"} />
                 <Chip icon={<Sun className="h-4 w-4" />} label="Sunday" value={r.sundayPay} sign="+" sub={c.sundaysWorked ? `${c.sundaysWorked} Sun` : "none"} />
