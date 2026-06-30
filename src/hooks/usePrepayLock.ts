@@ -19,7 +19,9 @@ export interface PrepayLine {
   sundays_worked: number;
   vacation_days: number;
   base: number;
+  kpi_bonus: number;
   missed_deduction: number;
+  partial_day_deduction: number;
   makeup_credit: number;
   overtime_pay: number;
   sunday_pay: number;

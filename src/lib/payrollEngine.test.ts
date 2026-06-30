@@ -14,6 +14,20 @@ describe("computeNetPay — base & daily", () => {
   });
 });
 
+describe("computeNetPay — partial (short) days", () => {
+  it("docks the unworked fraction of a short day", () => {
+    // Caller computes the peso amount upstream; engine just subtracts it.
+    const r = computeNetPay({ monthlyBase: 12000, partialDayDeduction: 348.67 });
+    expect(r.partialDayDeduction).toBe(348.67);
+    expect(r.net).toBe(6000 - 348.67);
+  });
+  it("defaults to zero when not provided", () => {
+    const r = computeNetPay({ monthlyBase: 12000 });
+    expect(r.partialDayDeduction).toBe(0);
+    expect(r.net).toBe(6000);
+  });
+});
+
 describe("computeNetPay — missed, makeup, overtime", () => {
   it("missed days are docked at the daily rate", () => {
     const r = computeNetPay({ monthlyBase: 12000, missedDays: 3 });

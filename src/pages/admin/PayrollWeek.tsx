@@ -984,7 +984,7 @@ export default function PayrollWeek() {
             This pay period is <strong>PAID and locked</strong>. All records are immutable.{" "}
             {SHOW_UNLOCK_BUTTON && canUnlock
               ? "Use the Unlock Period button above to reopen — every unlock is recorded in the audit log."
-              : "PAID periods stay locked. If a correction is genuinely needed, ask Diomedes — it's a manual DB operation with an audit row."}
+              : "PAID periods stay locked. If a correction is genuinely needed, ask the owner — it's a manual DB operation with an audit row."}
           </span>
         </div>
       )}

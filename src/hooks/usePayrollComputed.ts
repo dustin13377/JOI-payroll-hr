@@ -15,6 +15,10 @@ export interface ComputedPayroll {
   extraDaysWorked: number;
   sundaysWorked: number;
   timeOffDays: number;
+  /** Count of scheduled days punched but worked < 6h (prorated, not full pay). */
+  partialDayCount: number;
+  /** Peso amount docked across those short days (unworked fraction × daily). */
+  partialDayDeduction: number;
   days: { date: string; dow: number; status: PayrollDayStatus }[];
 }
 
@@ -22,10 +26,40 @@ export type PayrollDayStatus =
   | "off"
   | "worked"
   | "missed"
+  | "partial"
   | "vacation"
   | "holiday"
   | "holiday_worked"
   | "extra";
+
+/** A scheduled day with this many net hours or more pays as a full day. */
+const FULL_DAY_MIN_HOURS = 6;
+/** Fallback scheduled shift length when a campaign has no shift_settings row. */
+const DEFAULT_SHIFT_HOURS = 8;
+
+/** Net worked hours for one time_clock row (span minus lunch + breaks).
+ *  Returns null when the punch is incomplete (no clock_out) — we don't dock
+ *  pay on a half-recorded punch. */
+function rowNetHours(row: {
+  clock_in: string | null;
+  clock_out: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  break1_start: string | null;
+  break1_end: string | null;
+  break2_start: string | null;
+  break2_end: string | null;
+}): number | null {
+  if (!row.clock_in || !row.clock_out) return null;
+  const ms = (a: string | null, b: string | null) =>
+    a && b ? new Date(b).getTime() - new Date(a).getTime() : 0;
+  const gross = ms(row.clock_in, row.clock_out);
+  const breaks =
+    ms(row.lunch_start, row.lunch_end) +
+    ms(row.break1_start, row.break1_end) +
+    ms(row.break2_start, row.break2_end);
+  return Math.max(0, (gross - breaks) / 3_600_000);
+}
 
 /** Format a Date as "YYYY-MM-DD" without UTC shift. */
 function fmtDate(d: Date): string {
@@ -72,7 +106,9 @@ export function usePayrollComputed(
           "id, employee_id, full_name, campaign_id, monthly_base_salary, daily_discount_rate, kpi_bonus_amount, hire_date, terminated_at, campaigns!employees_campaign_id_fkey(name)"
         )
         .eq("is_active", true)
-        .eq("is_system_user", false);  // partners/auditors are not on payroll
+        .eq("is_system_user", false)   // partners/auditors are not on payroll
+        .gt("monthly_base_salary", 0); // no salary set = not on a pay run
+                                       // (drops the owner + zero-salary test accounts)
 
       if (employeeId) {
         empQuery = empQuery.eq("id", employeeId);
@@ -91,36 +127,66 @@ export function usePayrollComputed(
         ),
       ];
 
-      // 2. Fetch time_clock entries
+      // 2. Fetch time_clock entries (with punch times so we can measure hours)
       const { data: clockRows, error: clockErr } = await supabase
         .from("time_clock")
-        .select("employee_id, date")
+        .select(
+          "employee_id, date, clock_in, clock_out, lunch_start, lunch_end, break1_start, break1_end, break2_start, break2_end"
+        )
         .gte("date", pStart)
         .lte("date", pEnd);
       if (clockErr) throw clockErr;
 
-      // Build map: employeeUUID -> Set<dateString>
+      // Build maps:
+      //   clockMap  — employeeUUID -> Set<dateString> (did they punch at all)
+      //   hoursMap  — employeeUUID -> Map<dateString, number|null> net hours worked
+      //               (null = at least one incomplete punch that day → treat as full)
       const clockMap = new Map<string, Set<string>>();
+      const hoursMap = new Map<string, Map<string, number | null>>();
       for (const row of clockRows ?? []) {
         const eid = (row as any).employee_id as string;
         const d = (row as any).date as string;
         if (!clockMap.has(eid)) clockMap.set(eid, new Set());
         clockMap.get(eid)!.add(d);
+
+        if (!hoursMap.has(eid)) hoursMap.set(eid, new Map());
+        const dayMap = hoursMap.get(eid)!;
+        const net = rowNetHours(row as any);
+        const prev = dayMap.get(d);
+        if (prev === undefined) {
+          dayMap.set(d, net);
+        } else if (prev === null || net === null) {
+          dayMap.set(d, null); // any incomplete punch poisons the day → full credit
+        } else {
+          dayMap.set(d, prev + net);
+        }
       }
 
       // 3. Fetch shift_settings
       const safeIds = campaignIds.length > 0 ? campaignIds : ["__none__"];
       const { data: shiftRows, error: shiftErr } = await supabase
         .from("shift_settings")
-        .select("campaign_id, days_of_week")
+        .select("campaign_id, days_of_week, start_time, end_time")
         .in("campaign_id", safeIds);
       if (shiftErr) throw shiftErr;
 
       const shiftMap = new Map<string, number[]>();
+      const shiftHoursMap = new Map<string, number>(); // campaign_id -> scheduled day length (h)
       for (const row of shiftRows ?? []) {
         const cid = (row as any).campaign_id as string;
         const dow = (row as any).days_of_week as number[];
         shiftMap.set(cid, dow);
+        // start_time / end_time are "HH:MM:SS"; difference = scheduled shift length.
+        const start = (row as any).start_time as string | null;
+        const end = (row as any).end_time as string | null;
+        if (start && end) {
+          const toH = (t: string) => {
+            const [h, m] = t.split(":").map(Number);
+            return h + (m || 0) / 60;
+          };
+          const len = toH(end) - toH(start);
+          if (len > 0) shiftHoursMap.set(cid, len);
+        }
       }
 
       // 4. Fetch mexican_holidays
@@ -135,32 +201,43 @@ export function usePayrollComputed(
         (holidayRows ?? []).map((r: any) => r.date as string)
       );
 
-      // 5. Fetch approved time-off (any type) overlapping the period.
-      // Reads from vacation_requests — the unified time-off table that holds
-      // all approved leave (paid Vacation + unpaid Sick/Personal/Other). PTO
-      // day math doesn't care if it's paid; absence is absence.
-      // See TIME_OFF_UNIFICATION_PLAN.md.
+      // 5. Fetch approved time-off overlapping the period — carrying the leave
+      // TYPE and the PAID flag, because they change the pay math:
+      //   - paid vacation (is_paid + type=vacation), tenure ≥ 1yr → +25% prima
+      //     vacacional and the day is covered (not docked).
+      //   - paid non-vacation leave (paid sick, etc.) → covered, no premium.
+      //   - unpaid leave (is_paid = false), OR vacation taken under 1 year of
+      //     service → NOT paid; the day is docked like an absence, no premium.
       const { data: timeOffRows, error: toErr } = await supabase
         .from("vacation_requests")
-        .select("employee_id, start_date, end_date")
+        .select("employee_id, start_date, end_date, request_type, is_paid")
         .eq("status", "approved")
         .lte("start_date", pEnd)
         .gte("end_date", pStart);
       if (toErr) throw toErr;
 
-      // Build map: employeeUUID -> Set<dateString>
-      const timeOffMap = new Map<string, Set<string>>();
+      // Build map: employeeUUID -> Map<dateString, {isVacation, isPaid}>
+      type LeaveDay = { isVacation: boolean; isPaid: boolean };
+      const timeOffMap = new Map<string, Map<string, LeaveDay>>();
       for (const row of timeOffRows ?? []) {
         const eid = (row as any).employee_id as string;
         const s = (row as any).start_date as string;
         const e = (row as any).end_date as string;
-        // Clamp to period
+        const isVacation = ((row as any).request_type as string | null) === "vacation";
+        const isPaid = (row as any).is_paid === true;
         const rangeStart = s < pStart ? pStart : s;
         const rangeEnd = e > pEnd ? pEnd : e;
         const dates = dateRange(rangeStart, rangeEnd);
-        if (!timeOffMap.has(eid)) timeOffMap.set(eid, new Set());
-        const set = timeOffMap.get(eid)!;
-        for (const d of dates) set.add(d);
+        if (!timeOffMap.has(eid)) timeOffMap.set(eid, new Map());
+        const m = timeOffMap.get(eid)!;
+        for (const d of dates) {
+          // If overlapping requests disagree, prefer the paid one.
+          const prev = m.get(d);
+          m.set(d, {
+            isVacation: isVacation || (prev?.isVacation ?? false),
+            isPaid: isPaid || (prev?.isPaid ?? false),
+          });
+        }
       }
 
       // All dates in the period
@@ -198,13 +275,59 @@ export function usePayrollComputed(
         );
 
         const clocked = clockMap.get(uuid) ?? new Set<string>();
-        const timeOff = timeOffMap.get(uuid) ?? new Set<string>();
+        const timeOff = timeOffMap.get(uuid) ?? new Map<string, LeaveDay>();
+        const dayHours = hoursMap.get(uuid) ?? new Map<string, number | null>();
+        const scheduledShiftHours =
+          (campaignId && shiftHoursMap.get(campaignId)) || DEFAULT_SHIFT_HOURS;
+        const dailyRate = (Number(emp.monthly_base_salary) || 0) / 30;
 
-        // daysAbsent
+        // Vacation eligibility: paid vacation + prima vacacional require ≥1 year
+        // of service (LFT Art. 76). Compute the cutoff as exactly one year before
+        // the period end.
+        const oneYearAgo = (() => {
+          const dt = parseDate(pEnd);
+          dt.setFullYear(dt.getFullYear() - 1);
+          return fmtDate(dt);
+        })();
+        const tenured = hireDate != null && hireDate <= oneYearAgo;
+
+        // Classify each approved leave day. A day is "paid" (covered by base, not
+        // docked) when is_paid is true AND — for vacation — the employee is
+        // tenured. Only paid vacation days earn the +25% prima vacacional. Unpaid
+        // leave (and vacation taken under a year) is not paid → docked below.
+        const paidLeaveDates = new Set<string>();
+        let vacationPremiumDays = 0;
+        for (const [d, leave] of timeOff) {
+          const effectivePaid = leave.isPaid && (!leave.isVacation || tenured);
+          if (effectivePaid) {
+            paidLeaveDates.add(d);
+            if (leave.isVacation) vacationPremiumDays++;
+          }
+        }
+
+        // daysAbsent: scheduled day with no punch and not covered by PAID leave.
+        // Unpaid leave therefore docks exactly like an absence.
         let daysAbsent = 0;
         for (const d of scheduledDays) {
-          if (!clocked.has(d) && !timeOff.has(d)) daysAbsent++;
+          if (!clocked.has(d) && !paidLeaveDates.has(d)) daysAbsent++;
         }
+
+        // Partial days: scheduled days punched but worked < 6h net. The base
+        // already paid the full day, so dock the unworked fraction (0..1) ×
+        // daily. Incomplete punches (null hours) stay full; missed days (no
+        // punch) are counted above, not here.
+        const partialDates = new Set<string>();
+        let partialDayDeduction = 0;
+        for (const d of scheduledDays) {
+          if (!clocked.has(d)) continue;
+          const h = dayHours.get(d);
+          if (h == null || h <= 0 || h >= FULL_DAY_MIN_HOURS) continue;
+          const unworked = Math.min(1, Math.max(0, 1 - h / scheduledShiftHours));
+          partialDayDeduction += unworked * dailyRate;
+          partialDates.add(d);
+        }
+        partialDayDeduction =
+          Math.round((partialDayDeduction + Number.EPSILON) * 100) / 100;
 
         // sundayPremiumEarned
         let sundayPremiumEarned = false;
@@ -240,9 +363,15 @@ export function usePayrollComputed(
           if (holidaySet.has(d)) {
             status = clocked.has(d) ? "holiday_worked" : "holiday";
           } else if (scheduledDays.has(d)) {
-            status = clocked.has(d) ? "worked" : timeOff.has(d) ? "vacation" : "missed";
+            status = clocked.has(d)
+              ? partialDates.has(d)
+                ? "partial"
+                : "worked"
+              : paidLeaveDates.has(d)
+              ? "vacation"
+              : "missed"; // unpaid leave shows as missed because it docks
           } else {
-            status = clocked.has(d) ? "extra" : timeOff.has(d) ? "vacation" : "off";
+            status = clocked.has(d) ? "extra" : paidLeaveDates.has(d) ? "vacation" : "off";
           }
           return { date: d, dow, status };
         });
@@ -262,7 +391,10 @@ export function usePayrollComputed(
           holidayDaysWorked,
           extraDaysWorked,
           sundaysWorked,
-          timeOffDays: timeOff.size,
+          // Only paid vacation days (tenured) — this drives the +25% prima.
+          timeOffDays: vacationPremiumDays,
+          partialDayCount: partialDates.size,
+          partialDayDeduction,
           days,
         };
       });
