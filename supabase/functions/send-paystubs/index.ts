@@ -42,11 +42,14 @@ function paystubHtml(name: string, periodCode: string, range: string, l: Record<
     <div style="padding:20px 28px;">
       <table style="width:100%;font-size:14px;border-collapse:collapse;">
         ${row("Base (½ month)", l.base)}
+        ${row("KPI (½ month)", l.kpi_bonus, "+")}
         ${row("Missed days", l.missed_deduction, "−")}
+        ${l.partial_day_deduction ? row("Short days (&lt;6h)", l.partial_day_deduction, "−") : ""}
         ${row("Makeup credit", l.makeup_credit, "+")}
         ${row("Sunday premium", l.sunday_pay, "+")}
         ${row("Vacation premium", l.vacation_premium, "+")}
         ${row("Overtime", l.overtime_pay, "+")}
+        ${l.holiday_pay ? row("Holiday pay", l.holiday_pay, "+") : ""}
         ${row("Spiff", l.spiff_mxn, "+")}
         <tr><td colspan="2" style="border-top:1px solid #e5e7eb;padding-top:8px;"></td></tr>
         <tr><td style="padding:8px 0;font-weight:700;font-size:16px;color:#1d4ed8;">Net pay</td>
@@ -119,7 +122,7 @@ Deno.serve(async (req) => {
 
     const { data: lines, error } = await admin
       .from("prepay_lines")
-      .select("net, base, missed_deduction, makeup_credit, overtime_pay, sunday_pay, vacation_premium, spiff_mxn, employees(full_name, personal_email)")
+      .select("net, base, kpi_bonus, missed_deduction, partial_day_deduction, makeup_credit, overtime_pay, sunday_pay, vacation_premium, holiday_pay, spiff_mxn, employees(full_name, personal_email)")
       .eq("period_id", period_id);
     if (error) throw error;
 
