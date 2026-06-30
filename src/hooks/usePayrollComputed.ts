@@ -201,32 +201,43 @@ export function usePayrollComputed(
         (holidayRows ?? []).map((r: any) => r.date as string)
       );
 
-      // 5. Fetch approved time-off (any type) overlapping the period.
-      // Reads from vacation_requests — the unified time-off table that holds
-      // all approved leave (paid Vacation + unpaid Sick/Personal/Other). PTO
-      // day math doesn't care if it's paid; absence is absence.
-      // See TIME_OFF_UNIFICATION_PLAN.md.
+      // 5. Fetch approved time-off overlapping the period — carrying the leave
+      // TYPE and the PAID flag, because they change the pay math:
+      //   - paid vacation (is_paid + type=vacation), tenure ≥ 1yr → +25% prima
+      //     vacacional and the day is covered (not docked).
+      //   - paid non-vacation leave (paid sick, etc.) → covered, no premium.
+      //   - unpaid leave (is_paid = false), OR vacation taken under 1 year of
+      //     service → NOT paid; the day is docked like an absence, no premium.
       const { data: timeOffRows, error: toErr } = await supabase
         .from("vacation_requests")
-        .select("employee_id, start_date, end_date")
+        .select("employee_id, start_date, end_date, request_type, is_paid")
         .eq("status", "approved")
         .lte("start_date", pEnd)
         .gte("end_date", pStart);
       if (toErr) throw toErr;
 
-      // Build map: employeeUUID -> Set<dateString>
-      const timeOffMap = new Map<string, Set<string>>();
+      // Build map: employeeUUID -> Map<dateString, {isVacation, isPaid}>
+      type LeaveDay = { isVacation: boolean; isPaid: boolean };
+      const timeOffMap = new Map<string, Map<string, LeaveDay>>();
       for (const row of timeOffRows ?? []) {
         const eid = (row as any).employee_id as string;
         const s = (row as any).start_date as string;
         const e = (row as any).end_date as string;
-        // Clamp to period
+        const isVacation = ((row as any).request_type as string | null) === "vacation";
+        const isPaid = (row as any).is_paid === true;
         const rangeStart = s < pStart ? pStart : s;
         const rangeEnd = e > pEnd ? pEnd : e;
         const dates = dateRange(rangeStart, rangeEnd);
-        if (!timeOffMap.has(eid)) timeOffMap.set(eid, new Set());
-        const set = timeOffMap.get(eid)!;
-        for (const d of dates) set.add(d);
+        if (!timeOffMap.has(eid)) timeOffMap.set(eid, new Map());
+        const m = timeOffMap.get(eid)!;
+        for (const d of dates) {
+          // If overlapping requests disagree, prefer the paid one.
+          const prev = m.get(d);
+          m.set(d, {
+            isVacation: isVacation || (prev?.isVacation ?? false),
+            isPaid: isPaid || (prev?.isPaid ?? false),
+          });
+        }
       }
 
       // All dates in the period
@@ -264,16 +275,41 @@ export function usePayrollComputed(
         );
 
         const clocked = clockMap.get(uuid) ?? new Set<string>();
-        const timeOff = timeOffMap.get(uuid) ?? new Set<string>();
+        const timeOff = timeOffMap.get(uuid) ?? new Map<string, LeaveDay>();
         const dayHours = hoursMap.get(uuid) ?? new Map<string, number | null>();
         const scheduledShiftHours =
           (campaignId && shiftHoursMap.get(campaignId)) || DEFAULT_SHIFT_HOURS;
         const dailyRate = (Number(emp.monthly_base_salary) || 0) / 30;
 
-        // daysAbsent
+        // Vacation eligibility: paid vacation + prima vacacional require ≥1 year
+        // of service (LFT Art. 76). Compute the cutoff as exactly one year before
+        // the period end.
+        const oneYearAgo = (() => {
+          const dt = parseDate(pEnd);
+          dt.setFullYear(dt.getFullYear() - 1);
+          return fmtDate(dt);
+        })();
+        const tenured = hireDate != null && hireDate <= oneYearAgo;
+
+        // Classify each approved leave day. A day is "paid" (covered by base, not
+        // docked) when is_paid is true AND — for vacation — the employee is
+        // tenured. Only paid vacation days earn the +25% prima vacacional. Unpaid
+        // leave (and vacation taken under a year) is not paid → docked below.
+        const paidLeaveDates = new Set<string>();
+        let vacationPremiumDays = 0;
+        for (const [d, leave] of timeOff) {
+          const effectivePaid = leave.isPaid && (!leave.isVacation || tenured);
+          if (effectivePaid) {
+            paidLeaveDates.add(d);
+            if (leave.isVacation) vacationPremiumDays++;
+          }
+        }
+
+        // daysAbsent: scheduled day with no punch and not covered by PAID leave.
+        // Unpaid leave therefore docks exactly like an absence.
         let daysAbsent = 0;
         for (const d of scheduledDays) {
-          if (!clocked.has(d) && !timeOff.has(d)) daysAbsent++;
+          if (!clocked.has(d) && !paidLeaveDates.has(d)) daysAbsent++;
         }
 
         // Partial days: scheduled days punched but worked < 6h net. The base
@@ -331,11 +367,11 @@ export function usePayrollComputed(
               ? partialDates.has(d)
                 ? "partial"
                 : "worked"
-              : timeOff.has(d)
+              : paidLeaveDates.has(d)
               ? "vacation"
-              : "missed";
+              : "missed"; // unpaid leave shows as missed because it docks
           } else {
-            status = clocked.has(d) ? "extra" : timeOff.has(d) ? "vacation" : "off";
+            status = clocked.has(d) ? "extra" : paidLeaveDates.has(d) ? "vacation" : "off";
           }
           return { date: d, dow, status };
         });
@@ -355,7 +391,8 @@ export function usePayrollComputed(
           holidayDaysWorked,
           extraDaysWorked,
           sundaysWorked,
-          timeOffDays: timeOff.size,
+          // Only paid vacation days (tenured) — this drives the +25% prima.
+          timeOffDays: vacationPremiumDays,
           partialDayCount: partialDates.size,
           partialDayDeduction,
           days,
