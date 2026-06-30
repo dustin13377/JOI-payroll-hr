@@ -72,7 +72,9 @@ export function usePayrollComputed(
           "id, employee_id, full_name, campaign_id, monthly_base_salary, daily_discount_rate, kpi_bonus_amount, hire_date, terminated_at, campaigns!employees_campaign_id_fkey(name)"
         )
         .eq("is_active", true)
-        .eq("is_system_user", false);  // partners/auditors are not on payroll
+        .eq("is_system_user", false)   // partners/auditors are not on payroll
+        .gt("monthly_base_salary", 0); // no salary set = not on a pay run
+                                       // (drops the owner + zero-salary test accounts)
 
       if (employeeId) {
         empQuery = empQuery.eq("id", employeeId);
