@@ -681,7 +681,10 @@ export default function EmpleadoPerfil() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label>KPI Bonus Amount</Label>
+                  <Label>Monthly KPI Bonus</Label>
+                  <p className="text-[11px] text-muted-foreground -mt-1">
+                    Full monthly amount. The system pays half each quincena.
+                  </p>
                   <Input
                     type="number"
                     value={salaryDraft.kpiMonto}
