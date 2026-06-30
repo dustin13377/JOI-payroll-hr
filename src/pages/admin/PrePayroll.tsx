@@ -142,9 +142,20 @@ export default function PrePayroll() {
       month: "long",
       year: "numeric",
     });
+    // Open the most recent half first: the period that contains today. If the
+    // displayed month is already in the past, default to PP2 (the latest half);
+    // if it's in the future, PP1.
+    const defaultHalf = (() => {
+      const t = new Date();
+      const sameMonth = t.getFullYear() === y && t.getMonth() + 1 === m;
+      if (sameMonth) return t.getDate() >= 16 ? ("pp2" as const) : ("pp1" as const);
+      const periodMonth = new Date(y, m - 1, 1);
+      const thisMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+      return periodMonth < thisMonth ? ("pp2" as const) : ("pp1" as const);
+    })();
     return {
       monthName,
-      defaultHalf: Number(period.start_date.split("-")[2]) >= 16 ? ("pp2" as const) : ("pp1" as const),
+      defaultHalf,
       pp1: { id: `${y}-${mm}-PP1`, start: `${y}-${mm}-01`, end: `${y}-${mm}-15`, label: "Pay Period 1", range: "1–15" },
       pp2: {
         id: `${y}-${mm}-PP2`,
@@ -336,7 +347,9 @@ export default function PrePayroll() {
             key={h}
             onClick={() => { setHalf(h); setCurrentPage(1); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              activeHalf === h ? "bg-background shadow-sm font-medium" : "text-muted-foreground"
+              activeHalf === h
+                ? "bg-background shadow-sm font-medium"
+                : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
             {monthInfo[h].label} <span className="text-xs opacity-70">({monthInfo[h].range})</span>
