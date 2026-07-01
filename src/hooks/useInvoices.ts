@@ -7,6 +7,11 @@ export interface Client {
   prefix: string;
   bill_to_name: string | null;
   bill_to_address: string | null;
+  // "weekly" (default) or "monthly". Monthly clients (e.g. HFB) are billed a
+  // full month ahead against a flat per-agent rate, so their invoices have no
+  // day-level punch backing — the PDF skips the timesheet section for them.
+  billing_frequency?: string | null;
+  monthly_flat_per_agent?: number | null;
 }
 
 export interface Invoice {

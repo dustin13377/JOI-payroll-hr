@@ -145,6 +145,10 @@ export default function FacturaDetalle() {
   }
 
   const lines = invoice.lines || [];
+  // Monthly clients (e.g. HFB) are billed a month ahead against a flat
+  // per-agent rate, so there are no day-level punches — the PDF skips the
+  // timesheet section and the download flow skips the punch-mismatch check.
+  const isMonthlyBilled = invoice.client?.billing_frequency === "monthly";
   const grandTotal = lines.reduce((sum, l) => sum + Number(l.total_price), 0);
   // Screen-only spiffs subtotal so D can eyeball it against the spiff tracker.
   const spiffsTotal = lines.reduce((sum, l) => sum + Number(l.spiffs || 0), 0);
@@ -160,6 +164,8 @@ export default function FacturaDetalle() {
   // Compute invoice-days vs punch-days mismatches across all punch-billed
   // lines. Used by the download flow.
   const computeMismatches = (): MismatchInfo[] => {
+    // Month-ahead invoices have no punch backing by design — nothing to reconcile.
+    if (isMonthlyBilled) return [];
     const out: MismatchInfo[] = [];
     for (const line of lines) {
       if (!line.employee_id || line.is_flat_total) continue;
@@ -281,7 +287,7 @@ export default function FacturaDetalle() {
             {downloading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Building PDF…</>
             ) : (
-              <><Download className="mr-2 h-4 w-4" /> Download Invoice + Timesheet</>
+              <><Download className="mr-2 h-4 w-4" /> {isMonthlyBilled ? "Download Invoice" : "Download Invoice + Timesheet"}</>
             )}
           </Button>
           <Button variant="outline" onClick={() => window.print()}>
