@@ -122,11 +122,29 @@ export default function FacturaDetalle() {
       .map((l) => l.employee_id as string);
   }, [invoice?.lines]);
 
+  // For monthly clients (billed a month ahead) the timesheet documents the
+  // PRIOR calendar month being reconciled — not the invoice's forward-dated
+  // period, which has no punches yet. Weekly clients use their own week range.
+  const punchRange = useMemo(() => {
+    if (!invoice?.week_start || !invoice?.week_end) {
+      return { start: undefined as string | undefined, end: undefined as string | undefined };
+    }
+    if (invoice.client?.billing_frequency === "monthly") {
+      const [wy, wm] = invoice.week_start.split("-").map(Number);
+      const pm = wm === 1 ? 12 : wm - 1;
+      const py = wm === 1 ? wy - 1 : wy;
+      const mm = String(pm).padStart(2, "0");
+      const lastDay = new Date(py, pm, 0).getDate();
+      return { start: `${py}-${mm}-01`, end: `${py}-${mm}-${String(lastDay).padStart(2, "0")}` };
+    }
+    return { start: invoice.week_start, end: invoice.week_end };
+  }, [invoice?.week_start, invoice?.week_end, invoice?.client?.billing_frequency]);
+
   const { data: punchesByEmployee = new Map(), isLoading: punchesLoading } = useInvoicePunches(
     invoice?.id,
     punchEmployeeIds,
-    invoice?.week_start,
-    invoice?.week_end,
+    punchRange.start,
+    punchRange.end,
   );
 
   if (isLoading) {
@@ -287,7 +305,7 @@ export default function FacturaDetalle() {
             {downloading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Building PDF…</>
             ) : (
-              <><Download className="mr-2 h-4 w-4" /> {isMonthlyBilled ? "Download Invoice" : "Download Invoice + Timesheet"}</>
+              <><Download className="mr-2 h-4 w-4" /> Download Invoice + Timesheet</>
             )}
           </Button>
           <Button variant="outline" onClick={() => window.print()}>
