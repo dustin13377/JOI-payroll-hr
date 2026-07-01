@@ -77,10 +77,14 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   return null;
 }
 
-/** First given name, for the greeting. Falls back to empty string. */
-function firstName(fullName: string | null | undefined): string {
+/**
+ * Full name for the greeting, whitespace-collapsed. Falls back to empty string.
+ * We greet by full name (not just the first name) so the recruiter can tell
+ * two same-first-name candidates apart from the sent message in WhatsApp.
+ */
+function greetingName(fullName: string | null | undefined): string {
   if (!fullName) return "";
-  return fullName.trim().split(/\s+/)[0] ?? "";
+  return fullName.trim().replace(/\s+/g, " ");
 }
 
 /**
@@ -90,7 +94,7 @@ function firstName(fullName: string | null | undefined): string {
 export function buildInterviewInviteMessage(
   fullName: string | null | undefined,
 ): string {
-  const name = firstName(fullName);
+  const name = greetingName(fullName);
   const greeting = name ? `Hola ${name},` : "Hola,";
   return (
     `${greeting} gracias por aplicar a JOI. Nos gustaría agendar una ` +
