@@ -288,11 +288,15 @@ function drawTimesheets(
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(12);
     doc.text(line.agent_name, MARGIN_LEFT, y);
+    // Measure the actual name width (at the current bold-12 font) and place the
+    // role label just after it. A fixed offset here overprinted long names
+    // (e.g. "Francisco De Jesus Ascencio Rivera" ran into "— Designer").
+    const nameWidth = doc.getTextWidth(line.agent_name);
     if (line.campaign_name) {
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(110, 110, 110);
-      doc.text(`— ${line.campaign_name}`, MARGIN_LEFT + 2.5, y);
+      doc.text(`— ${line.campaign_name}`, MARGIN_LEFT + nameWidth + 0.12, y);
       doc.setTextColor(0, 0, 0);
     }
     y += 0.2;
