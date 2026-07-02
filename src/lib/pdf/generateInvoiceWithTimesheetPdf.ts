@@ -313,34 +313,44 @@ function drawTimesheets(
     }
     y += 0.2;
 
-    if (line.is_flat_total) {
+    const punches = punchesByEmployee.get(line.employee_id!) ?? [];
+    const distinctPunchDates = new Set(punches.map((p) => p.date)).size;
+
+    // Flat lines with no punch backing (e.g. misc adjustments) just get a short
+    // note. A flat CREDIT line that DOES have punches — e.g. a departed agent
+    // credited for prior-month missed days — falls through and renders its
+    // timesheet as the documentation for that credit.
+    if (line.is_flat_total && punches.length === 0) {
       doc.setFont("Helvetica", "italic");
       doc.setFontSize(10);
       doc.setTextColor(110, 110, 110);
-      doc.text("Flat weekly bill — no daily punches.", MARGIN_LEFT + 0.1, y + 0.05);
+      doc.text("Flat bill — no daily punches.", MARGIN_LEFT + 0.1, y + 0.05);
       doc.setTextColor(0, 0, 0);
       doc.setFont("Helvetica", "normal");
       y += 0.35;
       continue;
     }
 
-    const punches = punchesByEmployee.get(line.employee_id!) ?? [];
-
-    // Sub-header for the invoice-vs-punches discrepancy if any
-    const distinctPunchDates = new Set(punches.map((p) => p.date)).size;
-    const invoiceDays = Number(line.days_worked);
-    if (distinctPunchDates !== invoiceDays) {
-      doc.setFont("Helvetica", "italic");
-      doc.setFontSize(9);
-      doc.setTextColor(180, 80, 0);
-      doc.text(
-        `Invoice billed ${invoiceDays} day${invoiceDays === 1 ? "" : "s"}; ${distinctPunchDates} punch day${distinctPunchDates === 1 ? "" : "s"} found.`,
-        MARGIN_LEFT + 0.1,
-        y + 0.05,
-      );
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("Helvetica", "normal");
-      y += 0.2;
+    // Invoice-vs-punches discrepancy note — only meaningful for day-billed lines
+    // on non-monthly invoices. A flat credit line has days_worked = 0, and on a
+    // monthly (flat-cap) invoice the "billed 20 vs 22 punched" gap is expected,
+    // so the note is just noise there.
+    const isMonthlyInvoice = invoice.client?.billing_frequency === "monthly";
+    if (!line.is_flat_total && !isMonthlyInvoice) {
+      const invoiceDays = Number(line.days_worked);
+      if (distinctPunchDates !== invoiceDays) {
+        doc.setFont("Helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(180, 80, 0);
+        doc.text(
+          `Invoice billed ${invoiceDays} day${invoiceDays === 1 ? "" : "s"}; ${distinctPunchDates} punch day${distinctPunchDates === 1 ? "" : "s"} found.`,
+          MARGIN_LEFT + 0.1,
+          y + 0.05,
+        );
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("Helvetica", "normal");
+        y += 0.2;
+      }
     }
 
     // Table header — same right-anchor pattern as the invoice table.
