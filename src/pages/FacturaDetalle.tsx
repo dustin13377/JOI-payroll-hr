@@ -117,8 +117,11 @@ export default function FacturaDetalle() {
   // but won't have day-level punches to reconcile against.
   const punchEmployeeIds = useMemo(() => {
     if (!invoice?.lines) return [];
+    // Any line tied to an employee needs its punches — including flat CREDIT
+    // lines (e.g. a departed agent credited for missed days), whose timesheet
+    // documents the credit. Misc adjustment lines have no employee_id.
     return invoice.lines
-      .filter((l) => l.employee_id !== null && !l.is_flat_total)
+      .filter((l) => l.employee_id !== null)
       .map((l) => l.employee_id as string);
   }, [invoice?.lines]);
 
