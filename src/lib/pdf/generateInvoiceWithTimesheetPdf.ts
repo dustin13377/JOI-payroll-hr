@@ -263,11 +263,23 @@ function drawTimesheets(
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(110, 110, 110);
-  doc.text(
-    `Week ${invoice.week_number}: ${formatDateUSLong(invoice.week_start)} — ${formatDateUSLong(invoice.week_end)}`,
-    MARGIN_LEFT,
-    y,
-  );
+  // Monthly clients are billed a month ahead, so the timesheet documents the
+  // PRIOR calendar month (the one being reconciled on this invoice), not the
+  // invoice's own forward-dated period.
+  let periodLabel: string;
+  if (invoice.client?.billing_frequency === "monthly") {
+    const [wy, wm] = invoice.week_start.split("-").map(Number);
+    const pm = wm === 1 ? 12 : wm - 1;
+    const py = wm === 1 ? wy - 1 : wy;
+    const mm = String(pm).padStart(2, "0");
+    const lastDay = new Date(py, pm, 0).getDate();
+    const start = `${py}-${mm}-01`;
+    const end = `${py}-${mm}-${String(lastDay).padStart(2, "0")}`;
+    periodLabel = `${formatDateUSLong(start)} — ${formatDateUSLong(end)} (reconciled month)`;
+  } else {
+    periodLabel = `Week ${invoice.week_number}: ${formatDateUSLong(invoice.week_start)} — ${formatDateUSLong(invoice.week_end)}`;
+  }
+  doc.text(periodLabel, MARGIN_LEFT, y);
   doc.setTextColor(0, 0, 0);
   y += 0.35;
 
@@ -436,13 +448,7 @@ function buildInvoiceDoc(
 ): { doc: ReturnType<typeof createDoc>; filename: string } {
   const doc = createDoc();
   const invoiceEndY = drawInvoicePage(doc, invoice);
-  // Monthly clients (e.g. HFB) are billed a full month ahead against a flat
-  // per-agent rate, so there are no day-level punches to reconcile — skip the
-  // timesheet section entirely rather than printing empty "no punches" pages.
-  const isMonthlyBilled = invoice.client?.billing_frequency === "monthly";
-  if (!isMonthlyBilled) {
-    drawTimesheets(doc, invoice, punchesByEmployee, invoiceEndY);
-  }
+  drawTimesheets(doc, invoice, punchesByEmployee, invoiceEndY);
   drawFooters(doc, invoice.invoice_number);
   return { doc, filename: buildInvoiceFilename(invoice) };
 }
