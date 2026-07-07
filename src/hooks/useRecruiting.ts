@@ -24,6 +24,9 @@ export interface Candidate {
   phone: string | null;
   city: string | null;
   role_interest: "b2b_setter" | "funding_activation" | "customer_reactivation" | "ai_automation" | "ai_operations" | null;
+  // Exact position the applicant chose on the form. Accepts any role (not just
+  // the legacy 5). This is what we show as their applied-for role.
+  applied_position: string | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   referral_source: string | null;
   applicant_notes: string | null;

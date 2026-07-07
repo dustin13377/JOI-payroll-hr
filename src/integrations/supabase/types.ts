@@ -3272,6 +3272,7 @@ export type Database = {
       recruiting_candidates: {
         Row: {
           applicant_notes: string | null
+          applied_position: string | null
           assigned_to: string | null
           city: string | null
           created_at: string
@@ -3306,6 +3307,7 @@ export type Database = {
         }
         Insert: {
           applicant_notes?: string | null
+          applied_position?: string | null
           assigned_to?: string | null
           city?: string | null
           created_at?: string
@@ -3340,6 +3342,7 @@ export type Database = {
         }
         Update: {
           applicant_notes?: string | null
+          applied_position?: string | null
           assigned_to?: string | null
           city?: string | null
           created_at?: string

@@ -13,6 +13,17 @@ const ROLE_LABELS: Record<string, string> = {
   ai_operations: "AI Operations",
 };
 
+/**
+ * The role a candidate applied for. Prefers applied_position (verbatim form
+ * value, works for any role); falls back to the legacy role_interest label for
+ * older rows that predate applied_position.
+ */
+function appliedRoleLabel(c: Candidate): string {
+  if (c.applied_position) return c.applied_position;
+  if (c.role_interest) return ROLE_LABELS[c.role_interest] ?? c.role_interest;
+  return "—";
+}
+
 interface Props {
   candidates: Candidate[];
   onRowClick: (id: string) => void;
@@ -51,7 +62,7 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
           >
             <TableCell className="font-medium">{c.full_name ?? "—"}</TableCell>
             <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
-            <TableCell>{c.role_interest ? ROLE_LABELS[c.role_interest] : "—"}</TableCell>
+            <TableCell>{appliedRoleLabel(c)}</TableCell>
             <TableCell>
               {c.position_fits?.length ? (
                 <div className="flex flex-wrap gap-1">

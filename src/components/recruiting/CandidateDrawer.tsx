@@ -338,7 +338,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
               <div>
                 <h3 className="text-sm font-medium mb-2">Form metadata</h3>
                 <dl className="text-sm space-y-1">
-                  <div className="flex gap-2"><dt className="text-muted-foreground w-32">Role interest</dt><dd>{candidate.role_interest ?? "—"}</dd></div>
+                  <div className="flex gap-2"><dt className="text-muted-foreground w-32">Position applied for</dt><dd>{candidate.applied_position ?? candidate.role_interest ?? "—"}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">English (self)</dt><dd>{candidate.english_level_self}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">Referral</dt><dd>{candidate.referral_source ?? "—"}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">CURP</dt><dd>{candidate.curp ?? "—"}</dd></div>

@@ -10,6 +10,11 @@ export interface ParsedApplication {
     | "ai_automation"
     | "ai_operations"
     | null;
+  // Exact "Position you are applying for" value from the form, stored verbatim.
+  // Unlike role_interest (a fixed 5-value enum), this accepts ANY role — so new
+  // roles added via the Job Postings plugin are never dropped. This is what the
+  // recruiting UI shows as the applied-for role.
+  applied_position: string | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   applicant_notes: string | null;
   cv_url: string | null; // Gravity Forms field-id=4 (PDF/DOCX)
@@ -275,6 +280,11 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
     "POSITION YOU ARE APPLYING FOR",
     "VACANTE A LA QUE DESEA POSTULARSE",
   );
+  // Keep the exact selection verbatim (except the "Open" catch-all, which means
+  // "no specific role"). role_interest still maps the legacy 5 for any old
+  // filters, but applied_position is the source of truth for display.
+  const applied_position =
+    position && position.trim() !== "Open" ? position.trim() : null;
   const role_interest = mapRoleInterest(position, warnings);
 
   const englishRaw = getValue(map, "ENGLISH LEVEL", "NIVEL DE INGLÉS");
@@ -298,6 +308,7 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
     email,
     phone,
     role_interest,
+    applied_position,
     english_level_self,
     applicant_notes,
     cv_url,
