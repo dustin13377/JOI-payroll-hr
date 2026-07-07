@@ -24,6 +24,9 @@ export interface Candidate {
   phone: string | null;
   city: string | null;
   role_interest: "b2b_setter" | "funding_activation" | "customer_reactivation" | "ai_automation" | "ai_operations" | null;
+  // Exact position the applicant chose on the form. Accepts any role (not just
+  // the legacy 5). This is what we show as their applied-for role.
+  applied_position: string | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   referral_source: string | null;
   applicant_notes: string | null;
@@ -42,10 +45,15 @@ export interface Candidate {
   assigned_to: string | null;
   last_contacted_at: string | null;
   next_followup_at: string | null;
-  final_status: "hired" | "passed" | "withdrew" | "ghosted" | null;
+  final_status: "hired" | "passed" | "withdrew" | "ghosted" | "no_show" | null;
   pass_reason: string | null;
   hired_for_role: string | null;
   hired_at: string | null;
+  // Offer / Pending Start: set when a candidate is given an offer with an
+  // expected first day. Cleared once they're hired or marked no-show.
+  offer_start_date: string | null;
+  offer_extended_at: string | null;
+  offer_extended_by: string | null;
 }
 
 const CANDIDATES_KEY = ["recruiting", "candidates"] as const;

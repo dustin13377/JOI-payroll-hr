@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { STAGES, isTerminal, isValidTransition, STAGE_LABELS } from "./stages";
 
 describe("stages", () => {
-  it("exposes all 10 stages", () => {
-    expect(STAGES).toHaveLength(10);
+  it("exposes all 13 stages", () => {
+    expect(STAGES).toHaveLength(13);
   });
 
   it("identifies terminal stages", () => {
@@ -11,8 +11,26 @@ describe("stages", () => {
     expect(isTerminal("passed")).toBe(true);
     expect(isTerminal("withdrew")).toBe(true);
     expect(isTerminal("ghosted")).toBe(true);
+    expect(isTerminal("no_show")).toBe(true);
+    expect(isTerminal("offer")).toBe(false);
     expect(isTerminal("warm_hold")).toBe(false);
     expect(isTerminal("new")).toBe(false);
+  });
+
+  it("allows reaching offer from interview/hold stages", () => {
+    expect(isValidTransition("interviewed", "offer")).toBe(true);
+    expect(isValidTransition("warm_hold", "offer")).toBe(true);
+    expect(isValidTransition("reactivated", "offer")).toBe(true);
+  });
+
+  it("allows an offer to resolve to hired or no_show", () => {
+    expect(isValidTransition("offer", "hired")).toBe(true);
+    expect(isValidTransition("offer", "no_show")).toBe(true);
+  });
+
+  it("does not escape a no_show", () => {
+    expect(isValidTransition("no_show", "offer")).toBe(false);
+    expect(isValidTransition("no_show", "hired")).toBe(false);
   });
 
   it("allows forward transition new → triaged", () => {

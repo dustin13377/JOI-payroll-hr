@@ -3272,7 +3272,11 @@ export type Database = {
       recruiting_candidates: {
         Row: {
           applicant_notes: string | null
+          applied_position: string | null
           assigned_to: string | null
+          offer_start_date: string | null
+          offer_extended_at: string | null
+          offer_extended_by: string | null
           city: string | null
           created_at: string
           curp: string | null
@@ -3306,7 +3310,11 @@ export type Database = {
         }
         Insert: {
           applicant_notes?: string | null
+          applied_position?: string | null
           assigned_to?: string | null
+          offer_start_date?: string | null
+          offer_extended_at?: string | null
+          offer_extended_by?: string | null
           city?: string | null
           created_at?: string
           curp?: string | null
@@ -3340,7 +3348,11 @@ export type Database = {
         }
         Update: {
           applicant_notes?: string | null
+          applied_position?: string | null
           assigned_to?: string | null
+          offer_start_date?: string | null
+          offer_extended_at?: string | null
+          offer_extended_by?: string | null
           city?: string | null
           created_at?: string
           curp?: string | null

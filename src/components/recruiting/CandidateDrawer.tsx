@@ -8,14 +8,23 @@ import { Separator } from "@/components/ui/separator";
 import { StageSelector } from "./StageSelector";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   useCandidate,
   useUpdateCandidate,
   useSendWhatsAppInvite,
   useCandidateInterviews,
 } from "@/hooks/useRecruiting";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { UserPlus, MessageCircle } from "lucide-react";
+import { UserPlus, MessageCircle, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
 import {
@@ -48,6 +57,8 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     applicant_notes: "",
   });
   const [recruiterNotes, setRecruiterNotes] = useState("");
+  const [offerDialogOpen, setOfferDialogOpen] = useState(false);
+  const [offerDate, setOfferDate] = useState("");
 
   useEffect(() => {
     if (candidate) {
@@ -93,13 +104,69 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
 
   const handleStageChange = async (next: Stage) => {
     if (!candidate) return;
+    // Moving to "offer" needs a start date, so open the dialog instead of
+    // patching straight away.
+    if (next === "offer") {
+      setOfferDate(candidate.offer_start_date ?? "");
+      setOfferDialogOpen(true);
+      return;
+    }
     const patch: Parameters<typeof updateMutation.mutateAsync>[0]["patch"] = { stage: next };
-    if (next === "hired" || next === "passed" || next === "withdrew" || next === "ghosted") {
+    if (
+      next === "hired" ||
+      next === "passed" ||
+      next === "withdrew" ||
+      next === "ghosted" ||
+      next === "no_show"
+    ) {
       patch.final_status = next;
     }
     try {
       await updateMutation.mutateAsync({ id: candidate.id, patch });
       toast.success(`Moved to ${next}`);
+    } catch (e) {
+      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  };
+
+  // Save the offer + expected start date. Stamps who extended it and when.
+  const confirmOffer = async () => {
+    if (!candidate || !offerDate) return;
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      await updateMutation.mutateAsync({
+        id: candidate.id,
+        patch: {
+          stage: "offer",
+          offer_start_date: offerDate,
+          offer_extended_at: new Date().toISOString(),
+          offer_extended_by: auth?.user?.id ?? null,
+        },
+      });
+      toast.success("Offer set — candidate is Pending Start");
+      setOfferDialogOpen(false);
+    } catch (e) {
+      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  };
+
+  // Day-1 outcome: they showed up. Reuse the existing hire-from-candidate flow,
+  // which creates the employee and flips the candidate to "hired" on save.
+  const handleShowedUp = () => {
+    if (!candidate) return;
+    onClose();
+    navigate(`/empleados?hireFromCandidate=${candidate.id}`);
+  };
+
+  // Day-1 outcome: no-show. Terminal, flagged, kept in history.
+  const handleNoShow = async () => {
+    if (!candidate) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: candidate.id,
+        patch: { stage: "no_show", final_status: "no_show" },
+      });
+      toast.success("Marked as no-show");
     } catch (e) {
       toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
@@ -166,12 +233,67 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
               </div>
 
               {/*
+                Offer / Pending Start panel. Shows the expected start date and the
+                two day-1 outcomes HR marks: showed up (→ hire) or no-show.
+              */}
+              {candidate.stage === "offer" && (() => {
+                const start = candidate.offer_start_date;
+                const overdue =
+                  !!start && start < new Date().toISOString().slice(0, 10);
+                return (
+                  <div className="rounded-md border p-4 space-y-3 bg-muted/30">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <CalendarClock className="h-4 w-4" />
+                      Pending Start
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Expected start:{" "}
+                      <span className="font-medium text-foreground">
+                        {start ? format(new Date(`${start}T00:00:00`), "PP") : "not set"}
+                      </span>
+                      {overdue && (
+                        <span className="ml-2 text-destructive font-medium">
+                          — start date passed, mark day-1 outcome
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button className="flex-1" onClick={handleShowedUp}>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Showed up — hire
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={handleNoShow}
+                        disabled={updateMutation.isPending}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        No-show
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline"
+                      onClick={() => {
+                        setOfferDate(candidate.offer_start_date ?? "");
+                        setOfferDialogOpen(true);
+                      }}
+                    >
+                      Change start date
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/*
                 "Hire as employee" button. Hidden once the candidate is in a
                 terminal stage (already hired, passed, withdrew, ghosted) since
                 you can't re-hire from this row — the rehire check on the
-                employee form handles that case directly.
+                employee form handles that case directly. Also hidden in the
+                "offer" stage, which has its own hire button above.
               */}
-              {!isTerminal(candidate.stage) && (
+              {!isTerminal(candidate.stage) && candidate.stage !== "offer" && (
                 <Button
                   className="w-full"
                   onClick={() => {
@@ -338,7 +460,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
               <div>
                 <h3 className="text-sm font-medium mb-2">Form metadata</h3>
                 <dl className="text-sm space-y-1">
-                  <div className="flex gap-2"><dt className="text-muted-foreground w-32">Role interest</dt><dd>{candidate.role_interest ?? "—"}</dd></div>
+                  <div className="flex gap-2"><dt className="text-muted-foreground w-32">Position applied for</dt><dd>{candidate.applied_position ?? candidate.role_interest ?? "—"}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">English (self)</dt><dd>{candidate.english_level_self}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">Referral</dt><dd>{candidate.referral_source ?? "—"}</dd></div>
                   <div className="flex gap-2"><dt className="text-muted-foreground w-32">CURP</dt><dd>{candidate.curp ?? "—"}</dd></div>
@@ -355,6 +477,36 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 </pre>
               </details>
             </div>
+
+            {/* Start-date prompt shown when extending an offer. */}
+            <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Extend offer — set expected start date</DialogTitle>
+                  <DialogDescription>
+                    The candidate moves to “Pending Start”. On the start date, HR
+                    marks whether they showed up or were a no-show.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="offer-start-date" className="text-sm">Start date</Label>
+                  <Input
+                    id="offer-start-date"
+                    type="date"
+                    value={offerDate}
+                    onChange={(e) => setOfferDate(e.target.value)}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setOfferDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={confirmOffer} disabled={!offerDate || updateMutation.isPending}>
+                    Confirm offer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </SheetContent>

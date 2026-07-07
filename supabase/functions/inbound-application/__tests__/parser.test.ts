@@ -27,6 +27,23 @@ Deno.test("role_interest = null when POSITION is 'Open'", () => {
   assertEquals(parseApplicationEmail(sample).role_interest, null);
 });
 
+Deno.test(
+  "applied_position keeps a NEW role verbatim (regression: roles used to be dropped)",
+  () => {
+    const html =
+      `<strong>POSITION YOU ARE APPLYING FOR</strong></font></td></tr><tr><td></td><td><font>Production Designer</font></td>`;
+    const result = parseApplicationEmail(html);
+    // The exact form value is preserved even though it's not one of the legacy 5…
+    assertEquals(result.applied_position, "Production Designer");
+    // …and the legacy enum stays null (it can't represent this role).
+    assertEquals(result.role_interest, null);
+  },
+);
+
+Deno.test("applied_position = null when POSITION is 'Open'", () => {
+  assertEquals(parseApplicationEmail(sample).applied_position, null);
+});
+
 Deno.test("english_level_self = 'C2' when ENGLISH LEVEL is 'Native'", () => {
   assertEquals(parseApplicationEmail(sample).english_level_self, "C2");
 });
