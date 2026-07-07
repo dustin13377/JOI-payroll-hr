@@ -19,16 +19,52 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useCandidates,
   useCreateReferralCandidate,
   useInterviewOutcomes,
   useMarkInterviewOutcome,
+  OUTCOME_LABELS,
   type Candidate,
   type InterviewOutcome,
 } from "@/hooks/useRecruiting";
 import { toast } from "sonner";
-import { Calendar, Check, ChevronDown, ChevronUp, UserPlus, Video, X } from "lucide-react";
+import {
+  Ban,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  UserPlus,
+  Video,
+  X,
+} from "lucide-react";
+
+/** The outcomes offered as buttons once an interview slot has started. */
+const OUTCOME_ACTIONS: {
+  outcome: InterviewOutcome;
+  label: string;
+  icon: typeof Check;
+  destructive?: boolean;
+}[] = [
+  { outcome: "no_show", label: "No show", icon: X, destructive: true },
+  { outcome: "couldnt_attend", label: "Couldn't attend", icon: Clock },
+  { outcome: "passed", label: "Not a fit", icon: Ban },
+  { outcome: "offer_extended", label: "Extend offer", icon: Check },
+];
+
+const OUTCOME_BADGE_VARIANT: Record<
+  InterviewOutcome,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  completed: "secondary",
+  no_show: "destructive",
+  couldnt_attend: "outline",
+  passed: "secondary",
+  offer_extended: "default",
+};
 
 const EMBED_URL =
   "https://calendar.google.com/calendar/embed?src=humanresources%40justoutsource.it&ctz=America%2FMexico_City&mode=WEEK";
@@ -116,6 +152,10 @@ export function UpcomingInterviews() {
   const [showCalendar, setShowCalendar] = useState(false);
   // Set when a click couldn't be auto-matched to one candidate — opens picker.
   const [pending, setPending] = useState<PendingMark | null>(null);
+  // Optional note captured when creating a brand-new profile from the dialog.
+  const [note, setNote] = useState("");
+  // Event whose already-recorded outcome the user clicked to change.
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["hr-calendar"],
@@ -145,8 +185,7 @@ export function UpcomingInterviews() {
         outcome,
       },
       {
-        onSuccess: () =>
-          toast.success(outcome === "completed" ? "Marked completed" : "Marked no-show"),
+        onSuccess: () => toast.success(`Marked ${OUTCOME_LABELS[outcome].toLowerCase()}`),
         onError: (e) =>
           toast.error(`Couldn't save: ${e instanceof Error ? e.message : "unknown"}`),
       },
@@ -154,28 +193,41 @@ export function UpcomingInterviews() {
   };
 
   const handleMark = (event: CalendarEvent, outcome: InterviewOutcome) => {
+    setEditingKey(null);
     const name = extractEventName(event.summary);
     const matches = name ? matchCandidates(name, candidates) : [];
     if (matches.length === 1) {
       save(event, matches[0].id, outcome);
     } else {
-      // 0 or several matches — let the user pick.
+      // 0 or several matches — let the user pick or create a profile.
+      setNote("");
       setPending({ event, outcome });
     }
   };
 
-  // No matching profile (link handed out, never entered): create the person as
-  // a referral and mark the outcome against the new profile in one click.
-  const addAsReferral = async () => {
+  const closeDialog = () => {
+    setPending(null);
+    setNote("");
+  };
+
+  // No matching profile (interview link handed out, or a referral who skipped
+  // the application form): create the person as a new profile — with an optional
+  // note — and record the outcome against it in one click. This is also how a
+  // no-show gets a permanent record even though they never had a profile.
+  const createProfile = async () => {
     if (!pending) return;
     const name = extractEventName(pending.event.summary) ?? "";
     try {
-      const id = await createReferral.mutateAsync({ fullName: name, stage: "interviewed" });
+      const id = await createReferral.mutateAsync({
+        fullName: name,
+        stage: "interviewed",
+        note,
+      });
       save(pending.event, id, pending.outcome);
-      setPending(null);
+      closeDialog();
     } catch (e) {
       toast.error(
-        `Couldn't add referral: ${e instanceof Error ? e.message : "unknown"}`,
+        `Couldn't create profile: ${e instanceof Error ? e.message : "unknown"}`,
       );
     }
   };
@@ -239,43 +291,36 @@ export function UpcomingInterviews() {
                   </span>
                   <span className="truncate flex-1">{e.summary}</span>
 
-                  {/* Right side: outcome state > outcome buttons (started events) > Join */}
-                  {marked ? (
+                  {/* Right side: recorded outcome (click to change) > outcome
+                      buttons (started or being edited) > Join link */}
+                  {marked && editingKey !== eventKey(e) ? (
                     <button
                       type="button"
                       className="shrink-0"
                       title="Click to change"
-                      onClick={() =>
-                        handleMark(e, marked === "completed" ? "no_show" : "completed")
-                      }
+                      onClick={() => setEditingKey(eventKey(e))}
                     >
-                      <Badge
-                        variant={marked === "completed" ? "default" : "destructive"}
-                        className="text-xs"
-                      >
-                        {marked === "completed" ? "Completed" : "No show"}
+                      <Badge variant={OUTCOME_BADGE_VARIANT[marked]} className="text-xs">
+                        {OUTCOME_LABELS[marked]}
                       </Badge>
                     </button>
-                  ) : hasStarted(e) ? (
-                    <span className="shrink-0 flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-xs"
-                        disabled={markOutcome.isPending}
-                        onClick={() => handleMark(e, "completed")}
-                      >
-                        <Check className="h-3 w-3 mr-1" /> Completed
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                        disabled={markOutcome.isPending}
-                        onClick={() => handleMark(e, "no_show")}
-                      >
-                        <X className="h-3 w-3 mr-1" /> No show
-                      </Button>
+                  ) : hasStarted(e) || editingKey === eventKey(e) ? (
+                    <span className="shrink-0 flex flex-wrap items-center justify-end gap-1">
+                      {OUTCOME_ACTIONS.map(({ outcome, label, icon: Icon, destructive }) => (
+                        <Button
+                          key={outcome}
+                          size="sm"
+                          variant="outline"
+                          className={
+                            "h-6 px-2 text-xs" +
+                            (destructive ? " text-destructive hover:text-destructive" : "")
+                          }
+                          disabled={markOutcome.isPending}
+                          onClick={() => handleMark(e, outcome)}
+                        >
+                          <Icon className="h-3 w-3 mr-1" /> {label}
+                        </Button>
+                      ))}
                     </span>
                   ) : (
                     e.meetUrl && (
@@ -311,14 +356,15 @@ export function UpcomingInterviews() {
       </CardContent>
 
       {/* Candidate picker — only when the event name didn't match exactly one candidate */}
-      <Dialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+      <Dialog open={!!pending} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Which candidate is this?</DialogTitle>
             <DialogDescription>
-              Couldn't auto-match “{pending ? extractEventName(pending.event.summary) : ""}”
-              to one candidate. Pick them to mark{" "}
-              {pending?.outcome === "completed" ? "Completed" : "No show"}.
+              Couldn't match “{pending ? extractEventName(pending.event.summary) : ""}”
+              to an existing candidate. Pick them below to mark{" "}
+              {pending ? OUTCOME_LABELS[pending.outcome] : ""}, or create a new
+              profile for them.
             </DialogDescription>
           </DialogHeader>
           <Command>
@@ -332,7 +378,7 @@ export function UpcomingInterviews() {
                     value={`${c.full_name ?? ""} ${c.email ?? ""}`}
                     onSelect={() => {
                       if (pending) save(pending.event, c.id, pending.outcome);
-                      setPending(null);
+                      closeDialog();
                     }}
                   >
                     <span className="truncate">{c.full_name ?? "Unnamed"}</span>
@@ -346,15 +392,25 @@ export function UpcomingInterviews() {
               </CommandGroup>
             </CommandList>
           </Command>
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            disabled={createReferral.isPending || !pendingName}
-            onClick={addAsReferral}
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add{pendingName ? ` “${pendingName}”` : ""} as a referral
-          </Button>
+
+          {/* Create a brand-new profile — for referrals who skipped the form, and
+              so no-shows still leave a permanent record. */}
+          <div className="space-y-2 border-t pt-3">
+            <Textarea
+              value={note}
+              onChange={(ev) => setNote(ev.target.value)}
+              placeholder="Optional note (e.g. referred by agent, why they didn't show)…"
+              className="min-h-[64px] text-sm"
+            />
+            <Button
+              className="w-full justify-start"
+              disabled={createReferral.isPending || markOutcome.isPending || !pendingName}
+              onClick={createProfile}
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Create profile{pendingName ? ` “${pendingName}”` : ""}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

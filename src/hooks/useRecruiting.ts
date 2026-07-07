@@ -122,13 +122,21 @@ export function useCreateReferralCandidate() {
     mutationFn: async ({
       fullName,
       stage,
+      note,
     }: {
       fullName: string;
       stage: Stage;
+      note?: string;
     }): Promise<string> => {
+      const trimmedNote = note?.trim();
       const { data, error } = await supabase
         .from("recruiting_candidates")
-        .insert({ full_name: fullName.trim() || null, source: "referral", stage })
+        .insert({
+          full_name: fullName.trim() || null,
+          source: "referral",
+          stage,
+          recruiter_notes: trimmedNote ? trimmedNote : null,
+        })
         .select("id")
         .single();
       if (error) throw error;
@@ -189,7 +197,21 @@ export function useAddPosition() {
 // Interview outcomes (Completed / No show from the Upcoming Interviews widget)
 // ---------------------------------------------------------------------------
 
-export type InterviewOutcome = "completed" | "no_show";
+export type InterviewOutcome =
+  | "completed" // legacy rows only; the UI no longer produces this
+  | "no_show"
+  | "couldnt_attend"
+  | "passed"
+  | "offer_extended";
+
+/** Short label for each outcome, used on the badge in the interviews widget. */
+export const OUTCOME_LABELS: Record<InterviewOutcome, string> = {
+  completed: "Completed",
+  no_show: "No show",
+  couldnt_attend: "Couldn't attend",
+  passed: "Not a fit",
+  offer_extended: "Offer extended",
+};
 
 export interface InterviewRecord {
   id: string;
