@@ -9,10 +9,12 @@ const VARIANT: Record<Stage, "default" | "secondary" | "outline" | "destructive"
   interviewed: "secondary",
   warm_hold: "outline",
   reactivated: "default",
+  offer: "secondary",
   hired: "default",
   passed: "destructive",
   withdrew: "destructive",
   ghosted: "destructive",
+  no_show: "destructive",
 };
 
 export function StageBadge({ stage }: { stage: Stage }) {

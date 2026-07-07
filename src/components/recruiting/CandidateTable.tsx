@@ -81,7 +81,20 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
             <TableCell className="text-muted-foreground text-sm">
               {format(new Date(c.created_at), "MMM d, HH:mm")}
             </TableCell>
-            <TableCell><StageBadge stage={c.stage} /></TableCell>
+            <TableCell>
+              <StageBadge stage={c.stage} />
+              {c.stage === "offer" && c.offer_start_date && (
+                <div
+                  className={`mt-1 text-xs ${
+                    c.offer_start_date < new Date().toISOString().slice(0, 10)
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  Starts {format(new Date(`${c.offer_start_date}T00:00:00`), "MMM d")}
+                </div>
+              )}
+            </TableCell>
             <TableCell>
               {c.needs_manual_review && (
                 <AlertTriangle className="h-4 w-4 text-yellow-500" aria-label="Needs review" />
