@@ -137,14 +137,25 @@ function extractEventName(summary: string): string | null {
 }
 
 /**
- * The applied-for position to show for an event, taken from the candidate whose
- * name matches the calendar title — only when the match is unambiguous.
+ * The applied-for position to show for an event, from the candidate(s) whose
+ * name matches the calendar title. People re-apply (sometimes many times), so a
+ * name can match several rows: if they all name the same position we show it;
+ * if they disagree we show the most recent application's position.
  */
 function positionForEvent(e: CalendarEvent, candidates: Candidate[]): string | null {
   const name = extractEventName(e.summary);
   if (!name) return null;
-  const matches = matchCandidates(name, candidates);
-  return matches.length === 1 ? matches[0].applied_position ?? null : null;
+  const withPosition = matchCandidates(name, candidates).filter(
+    (c) => c.applied_position,
+  );
+  if (withPosition.length === 0) return null;
+  const distinct = new Set(withPosition.map((c) => c.applied_position));
+  if (distinct.size === 1) return withPosition[0].applied_position;
+  // Genuinely different roles across applications — trust the newest one.
+  const newest = withPosition.reduce((a, b) =>
+    a.created_at >= b.created_at ? a : b,
+  );
+  return newest.applied_position;
 }
 
 /**
