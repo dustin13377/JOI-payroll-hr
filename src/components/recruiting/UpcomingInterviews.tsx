@@ -120,10 +120,31 @@ function hasStarted(e: CalendarEvent): boolean {
   return !e.allDay && new Date(e.start).getTime() <= Date.now();
 }
 
-/** Calendly/Google titles look like "Jane Doe and Human Resources JOI". */
+/**
+ * Pull the candidate's name out of a calendar title. Handles the two shapes we
+ * see: "Interview (Jane Doe)" and "Jane Doe and Human Resources JOI".
+ */
 function extractEventName(summary: string): string | null {
-  const m = summary.match(/^(.*?)\s+and\s+Human Resources/i);
-  return (m ? m[1] : summary).trim() || null;
+  let s = summary;
+  // "Interview (Jane Doe)" → "Jane Doe"
+  const paren = summary.match(/\(([^)]+)\)/);
+  if (/^\s*interview/i.test(summary) && paren) {
+    s = paren[1];
+  }
+  // "Jane Doe and Human Resources JOI" → "Jane Doe"
+  const m = s.match(/^(.*?)\s+and\s+Human Resources/i);
+  return (m ? m[1] : s).trim() || null;
+}
+
+/**
+ * The applied-for position to show for an event, taken from the candidate whose
+ * name matches the calendar title — only when the match is unambiguous.
+ */
+function positionForEvent(e: CalendarEvent, candidates: Candidate[]): string | null {
+  const name = extractEventName(e.summary);
+  if (!name) return null;
+  const matches = matchCandidates(name, candidates);
+  return matches.length === 1 ? matches[0].applied_position ?? null : null;
 }
 
 /**
@@ -274,6 +295,7 @@ export function UpcomingInterviews() {
           <ul className="divide-y">
             {events.map((e, i) => {
               const marked = outcomeByKey.get(eventKey(e));
+              const position = positionForEvent(e, candidates);
               return (
                 <li key={i} className="py-1.5 flex items-baseline gap-3 text-sm">
                   <span
@@ -289,7 +311,14 @@ export function UpcomingInterviews() {
                   <span className="w-36 shrink-0 tabular-nums text-muted-foreground">
                     {fmtTime(e)}
                   </span>
-                  <span className="truncate flex-1">{e.summary}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{e.summary}</span>
+                    {position && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {position}
+                      </span>
+                    )}
+                  </span>
 
                   {/* Right side: recorded outcome (click to change) > outcome
                       buttons (started or being edited) > Join link */}
