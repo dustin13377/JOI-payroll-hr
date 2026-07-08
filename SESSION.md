@@ -1,45 +1,39 @@
 # Session Handoff
 
-**Saved:** 2026-06-24 (Cowork EOD handoff)
-**Machine:** built on admins-MacBook-Air, but today's commits came from the **other machine**
-**Branch:** `origin/main` is the source of truth at **6463e1a** — this laptop's local main is behind, fetch only (see Watch out for)
-**Last commit:** 6463e1a `Loosen short-break late-return grace to 30 seconds`
+**Saved:** 2026-07-08T13:56:27-06:00
+**Machine:** Diomedess-Mac-mini
+**Branch:** main
+**Last commit:** 714a273 Fix campaign change failing when a same-day assignment already exists
 
 ## What we were doing
 
-Five commits landed on **main today (2026-06-24)**, pushed from the other machine — a batch of small fixes and polish across invoices, spiffs, timeclock, recruiting, and onboarding. No single big feature; this was a clean-up / loose-ends day. Separately, yesterday's banner work (schedule banner + dashboard banners) **did merge** as PRs #110 and #111 — so the "in flight" branch from the earlier draft of this file is now landed; disregard that.
+Fixed a campaign-move failure for Sebastian Cordova (EMP-008). Moving him from HFB Setter to Torro MCA effective July 6 was throwing a check-constraint error. Root cause: a leftover future-dated assignment already started July 6, and the move code tried to end it the day before it began. Both a data fix and a code fix are done and pushed.
 
-## Shipped today (all on main)
+## Files in flight
 
-- **6463e1a** — Loosen short-break late-return grace to **30 seconds** (timeclock break compliance)
-- **4345a88** — Fix ambiguous `invoice_id` in `generate_weekly_invoices` — this was the **Generate button returning 400** (invoice generator bug)
-- **a1c8d18** — Show screen-only spiffs subtotal on invoice detail
-- **6b439d0** — Sync initial campaign assignment `start_date` when `hire_date` is set later (onboarding data integrity)
-- **c22dc46** — Update interview booking link to Google Calendar (recruiting)
+- `src/components/ChangeCampaignDialog.tsx` — COMMITTED/PUSHED (714a273). Rewrote the move mutation: it now fetches open assignments first, updates the row in place when one already starts on the effective date (same-day replacement), and only closes assignments that started strictly before the new date (added `.lt("start_date", effectiveDate)` guard).
+- Pre-existing uncommitted work NOT from this session (left dirty on purpose): `supabase/functions/send-invoice-email/index.ts`, `PROJECT.md`, plus untracked Resend files (`docs/RESEND_*.md`, `index.resend.ts`, `index.postmark.bak`, DNS/email drafts). These belong to the Resend migration thread — do not sweep into an unrelated commit.
 
-Yesterday (2026-06-23), for context: **#111** `feat/dashboard banners` (b413c27) and **#110** schedule banner (1b48652) both merged to main.
+## Decisions made this session
 
-## Decisions made
-
-- Short-break late-return grace is now **30 seconds** (was tighter) — small tolerance so a few seconds over doesn't flag a late return.
-- Spiffs subtotal on the invoice detail is **screen-only** (display, not a billed line).
-- Campaign assignment `start_date` now backfills from `hire_date` when hire_date is filled in after the fact, rather than staying null.
+- Converted Sebastian's existing July 6 assignment row in place (SLOC Weekday → MCA) rather than inserting a new row, since no time was punched under it yet (no billing impact).
+- Also synced `employees.campaign_id` (was NULL) to MCA so the flat field matches the assignment history.
+- Fixed the bug in the frontend dialog only (YAGNI). A server-side DB guard was offered but deferred unless campaign moves start happening outside ChangeCampaignDialog.
+- Left the cosmetic "No prior assignment to close" warning as-is — it reads the drift-prone flat field but the real logic no longer depends on it.
 
 ## Open todos
 
-- [ ] Sync this laptop: `git checkout main && git pull`, then delete the now-merged `feat/dashboard-banners` (and stale `feat/timeclock-schedule-banner`) branches.
-- [ ] Payroll: base/spiffs migrations still **held** (not deployed) per #103 — confirm before the next payroll run.
-- [ ] Continue payroll rework with Joe — finish quincenal base + lock periods, unify the two payroll screens (`docs/payroll-rework.md`).
-- [ ] Carry-overs: decide on `generate_seed.sql` (commit vs. keep local); verify the four prior untracked docs (`docs/collaborator-access.md`, the three `2026-06-19-*` plan files) were committed or intentionally gitignored.
+- [ ] Confirm the deploy picked up 714a273 and re-test a same-day campaign move in prod (Vercel deploy handled by the external dev company — can't verify from here).
+- [ ] Optional: make the "No prior assignment to close" warning read actual open assignment rows instead of the flat field.
+- [ ] Optional: server-side same-day guard if campaign moves ever happen outside the dialog.
+- [ ] Separate thread: finish/commit the Resend migration work currently dirty in the tree.
 
 ## Next step when you come back
 
-Nothing's blocking on main — today's batch is shipped. First thing: fast-forward this laptop's local main so it isn't stranded behind origin (6463e1a). Then pick the payroll rework with Joe back up per `docs/payroll-rework.md`, and confirm the held #103 migrations before any real payroll run.
+Verify the deploy shipped 714a273, then open any employee already carrying a future-dated assignment and try changing their campaign to that same date — it should update in place instead of erroring.
 
 ## Watch out for
 
-- **This laptop is behind origin.** Today's commits were pushed elsewhere; you've fetched but not pulled. `git checkout main && git pull` before starting new work, or you'll branch off stale code.
-- Today's five commits have **no PR numbers** — they appear to have gone **direct to main**, which is branch-protected. If that's not intended, check the branch protection / who pushed.
-- Never commit `.claude/settings.local.json` (local-only) or `*.tsbuildinfo` (gitignored).
-- The Cowork shell can't run git against this repo — use the paste-ready block below.
-- This handoff is a **draft built from the commit log** — glance over it before committing.
+- The code fix is committed/pushed and type-checks clean, but was NOT run against a live same-day move in prod yet — the manual DB fix for Sebastian is what's verified, not the UI path.
+- The sandbox git checkout is stale (showed a4ae8ee as HEAD); origin/main is at 714a273. Trust your local machine, not the sandbox.
+- Resend migration changes are sitting uncommitted in the working tree — don't let a handoff or campaign-fix commit accidentally include them.
