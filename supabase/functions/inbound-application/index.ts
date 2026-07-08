@@ -56,62 +56,86 @@ Deno.serve(async (req) => {
     ? new Date(payload.Date).toISOString()
     : new Date().toISOString();
 
-  // 4. Handle dedup by CURP — if curp is set AND a row with this curp exists,
-  //    UPDATE the existing row's data fields (refresh raw email + notes + phone)
-  //    but PRESERVE pipeline state (stage, assigned_to, follow-up timestamps, outcome).
+  // 4. Dedup so the same person never becomes two rows. The same application
+  //    can reach us more than once: an applicant genuinely re-applies, or (more
+  //    commonly) Postmark re-delivers the identical inbound email on its retry
+  //    schedule when it doesn't get a fast 2xx from us. We match an existing
+  //    candidate by CURP when we have one, otherwise by email. If found, we
+  //    UPDATE the data fields but PRESERVE pipeline state — which makes this
+  //    endpoint idempotent: replays refresh the row instead of duplicating it.
+  let existing: { id: string; stage: string } | null = null;
+
   if (parsed.curp) {
-    const { data: existing, error: lookupErr } = await supabase
+    const { data, error: lookupErr } = await supabase
       .from("recruiting_candidates")
       .select("id, stage")
       .eq("curp", parsed.curp)
-      .maybeSingle();
-
+      .order("created_at", { ascending: true })
+      .limit(1);
     if (lookupErr) {
       console.error("curp lookup failed", lookupErr);
       return new Response("lookup failed", { status: 500 });
     }
+    existing = data?.[0] ?? null;
+  }
 
-    if (existing) {
-      const { error: updateErr } = await supabase
-        .from("recruiting_candidates")
-        .update({
-          full_name: parsed.full_name,
-          // Only overwrite email when the new submission actually has one —
-          // never wipe a known email with null.
-          ...(parsed.email ? { email: parsed.email } : {}),
-          phone: parsed.phone,
-          role_interest: parsed.role_interest,
-          applied_position: parsed.applied_position,
-          english_level_self: parsed.english_level_self,
-          applicant_notes: parsed.applicant_notes,
-          cv_url: parsed.cv_url,
-          presentation_url: parsed.presentation_url,
-          raw_email_body: rawBody,
-          raw_email_received_at: receivedAt,
-          needs_manual_review: parsed.needs_manual_review,
-          // Deliberately NOT updated: stage, stage_changed_at, assigned_to,
-          // last_contacted_at, next_followup_at, final_status, pass_reason,
-          // hired_for_role, hired_at, geo_qualified, english_level_assessed,
-          // qualified_for_roles. These reflect recruiter decisions on the
-          // candidate as a person, not the latest form submission.
-        })
-        .eq("id", existing.id);
-
-      if (updateErr) {
-        console.error("re-application update failed", updateErr);
-        return new Response("update failed", { status: 500 });
-      }
-
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          candidate_id: existing.id,
-          action: "updated_existing",
-          existing_stage: existing.stage,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+  // Fall back to email — the common case, since most form applicants don't
+  // give a CURP at this stage. Case-insensitive, oldest row wins so we always
+  // converge on the first record we ever created for this person.
+  if (!existing && parsed.email) {
+    const { data, error: lookupErr } = await supabase
+      .from("recruiting_candidates")
+      .select("id, stage")
+      .ilike("email", parsed.email)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (lookupErr) {
+      console.error("email lookup failed", lookupErr);
+      return new Response("lookup failed", { status: 500 });
     }
+    existing = data?.[0] ?? null;
+  }
+
+  if (existing) {
+    const { error: updateErr } = await supabase
+      .from("recruiting_candidates")
+      .update({
+        full_name: parsed.full_name,
+        // Only overwrite email when the new submission actually has one —
+        // never wipe a known email with null.
+        ...(parsed.email ? { email: parsed.email } : {}),
+        phone: parsed.phone,
+        role_interest: parsed.role_interest,
+        applied_position: parsed.applied_position,
+        english_level_self: parsed.english_level_self,
+        applicant_notes: parsed.applicant_notes,
+        cv_url: parsed.cv_url,
+        presentation_url: parsed.presentation_url,
+        raw_email_body: rawBody,
+        raw_email_received_at: receivedAt,
+        needs_manual_review: parsed.needs_manual_review,
+        // Deliberately NOT updated: stage, stage_changed_at, assigned_to,
+        // last_contacted_at, next_followup_at, final_status, pass_reason,
+        // hired_for_role, hired_at, geo_qualified, english_level_assessed,
+        // qualified_for_roles. These reflect recruiter decisions on the
+        // candidate as a person, not the latest form submission.
+      })
+      .eq("id", existing.id);
+
+    if (updateErr) {
+      console.error("re-application update failed", updateErr);
+      return new Response("update failed", { status: 500 });
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        candidate_id: existing.id,
+        action: "updated_existing",
+        existing_stage: existing.stage,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
   }
 
   // 5. Otherwise insert a new candidate row
