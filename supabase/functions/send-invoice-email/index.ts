@@ -1,26 +1,37 @@
 /**
- * send-invoice-email
+ * send-invoice-email  (RESEND version)
+ *
+ * Drop-in replacement for the Postmark version. Same request body and same
+ * response shape, so the frontend (useSendInvoiceEmail) needs no changes.
+ * To go live: verify justoutsource.it in Resend, set the secrets below, then
+ * replace index.ts with this file and redeploy.
  *
  * Sends a single invoice (PDF + timesheet, generated in the browser and passed
- * in as base64) to the client's contacts via the Postmark email API.
+ * in as base64) to the client's contacts via the Resend email API.
  *
  * Flow:
  *   1. JWT-authenticated — caller must be owner / admin / manager.
  *   2. Validates recipients + that the invoice exists.
- *   3. Sends via Postmark with the PDF attached. BCCs the from-address by
+ *   3. Sends via Resend with the PDF attached. BCCs the from-address by
  *      default so D keeps a copy of every invoice that goes out.
  *   4. On success: flips a draft invoice to "sent" (+ submitted_on) and writes
- *      a row to invoice_email_log (paper trail + Postmark message id for bounce
- *      tracing). A failed send is logged too, with the error.
+ *      a row to invoice_email_log (paper trail + Resend message id). A failed
+ *      send is logged too, with the error.
  *
- * Required secrets (Supabase Dashboard → Edge Functions → send-invoice-email → Secrets):
- *   POSTMARK_SERVER_ACCOUNTING_TOKEN   Server API token from the Postmark accounting/invoices server.
- *                           (Falls back to POSTMARK_SERVER_TOKEN if that's what's set.)
+ * IMPORTANT — what "sent" means here:
+ *   A 200 from Resend means "accepted for delivery", NOT "landed in the inbox".
+ *   Real delivery / bounce / spam-complaint is confirmed asynchronously by
+ *   Resend webhooks. See the companion function `resend-webhook`, which updates
+ *   invoice_email_log.status to delivered / bounced / complained. Without that
+ *   webhook, a bounced invoice would still read "sent" — the exact trap that
+ *   hid the Postmark quota failure.
+ *
+ * Required secrets (Supabase Dashboard -> Edge Functions -> Secrets):
+ *   RESEND_API_KEY          Resend API key (starts with "re_").
  *   ALLOWED_ORIGIN          Comma-separated origin allow-list (defaults to app domain).
  *   INVOICE_FROM_EMAIL      Verified sender, e.g. "JOI Accounting <accounting@justoutsource.it>".
- *                           Defaults to accounting@justoutsource.it.
+ *                           MUST be on a domain verified in Resend.
  *   INVOICE_BCC             Address to BCC on every send. Defaults to the from-address.
- *   INVOICE_MESSAGE_STREAM  Postmark message stream. Defaults to "outbound".
  *
  * Auto-provided by Supabase:
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -33,13 +44,12 @@ import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 // ---------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const POSTMARK_SERVER_TOKEN =
-  Deno.env.get("POSTMARK_SERVER_ACCOUNTING_TOKEN") ??
-  Deno.env.get("POSTMARK_SERVER_TOKEN") ??
-  "";
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = Deno.env.get("INVOICE_FROM_EMAIL") ?? "JOI Accounting <accounting@justoutsource.it>";
-const BCC_EMAIL = Deno.env.get("INVOICE_BCC") ?? "accounting@justoutsource.it";
-const MESSAGE_STREAM = Deno.env.get("INVOICE_MESSAGE_STREAM") ?? "outbound";
+// BCC must differ from FROM (accounting@) — a self-BCC gets deduped/dropped by
+// the receiving mail server, which is why the "send me a copy" box appeared to
+// do nothing. Defaults to D's address so the copy actually lands.
+const BCC_EMAIL = Deno.env.get("INVOICE_BCC") ?? "diomedes.sandoval@torro.com";
 
 // ---------------------------------------------------------------------------
 // CORS — echo back the matching origin from a comma-separated allow-list.
@@ -84,7 +94,12 @@ function textToHtml(text: string): string {
   return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#111;line-height:1.5;white-space:normal;">${esc.replace(/\n/g, "<br>")}</div>`;
 }
 
-async function sendViaPostmark(opts: {
+/**
+ * Send via Resend. Returns the Resend message id on success.
+ * Throws with a human-readable message on any non-2xx or malformed response,
+ * so the caller logs a real failure instead of a false "sent".
+ */
+async function sendViaResend(opts: {
   to: string[];
   cc?: string[];
   bcc?: string[];
@@ -93,41 +108,50 @@ async function sendViaPostmark(opts: {
   attachmentName: string;
   attachmentBase64: string;
 }): Promise<string> {
-  if (!POSTMARK_SERVER_TOKEN) throw new Error("POSTMARK_SERVER_TOKEN not set");
+  if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not set");
+
   const payload: Record<string, unknown> = {
-    From: FROM_EMAIL,
-    To: opts.to.join(", "),
-    Subject: opts.subject,
-    TextBody: opts.text,
-    HtmlBody: textToHtml(opts.text),
-    MessageStream: MESSAGE_STREAM,
-    Attachments: [
+    from: FROM_EMAIL,
+    to: opts.to,
+    subject: opts.subject,
+    text: opts.text,
+    html: textToHtml(opts.text),
+    attachments: [
       {
-        Name: opts.attachmentName,
-        Content: opts.attachmentBase64,
-        ContentType: "application/pdf",
+        filename: opts.attachmentName,
+        content: opts.attachmentBase64, // base64 string
       },
     ],
   };
-  if (opts.cc && opts.cc.length) payload.Cc = opts.cc.join(", ");
-  if (opts.bcc && opts.bcc.length) payload.Bcc = opts.bcc.join(", ");
+  if (opts.cc && opts.cc.length) payload.cc = opts.cc;
+  if (opts.bcc && opts.bcc.length) payload.bcc = opts.bcc;
 
-  const res = await fetch("https://api.postmarkapp.com/email", {
-    method: "POST",
-    headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-      "X-Postmark-Server-Token": POSTMARK_SERVER_TOKEN,
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (netErr) {
+    // Network-level failure reaching Resend — treat as a hard failure.
+    throw new Error(`Could not reach Resend: ${netErr instanceof Error ? netErr.message : String(netErr)}`);
+  }
+
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    // Postmark returns { ErrorCode, Message } on failure.
-    const msg = (json as { Message?: string }).Message ?? `Postmark HTTP ${res.status}`;
+    // Resend returns { name, message } on failure.
+    const msg = (json as { message?: string }).message ?? `Resend HTTP ${res.status}`;
     throw new Error(msg);
   }
-  return (json as { MessageID?: string }).MessageID ?? "";
+
+  const id = (json as { id?: string }).id ?? "";
+  // A 200 with no id would be an unexpected shape — refuse to report success.
+  if (!id) throw new Error("Resend accepted the request but returned no message id");
+  return id;
 }
 
 Deno.serve(async (req) => {
@@ -198,7 +222,7 @@ Deno.serve(async (req) => {
   // 4. Send.
   let messageId = "";
   try {
-    messageId = await sendViaPostmark({
+    messageId = await sendViaResend({
       to: recipients,
       cc,
       bcc,
@@ -224,7 +248,9 @@ Deno.serve(async (req) => {
     return fail(502, `Send failed: ${errMsg}`);
   }
 
-  // 5. Flip a draft invoice to sent + log the successful send.
+  // 5. Flip a draft invoice to sent + log the submission.
+  //    NOTE: status "sent" here means "accepted by Resend". The resend-webhook
+  //    function upgrades/downgrades this row to delivered / bounced later.
   if (invoice.status === "draft") {
     await supabase
       .from("invoices")
@@ -240,7 +266,7 @@ Deno.serve(async (req) => {
     bcc: bcc.length ? bcc : null,
     subject,
     status: "sent",
-    postmark_message_id: messageId,
+    postmark_message_id: messageId, // reused column: now holds the Resend id
     sent_by: userId,
   });
 
