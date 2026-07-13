@@ -309,7 +309,8 @@ export function useMarkInterviewOutcome() {
 }
 
 /**
- * Records that a WhatsApp interview invite was sent (Path A wa.me link).
+ * Records that a WhatsApp message was sent (Path A wa.me link) — either the
+ * first interview invite or a follow-up nudge.
  *
  * This does the DB side only — logging the message and updating the candidate.
  * The caller opens the wa.me link itself, synchronously on click, so the
@@ -318,9 +319,14 @@ export function useMarkInterviewOutcome() {
  * Effects:
  *   1. Inserts a recruiting_messages row (channel whatsapp, outbound,
  *      status 'link_generated' — we generated a link, we can't confirm a send).
- *   2. Stamps last_contacted_at = now().
- *   3. Advances stage to 'contacted' only when the candidate isn't already
- *      further along the funnel (see ADVANCE_TO_CONTACTED_FROM).
+ *   2. Stamps last_contacted_at = now() (so a follow-up resets the clock and
+ *      the candidate drops off the "needs follow-up" list).
+ *   3. For the first invite only, advances stage to 'contacted' when the
+ *      candidate isn't already further along (see ADVANCE_TO_CONTACTED_FROM).
+ *      A follow-up never changes the stage.
+ *
+ * `templateKey` records which message went out; `advanceStage` (default true)
+ * is set false by follow-ups so a second touch can't drag stage around.
  */
 export function useSendWhatsAppInvite() {
   const qc = useQueryClient();
@@ -328,9 +334,13 @@ export function useSendWhatsAppInvite() {
     mutationFn: async ({
       candidate,
       messageBody,
+      templateKey = INTERVIEW_INVITE_TEMPLATE_KEY,
+      advanceStage = true,
     }: {
       candidate: Pick<Candidate, "id" | "stage">;
       messageBody: string;
+      templateKey?: string;
+      advanceStage?: boolean;
     }) => {
       const { data: auth } = await supabase.auth.getUser();
       const sentBy = auth?.user?.id ?? null;
@@ -339,7 +349,7 @@ export function useSendWhatsAppInvite() {
         candidate_id: candidate.id,
         direction: "outbound",
         channel: "whatsapp",
-        template_key: INTERVIEW_INVITE_TEMPLATE_KEY,
+        template_key: templateKey,
         body: messageBody,
         sent_by: sentBy,
         status: "link_generated",
@@ -349,7 +359,7 @@ export function useSendWhatsAppInvite() {
       const patch: Partial<Candidate> = {
         last_contacted_at: new Date().toISOString(),
       };
-      if (ADVANCE_TO_CONTACTED_FROM.has(candidate.stage)) {
+      if (advanceStage && ADVANCE_TO_CONTACTED_FROM.has(candidate.stage)) {
         patch.stage = "contacted";
       }
 
@@ -364,6 +374,59 @@ export function useSendWhatsAppInvite() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
       qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.candidate.id] });
+    },
+  });
+}
+
+/**
+ * Sends a recruiting follow-up EMAIL via the send-recruiting-email edge
+ * function (Resend). Unlike WhatsApp — which is a wa.me link the recruiter
+ * taps — the email actually goes out server-side, so the edge function owns
+ * the DB writes (logs the message, re-stamps last_contacted_at). Here we just
+ * fire the request and refresh the candidate on success.
+ *
+ * Second-channel nudge only: it never changes the candidate's stage.
+ */
+export function useSendRecruitingEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidateId,
+      subject,
+      body,
+      templateKey,
+    }: {
+      candidateId: string;
+      subject: string;
+      body: string;
+      templateKey?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("send-recruiting-email", {
+        body: {
+          candidate_id: candidateId,
+          subject,
+          body_text: body,
+          template_key: templateKey,
+        },
+      });
+      // supabase.functions.invoke surfaces non-2xx as `error`; the function's
+      // JSON error message is the most useful thing to show the recruiter.
+      if (error) {
+        let detail = error.message;
+        try {
+          const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+          const parsed = ctx?.json ? await ctx.json() : null;
+          if (parsed?.error) detail = parsed.error;
+        } catch {
+          // fall back to error.message
+        }
+        throw new Error(detail);
+      }
+      return data as { status: string; to: string };
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
+      qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.candidateId] });
     },
   });
 }

@@ -15,6 +15,9 @@ export const CALENDLY_INTERVIEW_URL =
 /** Template key recorded on the recruiting_messages row for this message type. */
 export const INTERVIEW_INVITE_TEMPLATE_KEY = "interview_invite_whatsapp";
 
+/** Template key for a second-touch nudge to a candidate who went quiet. */
+export const INTERVIEW_FOLLOWUP_TEMPLATE_KEY = "interview_followup_whatsapp";
+
 /**
  * Normalize a phone number to digits-only with a country code, which is what
  * wa.me expects (no +, spaces, or dashes). Candidates are mostly local (MX) but
@@ -78,9 +81,7 @@ export function normalizePhone(raw: string | null | undefined): string | null {
 }
 
 /**
- * Full name for the greeting, whitespace-collapsed. Falls back to empty string.
- * We greet by full name (not just the first name) so the recruiter can tell
- * two same-first-name candidates apart from the sent message in WhatsApp.
+ * Full name, whitespace-collapsed. Falls back to empty string.
  */
 function greetingName(fullName: string | null | undefined): string {
   if (!fullName) return "";
@@ -88,17 +89,48 @@ function greetingName(fullName: string | null | undefined): string {
 }
 
 /**
- * Spanish interview-invite message with the Calendly link.
+ * First name only, for a warmer, less form-letter greeting. A message that
+ * opens "Hola Adam," reads more personal than "Hola Adam Rodriguez," and tends
+ * to get more replies. Falls back to empty string when we have no name.
+ * Exported so the email template greets the same way.
+ */
+export function firstName(fullName: string | null | undefined): string {
+  const full = greetingName(fullName);
+  return full ? full.split(" ")[0] : "";
+}
+
+/**
+ * Spanish interview-invite message (first contact) with the booking link.
+ * Opens with a reason to reply and a clear action, not just a thank-you.
  * Greeting adapts gracefully when we don't have a name.
  */
 export function buildInterviewInviteMessage(
   fullName: string | null | undefined,
 ): string {
-  const name = greetingName(fullName);
+  const name = firstName(fullName);
   const greeting = name ? `Hola ${name},` : "Hola,";
   return (
-    `${greeting} gracias por aplicar a JOI. Nos gustaría agendar una ` +
-    `entrevista contigo. Por favor elige un horario aquí: ${CALENDLY_INTERVIEW_URL}`
+    `${greeting} te escribo de JOI 👋 Vimos tu solicitud y nos gustaría ` +
+    `platicar contigo sobre la vacante. ¿Agendas tu entrevista aquí? ` +
+    `${CALENDLY_INTERVIEW_URL} Si tienes alguna duda, respóndeme por aquí.`
+  );
+}
+
+/**
+ * Spanish follow-up message (second touch) for a candidate who was contacted
+ * but hasn't booked. Shorter than the first message, re-sends the link, and
+ * gives an easy out ("solo avísame") — offering a graceful no tends to surface
+ * honest declines instead of silence, which keeps the pipeline clean.
+ */
+export function buildInterviewFollowUpMessage(
+  fullName: string | null | undefined,
+): string {
+  const name = firstName(fullName);
+  const greeting = name ? `Hola ${name},` : "Hola,";
+  return (
+    `${greeting} ¿seguimos con lo de la entrevista en JOI? Te dejo de nuevo ` +
+    `el link por si se te pasó: ${CALENDLY_INTERVIEW_URL} Si ya no te ` +
+    `interesa, no hay problema, solo avísame.`
   );
 }
 
