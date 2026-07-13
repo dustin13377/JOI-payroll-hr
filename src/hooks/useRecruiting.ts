@@ -309,7 +309,8 @@ export function useMarkInterviewOutcome() {
 }
 
 /**
- * Records that a WhatsApp interview invite was sent (Path A wa.me link).
+ * Records that a WhatsApp message was sent (Path A wa.me link) — either the
+ * first interview invite or a follow-up nudge.
  *
  * This does the DB side only — logging the message and updating the candidate.
  * The caller opens the wa.me link itself, synchronously on click, so the
@@ -318,9 +319,14 @@ export function useMarkInterviewOutcome() {
  * Effects:
  *   1. Inserts a recruiting_messages row (channel whatsapp, outbound,
  *      status 'link_generated' — we generated a link, we can't confirm a send).
- *   2. Stamps last_contacted_at = now().
- *   3. Advances stage to 'contacted' only when the candidate isn't already
- *      further along the funnel (see ADVANCE_TO_CONTACTED_FROM).
+ *   2. Stamps last_contacted_at = now() (so a follow-up resets the clock and
+ *      the candidate drops off the "needs follow-up" list).
+ *   3. For the first invite only, advances stage to 'contacted' when the
+ *      candidate isn't already further along (see ADVANCE_TO_CONTACTED_FROM).
+ *      A follow-up never changes the stage.
+ *
+ * `templateKey` records which message went out; `advanceStage` (default true)
+ * is set false by follow-ups so a second touch can't drag stage around.
  */
 export function useSendWhatsAppInvite() {
   const qc = useQueryClient();
@@ -328,9 +334,13 @@ export function useSendWhatsAppInvite() {
     mutationFn: async ({
       candidate,
       messageBody,
+      templateKey = INTERVIEW_INVITE_TEMPLATE_KEY,
+      advanceStage = true,
     }: {
       candidate: Pick<Candidate, "id" | "stage">;
       messageBody: string;
+      templateKey?: string;
+      advanceStage?: boolean;
     }) => {
       const { data: auth } = await supabase.auth.getUser();
       const sentBy = auth?.user?.id ?? null;
@@ -339,7 +349,7 @@ export function useSendWhatsAppInvite() {
         candidate_id: candidate.id,
         direction: "outbound",
         channel: "whatsapp",
-        template_key: INTERVIEW_INVITE_TEMPLATE_KEY,
+        template_key: templateKey,
         body: messageBody,
         sent_by: sentBy,
         status: "link_generated",
@@ -349,7 +359,7 @@ export function useSendWhatsAppInvite() {
       const patch: Partial<Candidate> = {
         last_contacted_at: new Date().toISOString(),
       };
-      if (ADVANCE_TO_CONTACTED_FROM.has(candidate.stage)) {
+      if (advanceStage && ADVANCE_TO_CONTACTED_FROM.has(candidate.stage)) {
         patch.stage = "contacted";
       }
 

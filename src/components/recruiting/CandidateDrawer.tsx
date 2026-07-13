@@ -30,8 +30,11 @@ import { isTerminal } from "@/lib/recruiting/stages";
 import {
   normalizePhone,
   buildInterviewInviteMessage,
+  buildInterviewFollowUpMessage,
   buildWhatsAppUrl,
+  INTERVIEW_FOLLOWUP_TEMPLATE_KEY,
 } from "@/lib/recruiting/whatsapp";
+import { needsFollowUp } from "@/lib/recruiting/followup";
 import { MediaAttachment } from "@/components/MediaAttachment";
 import { PositionFitPicker } from "./PositionFitPicker";
 import type { Stage } from "@/lib/recruiting/stages";
@@ -198,6 +201,37 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     );
   };
 
+  // Second-touch nudge for a candidate who was contacted but hasn't booked.
+  // Uses the shorter follow-up copy and does NOT change the stage — it only
+  // re-stamps last_contacted_at, which drops them off the follow-up list.
+  const handleSendFollowUp = () => {
+    if (!candidate) return;
+    const phoneDigits = normalizePhone(candidate.phone);
+    if (!phoneDigits) {
+      toast.error("No valid WhatsApp number on file. Add one under Details first.");
+      return;
+    }
+    const message = buildInterviewFollowUpMessage(candidate.full_name);
+    window.open(
+      buildWhatsAppUrl(phoneDigits, message),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    sendInvite.mutate(
+      {
+        candidate: { id: candidate.id, stage: candidate.stage },
+        messageBody: message,
+        templateKey: INTERVIEW_FOLLOWUP_TEMPLATE_KEY,
+        advanceStage: false,
+      },
+      {
+        onSuccess: () => toast.success("Follow-up logged"),
+        onError: (e) =>
+          toast.error(`Couldn't log the follow-up: ${e instanceof Error ? e.message : "unknown"}`),
+      },
+    );
+  };
+
   const saveEdits = async () => {
     if (!candidate) return;
     try {
@@ -328,9 +362,36 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 </Button>
               )}
 
+              {/*
+                Follow-up nudge. Shown once a candidate is in "contacted" (i.e.
+                already invited) so the recruiter can send the shorter second
+                message right here. Disabled without a usable phone.
+              */}
+              {candidate.stage === "contacted" && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSendFollowUp}
+                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone)}
+                  title={
+                    normalizePhone(candidate.phone)
+                      ? undefined
+                      : "No valid WhatsApp number on file"
+                  }
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Send WhatsApp follow-up
+                </Button>
+              )}
+
               {candidate.last_contacted_at && (
                 <p className="text-xs text-muted-foreground -mt-2">
                   Last contacted {format(new Date(candidate.last_contacted_at), "PP p")}
+                  {needsFollowUp(candidate.stage, candidate.last_contacted_at) && (
+                    <span className="ml-2 text-amber-600 font-medium">
+                      — follow-up due
+                    </span>
+                  )}
                 </p>
               )}
 

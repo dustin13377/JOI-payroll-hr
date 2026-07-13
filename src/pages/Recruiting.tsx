@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STAGES, STAGE_LABELS } from "@/lib/recruiting/stages";
+import { needsFollowUp } from "@/lib/recruiting/followup";
 import { Check, Copy, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const BOOKING_URL = "https://calendar.app.google/nw7EubnaE3gGhaaS8";
 
 const STAGE_FILTER_ACTIVE = "active";
+// Worklist: contacted candidates who've gone quiet and are due a second touch.
+const STAGE_FILTER_FOLLOWUP = "needs_followup";
 
 export default function Recruiting() {
   const { data: candidates = [], isLoading, error } = useCandidates();
@@ -59,6 +62,8 @@ export default function Recruiting() {
         if (c.stage === "hired" || c.stage === "passed" || c.stage === "withdrew" || c.stage === "ghosted") {
           return false;
         }
+      } else if (stageFilter === STAGE_FILTER_FOLLOWUP) {
+        if (!needsFollowUp(c.stage, c.last_contacted_at)) return false;
       } else if (stageFilter !== "all") {
         if (c.stage !== stageFilter) return false;
       }
@@ -117,6 +122,7 @@ export default function Recruiting() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={STAGE_FILTER_ACTIVE}>Active (non-terminal)</SelectItem>
+            <SelectItem value={STAGE_FILTER_FOLLOWUP}>Needs follow-up</SelectItem>
             <SelectItem value="all">All stages</SelectItem>
             {STAGES.map((s) => (
               <SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>
