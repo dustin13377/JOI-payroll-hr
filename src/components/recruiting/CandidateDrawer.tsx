@@ -19,12 +19,13 @@ import {
   useCandidate,
   useUpdateCandidate,
   useSendWhatsAppInvite,
+  useSendRecruitingEmail,
   useCandidateInterviews,
 } from "@/hooks/useRecruiting";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { UserPlus, MessageCircle, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
+import { UserPlus, MessageCircle, Mail, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
 import {
@@ -34,6 +35,10 @@ import {
   buildWhatsAppUrl,
   INTERVIEW_FOLLOWUP_TEMPLATE_KEY,
 } from "@/lib/recruiting/whatsapp";
+import {
+  buildInterviewFollowUpEmail,
+  INTERVIEW_FOLLOWUP_EMAIL_TEMPLATE_KEY,
+} from "@/lib/recruiting/email";
 import { needsFollowUp } from "@/lib/recruiting/followup";
 import { MediaAttachment } from "@/components/MediaAttachment";
 import { PositionFitPicker } from "./PositionFitPicker";
@@ -49,6 +54,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
   const { data: interviews = [] } = useCandidateInterviews(candidateId ?? undefined);
   const updateMutation = useUpdateCandidate();
   const sendInvite = useSendWhatsAppInvite();
+  const sendEmail = useSendRecruitingEmail();
   const navigate = useNavigate();
 
   const [editing, setEditing] = useState(false);
@@ -232,6 +238,30 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     );
   };
 
+  // Email follow-up (second channel). The edge function sends via Resend and
+  // does the DB writes, so here we just fire it and report the result.
+  const handleSendEmailFollowUp = () => {
+    if (!candidate) return;
+    if (!candidate.email) {
+      toast.error("No email on file. Add one under Details first.");
+      return;
+    }
+    const { subject, body } = buildInterviewFollowUpEmail(candidate.full_name);
+    sendEmail.mutate(
+      {
+        candidateId: candidate.id,
+        subject,
+        body,
+        templateKey: INTERVIEW_FOLLOWUP_EMAIL_TEMPLATE_KEY,
+      },
+      {
+        onSuccess: (res) => toast.success(`Email sent to ${res.to}`),
+        onError: (e) =>
+          toast.error(`Email failed: ${e instanceof Error ? e.message : "unknown"}`),
+      },
+    );
+  };
+
   const saveEdits = async () => {
     if (!candidate) return;
     try {
@@ -381,6 +411,24 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 >
                   <MessageCircle className="mr-2 h-4 w-4" />
                   Send WhatsApp follow-up
+                </Button>
+              )}
+
+              {/*
+                Email follow-up — second channel for a contacted candidate who
+                went quiet. Sends server-side via Resend. Disabled without an
+                email on file.
+              */}
+              {candidate.stage === "contacted" && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSendEmailFollowUp}
+                  disabled={sendEmail.isPending || !candidate.email}
+                  title={candidate.email ? undefined : "No email on file"}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  {sendEmail.isPending ? "Sending email…" : "Send email follow-up"}
                 </Button>
               )}
 

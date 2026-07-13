@@ -92,8 +92,9 @@ function greetingName(fullName: string | null | undefined): string {
  * First name only, for a warmer, less form-letter greeting. A message that
  * opens "Hola Adam," reads more personal than "Hola Adam Rodriguez," and tends
  * to get more replies. Falls back to empty string when we have no name.
+ * Exported so the email template greets the same way.
  */
-function firstName(fullName: string | null | undefined): string {
+export function firstName(fullName: string | null | undefined): string {
   const full = greetingName(fullName);
   return full ? full.split(" ")[0] : "";
 }

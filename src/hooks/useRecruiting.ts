@@ -377,3 +377,56 @@ export function useSendWhatsAppInvite() {
     },
   });
 }
+
+/**
+ * Sends a recruiting follow-up EMAIL via the send-recruiting-email edge
+ * function (Resend). Unlike WhatsApp — which is a wa.me link the recruiter
+ * taps — the email actually goes out server-side, so the edge function owns
+ * the DB writes (logs the message, re-stamps last_contacted_at). Here we just
+ * fire the request and refresh the candidate on success.
+ *
+ * Second-channel nudge only: it never changes the candidate's stage.
+ */
+export function useSendRecruitingEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidateId,
+      subject,
+      body,
+      templateKey,
+    }: {
+      candidateId: string;
+      subject: string;
+      body: string;
+      templateKey?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("send-recruiting-email", {
+        body: {
+          candidate_id: candidateId,
+          subject,
+          body_text: body,
+          template_key: templateKey,
+        },
+      });
+      // supabase.functions.invoke surfaces non-2xx as `error`; the function's
+      // JSON error message is the most useful thing to show the recruiter.
+      if (error) {
+        let detail = error.message;
+        try {
+          const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+          const parsed = ctx?.json ? await ctx.json() : null;
+          if (parsed?.error) detail = parsed.error;
+        } catch {
+          // fall back to error.message
+        }
+        throw new Error(detail);
+      }
+      return data as { status: string; to: string };
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: CANDIDATES_KEY });
+      qc.invalidateQueries({ queryKey: ["recruiting", "candidate", vars.candidateId] });
+    },
+  });
+}
