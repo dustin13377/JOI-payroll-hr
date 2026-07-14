@@ -39,7 +39,8 @@ import {
   buildInterviewFollowUpEmail,
   INTERVIEW_FOLLOWUP_EMAIL_TEMPLATE_KEY,
 } from "@/lib/recruiting/email";
-import { needsFollowUp } from "@/lib/recruiting/followup";
+import { needsFollowUp, isFollowUpLocked, followUpUnlockAt } from "@/lib/recruiting/followup";
+import { formatDistanceToNow } from "date-fns";
 import { MediaAttachment } from "@/components/MediaAttachment";
 import { PositionFitPicker } from "./PositionFitPicker";
 import type { Stage } from "@/lib/recruiting/stages";
@@ -273,6 +274,15 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     }
   };
 
+  // Follow-up 48h lock: keep both follow-up buttons locked until enough time
+  // has passed since last contact, so nobody double-taps a candidate the same
+  // day. Unlocks automatically once the window elapses.
+  const followUpLocked = candidate ? isFollowUpLocked(candidate.last_contacted_at) : false;
+  const followUpUnlock = candidate ? followUpUnlockAt(candidate.last_contacted_at) : null;
+  const followUpLockedTitle = followUpUnlock
+    ? `Follow-up unlocks ${formatDistanceToNow(followUpUnlock, { addSuffix: true })} (48h after last contact)`
+    : undefined;
+
   return (
     <Sheet open={!!candidateId} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="sm:max-w-[600px] overflow-y-auto">
@@ -402,11 +412,13 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   variant="outline"
                   className="w-full"
                   onClick={handleSendFollowUp}
-                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone)}
+                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone) || followUpLocked}
                   title={
-                    normalizePhone(candidate.phone)
-                      ? undefined
-                      : "No valid WhatsApp number on file"
+                    !normalizePhone(candidate.phone)
+                      ? "No valid WhatsApp number on file"
+                      : followUpLocked
+                        ? followUpLockedTitle
+                        : undefined
                   }
                 >
                   <MessageCircle className="mr-2 h-4 w-4" />
@@ -424,8 +436,14 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   variant="outline"
                   className="w-full"
                   onClick={handleSendEmailFollowUp}
-                  disabled={sendEmail.isPending || !candidate.email}
-                  title={candidate.email ? undefined : "No email on file"}
+                  disabled={sendEmail.isPending || !candidate.email || followUpLocked}
+                  title={
+                    !candidate.email
+                      ? "No email on file"
+                      : followUpLocked
+                        ? followUpLockedTitle
+                        : undefined
+                  }
                 >
                   <Mail className="mr-2 h-4 w-4" />
                   {sendEmail.isPending ? "Sending email…" : "Send email follow-up"}
