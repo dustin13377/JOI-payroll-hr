@@ -129,7 +129,8 @@ export function buildInterviewFollowUpMessage(
   const greeting = name ? `Hola ${name},` : "Hola,";
   return (
     `${greeting} ¿seguimos con lo de la entrevista en JOI? Te dejo de nuevo ` +
-    `el link por si se te pasó: ${CALENDLY_INTERVIEW_URL} Si ya no te ` +
+    `el link por si se te pasó: ${CALENDLY_INTERVIEW_URL} También te enviamos ` +
+    `un correo — si no lo ves, revisa tu carpeta de spam. Si ya no te ` +
     `interesa, no hay problema, solo avísame.`
   );
 }
