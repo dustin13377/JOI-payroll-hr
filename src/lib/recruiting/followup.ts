@@ -25,3 +25,26 @@ export function needsFollowUp(
   const ageMs = Date.now() - new Date(lastContactedAt).getTime();
   return ageMs >= FOLLOWUP_AFTER_HOURS * 60 * 60 * 1000;
 }
+
+/**
+ * When the 48h follow-up lock lifts for a candidate, based on their last
+ * contact. Returns null when we have no timestamp (nothing to count from).
+ */
+export function followUpUnlockAt(lastContactedAt: string | null): Date | null {
+  if (!lastContactedAt) return null;
+  return new Date(
+    new Date(lastContactedAt).getTime() + FOLLOWUP_AFTER_HOURS * 60 * 60 * 1000,
+  );
+}
+
+/**
+ * True while a candidate is inside the 48h wait window — contacted recently
+ * enough that a follow-up should stay locked. False once the window passes (due
+ * for follow-up) and also false when there's no timestamp to enforce against,
+ * so a manually-set "contacted" with no send isn't locked forever.
+ */
+export function isFollowUpLocked(lastContactedAt: string | null): boolean {
+  if (!lastContactedAt) return false;
+  const ageMs = Date.now() - new Date(lastContactedAt).getTime();
+  return ageMs < FOLLOWUP_AFTER_HOURS * 60 * 60 * 1000;
+}
