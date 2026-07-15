@@ -131,7 +131,7 @@ export function usePayrollComputed(
       const { data: clockRows, error: clockErr } = await supabase
         .from("time_clock")
         .select(
-          "employee_id, date, clock_in, clock_out, lunch_start, lunch_end, break1_start, break1_end, break2_start, break2_end"
+          "employee_id, date, clock_in, clock_out, lunch_start, lunch_end, break1_start, break1_end, break2_start, break2_end, early_release"
         )
         .gte("date", pStart)
         .lte("date", pEnd);
@@ -141,13 +141,22 @@ export function usePayrollComputed(
       //   clockMap  — employeeUUID -> Set<dateString> (did they punch at all)
       //   hoursMap  — employeeUUID -> Map<dateString, number|null> net hours worked
       //               (null = at least one incomplete punch that day → treat as full)
+      //   earlyReleaseMap — employeeUUID -> Set<dateString> where the agent left
+      //               early after claiming they hit their metrics. These days pay
+      //               as a FULL shift, so the short-day (<6h) dock is skipped below.
       const clockMap = new Map<string, Set<string>>();
       const hoursMap = new Map<string, Map<string, number | null>>();
+      const earlyReleaseMap = new Map<string, Set<string>>();
       for (const row of clockRows ?? []) {
         const eid = (row as any).employee_id as string;
         const d = (row as any).date as string;
         if (!clockMap.has(eid)) clockMap.set(eid, new Set());
         clockMap.get(eid)!.add(d);
+
+        if ((row as any).early_release === true) {
+          if (!earlyReleaseMap.has(eid)) earlyReleaseMap.set(eid, new Set());
+          earlyReleaseMap.get(eid)!.add(d);
+        }
 
         if (!hoursMap.has(eid)) hoursMap.set(eid, new Map());
         const dayMap = hoursMap.get(eid)!;
@@ -277,6 +286,7 @@ export function usePayrollComputed(
         const clocked = clockMap.get(uuid) ?? new Set<string>();
         const timeOff = timeOffMap.get(uuid) ?? new Map<string, LeaveDay>();
         const dayHours = hoursMap.get(uuid) ?? new Map<string, number | null>();
+        const earlyReleaseDays = earlyReleaseMap.get(uuid) ?? new Set<string>();
         const scheduledShiftHours =
           (campaignId && shiftHoursMap.get(campaignId)) || DEFAULT_SHIFT_HOURS;
         const dailyRate = (Number(emp.monthly_base_salary) || 0) / 30;
@@ -322,6 +332,12 @@ export function usePayrollComputed(
           if (!clocked.has(d)) continue;
           const h = dayHours.get(d);
           if (h == null || h <= 0 || h >= FULL_DAY_MIN_HOURS) continue;
+          // Early release: the agent left early after claiming they hit their
+          // metrics (only possible when the campaign enables the feature). That
+          // day pays as a full shift, so we do NOT dock the short-day fraction.
+          // Short days WITHOUT the flag (campaign has no early release, or the
+          // agent didn't claim it) still dock normally.
+          if (earlyReleaseDays.has(d)) continue;
           const unworked = Math.min(1, Math.max(0, 1 - h / scheduledShiftHours));
           partialDayDeduction += unworked * dailyRate;
           partialDates.add(d);
