@@ -200,9 +200,13 @@ export default function EmployeeHome() {
         .select("*")
         .eq("employee_id", employeeId)
         .eq("date", today)
-        .maybeSingle();
+        .order("clock_in", { ascending: false });
       if (error) throw error;
-      return (data || null) as TimeClockEntry | null;
+      // Prefer the open entry, else most recent. Not .maybeSingle() — it throws
+      // on duplicate rows (see uq_time_clock_one_open_per_day, 2026-07-15).
+      const rows = (data || []) as TimeClockEntry[];
+      const open = rows.find((r) => !r.clock_out);
+      return (open || rows[0] || null) as TimeClockEntry | null;
     },
     enabled: !!employeeId,
     refetchInterval: 30000,
@@ -233,13 +237,14 @@ export default function EmployeeHome() {
       const nowDate = new Date();
       const today = todayLocal(nowDate);
 
-      const { data: existing } = await supabase
+      // Plain select (not .maybeSingle, which errors on duplicates). DB index
+      // uq_time_clock_one_open_per_day is the real race guard.
+      const { data: existingRows } = await supabase
         .from("time_clock")
         .select("id")
         .eq("employee_id", employeeId)
-        .eq("date", today)
-        .maybeSingle();
-      if (existing) throw new Error("Already clocked in today");
+        .eq("date", today);
+      if (existingRows && existingRows.length > 0) throw new Error("Already clocked in today");
 
       let isLate = false;
       let lateMinutes = 0;
@@ -275,7 +280,13 @@ export default function EmployeeHome() {
         })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        // 23505 = unique violation (a concurrent tap already opened the row).
+        if ((error as { code?: string }).code === "23505") {
+          throw new Error("Already clocked in today");
+        }
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {

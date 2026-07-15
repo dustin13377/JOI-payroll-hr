@@ -180,14 +180,21 @@ export default function Timeclock() {
     queryFn: async () => {
       if (!employeeId) return null;
       const today = todayLocal();
+      // Fetch ALL of today's rows rather than .maybeSingle(). maybeSingle()
+      // throws the moment >1 row exists, which used to blank out the status and
+      // trap the UI on the "Clock In" button (Adrian's 13-open-rows loop,
+      // 2026-07-15). The DB now blocks duplicate open rows, but stay tolerant:
+      // prefer the open entry, else the most recent.
       const { data, error } = await supabase
         .from("time_clock")
         .select("*")
         .eq("employee_id", employeeId)
         .eq("date", today)
-        .maybeSingle();
+        .order("clock_in", { ascending: false });
       if (error) throw error;
-      return data as TimeClockEntry | null;
+      const rows = (data || []) as TimeClockEntry[];
+      const open = rows.find((r) => !r.clock_out);
+      return (open || rows[0] || null) as TimeClockEntry | null;
     },
     enabled: !!employeeId,
     refetchInterval: 30000,
@@ -306,13 +313,16 @@ export default function Timeclock() {
       const now = new Date();
       const today = todayLocal(now);
 
-      const { data: existing } = await supabase
+      // Guard against a re-clock-in. Use a plain select (not .maybeSingle,
+      // which errors on duplicates) so this check stays reliable even if stray
+      // rows exist. The real race protection is the DB partial unique index
+      // uq_time_clock_one_open_per_day — this is the friendly first line.
+      const { data: existingRows } = await supabase
         .from("time_clock")
         .select("id")
         .eq("employee_id", employeeId)
-        .eq("date", today)
-        .maybeSingle();
-      if (existing) throw new Error("Already clocked in today");
+        .eq("date", today);
+      if (existingRows && existingRows.length > 0) throw new Error("Already clocked in today");
 
       // is_late / late_minutes are NOT set here anymore. The
       // tg_time_clock_set_lateness BEFORE trigger (migration
@@ -333,7 +343,15 @@ export default function Timeclock() {
         })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        // 23505 = unique violation on uq_time_clock_one_open_per_day, i.e. a
+        // concurrent tap already created the open row. Treat as a no-op, not
+        // an error the agent needs to see.
+        if ((error as { code?: string }).code === "23505") {
+          throw new Error("Already clocked in today");
+        }
+        throw error;
+      }
       return data;
     },
     onSuccess: invalidate,

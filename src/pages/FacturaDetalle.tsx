@@ -1235,7 +1235,6 @@ function SendInvoiceDialog({
   const [newEmail, setNewEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [bccSelf, setBccSelf] = useState(true);
   const [building, setBuilding] = useState(false);
 
   const recipients = useMemo(() => contacts.map((c) => c.email), [contacts]);
@@ -1251,7 +1250,6 @@ function SendInvoiceDialog({
     prefilledRef.current = true;
     setSubject(buildDefaultSubject(invoice));
     setBody(buildDefaultBody(invoice));
-    setBccSelf(true);
     setNewEmail("");
   }, [open]);
 
@@ -1315,7 +1313,6 @@ function SendInvoiceDialog({
         body_text: body,
         pdf_base64: pdf.base64,
         pdf_filename: pdf.filename,
-        bcc_self: bccSelf,
       },
       {
         onSuccess: (r) => {
@@ -1420,20 +1417,11 @@ function SendInvoiceDialog({
             />
           </div>
 
-          {/* Attachment + BCC */}
+          {/* Attachment */}
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center gap-2">
             <Download className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="truncate">{pdfFilename}</span>
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={bccSelf}
-              onChange={(e) => setBccSelf(e.currentTarget.checked)}
-              className="h-4 w-4"
-            />
-            Send me a copy (BCC accounting@justoutsource.it)
-          </label>
         </div>
 
         <DialogFooter>
