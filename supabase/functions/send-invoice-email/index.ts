@@ -46,10 +46,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = Deno.env.get("INVOICE_FROM_EMAIL") ?? "JOI Accounting <accounting@justoutsource.it>";
-// BCC must differ from FROM (accounting@) — a self-BCC gets deduped/dropped by
-// the receiving mail server, which is why the "send me a copy" box appeared to
-// do nothing. Defaults to D's address so the copy actually lands.
-const BCC_EMAIL = Deno.env.get("INVOICE_BCC") ?? "diomedes.sandoval@torro.com";
+// No BCC on invoices. The paper trail lives in the Resend dashboard +
+// invoice_email_log, so we don't blind-copy anyone. Intentionally does NOT read
+// an INVOICE_BCC secret, so no stale copy address can sneak back in.
 
 // ---------------------------------------------------------------------------
 // CORS — echo back the matching origin from a comma-separated allow-list.
@@ -206,8 +205,7 @@ Deno.serve(async (req) => {
   const badCc = cc.find((e) => !EMAIL_RE.test(e));
   if (badCc) return fail(400, `CC '${badCc}' is not a valid email address`);
 
-  const bccSelf = body.bcc_self !== false; // default true
-  const bcc = bccSelf && BCC_EMAIL ? [BCC_EMAIL] : [];
+  const bcc: string[] = []; // no BCC — invoices go only to the client recipients
 
   // 3. Confirm the invoice exists. organization_id lives on the client, not the
   //    invoice, so pull it through the FK for the log rows.
