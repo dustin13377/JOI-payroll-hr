@@ -53,6 +53,7 @@ import { ThirtyDayReviewCard } from "@/components/employee-profile/ThirtyDayRevi
 import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard";
 import { ClockInHistoryCard } from "@/components/employee-profile/ClockInHistoryCard";
 import { CampaignHistoryCard } from "@/components/employee-profile/CampaignHistoryCard";
+import { PayrollHistoryCard } from "@/components/employee-profile/PayrollHistoryCard";
 import { ChangeCampaignDialog } from "@/components/ChangeCampaignDialog";
 import { RecruitingAttachmentsCard } from "@/components/employee-profile/RecruitingAttachmentsCard";
 
@@ -1045,6 +1046,16 @@ export default function EmpleadoPerfil() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      {/* Payroll History — owner + admin (HR) only. Period-by-period from the
+          locked quincenal snapshots; history begins May 2026. */}
+      {(isOwner || isAdmin) && emp._uuid && (
+        <PayrollHistoryCard
+          employeeUuid={emp._uuid}
+          employeeCode={emp.id}
+          employeeName={emp._workName || emp.nombre}
+        />
       )}
 
       {emp._uuid && (
