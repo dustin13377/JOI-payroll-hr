@@ -401,7 +401,15 @@ export default function PrePayroll() {
             <div key={c.employeeId} className="bg-card border rounded-xl p-4">
               <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
                 <div>
-                  <div className="font-medium">{c.fullName}</div>
+                  <Link
+                    to={`/empleados/${c.employeeDisplayId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium hover:underline hover:text-primary"
+                    title="Open profile in a new tab"
+                  >
+                    {c.fullName}
+                  </Link>
                   <div className="text-[11px] text-muted-foreground">
                     {c.employeeDisplayId} · {c.campaignName ?? "—"} · {formatMXN(c.monthlyBaseSalary)}/mo
                   </div>
