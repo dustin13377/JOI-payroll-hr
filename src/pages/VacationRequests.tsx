@@ -101,6 +101,7 @@ export default function VacationRequests() {
   }
 
   const min = minStartDateFor(requestType);
+  const startTooSoon = Boolean(startDate) && startDate < min;
   const liveDays =
     startDate && endDate && endDate >= startDate
       ? daysBetween(startDate, endDate)
@@ -111,6 +112,10 @@ export default function VacationRequests() {
 
   async function handleSubmit() {
     if (!employeeId || !campaignId || !startDate || !endDate) return;
+    if (startTooSoon) {
+      toast.error(`The earliest start date for this request is ${formatDateMX(min)}.`);
+      return;
+    }
     try {
       await requestMutation.mutateAsync({
         employeeId,
@@ -229,6 +234,21 @@ export default function VacationRequests() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {/* Advance-notice reminder — always visible so agents know the
+                rule before picking a date. Text switches with the reason. */}
+            <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold">Requests must be submitted in advance</p>
+                <p className="mt-1">
+                  {isPaid
+                    ? "Paid Vacation must be requested at least 21 days ahead."
+                    : "Sick, Personal, and Other leave must be requested at least 7 days ahead."}{" "}
+                  The earliest date you can choose right now is{" "}
+                  <span className="font-medium">{formatDateMX(min)}</span>.
+                </p>
+              </div>
+            </div>
             {/* Reason — first decision the agent makes */}
             <div className="space-y-2">
               <Label htmlFor="reason">Reason</Label>
@@ -303,12 +323,13 @@ export default function VacationRequests() {
               </p>
             )}
 
-            <p className="text-xs text-muted-foreground">
-              {isPaid
-                ? "Vacation requires at least 21 days notice"
-                : "Sick / Personal / Other requires at least 7 days notice"}
-              {" "}(earliest start: <span className="font-medium">{formatDateMX(min)}</span>).
-            </p>
+            {startTooSoon && (
+              <p className="flex items-center gap-1.5 text-sm text-red-600">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                That start date is too soon — the earliest you can request is{" "}
+                <span className="font-medium">{formatDateMX(min)}</span>.
+              </p>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="notes">Notes (optional)</Label>
@@ -327,7 +348,8 @@ export default function VacationRequests() {
                 requestMutation.isPending ||
                 !startDate ||
                 !endDate ||
-                !campaignId
+                !campaignId ||
+                startTooSoon
               }
               className="w-full"
             >
