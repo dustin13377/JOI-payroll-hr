@@ -1333,3 +1333,69 @@ export function useCreateNudge() {
     },
   });
 }
+
+/* ================================================================== */
+/*  Hook – useUpcomingApprovedTimeOffForTeam                           */
+/*                                                                     */
+/*  Fully-approved (status='approved') time off that hasn't ended yet, */
+/*  across the TL's whole team (same union helper as the pending       */
+/*  hook, so cross-campaign covering TLs like Deysi see it too). Powers */
+/*  the "who's out" list + Add-to-Calendar card on the TL dashboard.   */
+/* ================================================================== */
+export function useUpcomingApprovedTimeOffForTeam(tlEmployeeId: string | null) {
+  return useQuery({
+    queryKey: ["team-timeoff-approved", tlEmployeeId],
+    enabled: !!tlEmployeeId,
+    queryFn: async (): Promise<PendingTimeOff[]> => {
+      if (!tlEmployeeId) return [];
+
+      const teamIds = await fetchMyTeamMemberIds();
+      if (teamIds.length === 0) return [];
+      const { data: roster, error: rosterErr } = await supabase
+        .from("employees_no_pay")
+        .select("id, full_name, work_name")
+        .in("id", teamIds)
+        .eq("is_active", true);
+      if (rosterErr) throw rosterErr;
+      const members = (roster || []) as { id: string; full_name: string; work_name: string | null }[];
+      if (members.length === 0) return [];
+
+      const memberIds = members.map((m) => m.id);
+      const nameMap = new Map(members.map((m) => [m.id, { full_name: m.full_name, work_name: m.work_name }]));
+
+      // Approved and still current/future (end_date today-or-later, local tz).
+      const today = todayLocal();
+      const { data: requests, error: reqErr } = await supabase
+        .from("vacation_requests")
+        .select("id, employee_id, start_date, end_date, request_type, is_paid, status")
+        .in("employee_id", memberIds)
+        .eq("status", "approved")
+        .gte("end_date", today)
+        .order("start_date", { ascending: true });
+      if (reqErr) throw reqErr;
+
+      return ((requests || []) as Array<{
+        id: string;
+        employee_id: string;
+        start_date: string;
+        end_date: string;
+        request_type: string;
+        is_paid: boolean;
+        status: string;
+      }>).map((r) => {
+        const names = nameMap.get(r.employee_id);
+        return {
+          id: r.id,
+          employee_id: r.employee_id,
+          start_date: r.start_date,
+          end_date: r.end_date,
+          reason: r.request_type,
+          is_paid: r.is_paid,
+          status: r.status,
+          fullName: names?.full_name ?? "Unknown",
+          workName: names?.work_name ?? null,
+        };
+      });
+    },
+  });
+}
