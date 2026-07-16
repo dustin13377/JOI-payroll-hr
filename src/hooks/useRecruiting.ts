@@ -430,3 +430,65 @@ export function useSendRecruitingEmail() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Computer skills assessment — self-serve test link per candidate.
+// The public /skills-test/:token page + skills-assessment edge function write
+// the results back; here we only generate links and read results (leadership
+// RLS applies). `(supabase as any)` because recruiting_skill_assessments is not
+// yet in the generated Database types — regenerate types to make it typed.
+// ---------------------------------------------------------------------------
+export interface SkillAssessment {
+  id: string;
+  candidate_id: string;
+  token: string;
+  status: "pending" | "in_progress" | "completed" | "expired";
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  total_seconds: number | null;
+  results: any | null;
+}
+
+function makeAssessmentToken(): string {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  bytes.forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export function useCandidateAssessments(candidateId: string | undefined) {
+  return useQuery({
+    queryKey: ["recruiting", "assessments", candidateId],
+    enabled: !!candidateId,
+    queryFn: async (): Promise<SkillAssessment[]> => {
+      if (!candidateId) return [];
+      const { data, error } = await (supabase as any)
+        .from("recruiting_skill_assessments")
+        .select("*")
+        .eq("candidate_id", candidateId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SkillAssessment[];
+    },
+  });
+}
+
+export function useCreateAssessment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (candidateId: string): Promise<SkillAssessment> => {
+      const { data, error } = await (supabase as any)
+        .from("recruiting_skill_assessments")
+        .insert({ candidate_id: candidateId, token: makeAssessmentToken() })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as SkillAssessment;
+    },
+    onSuccess: (_data, candidateId) => {
+      qc.invalidateQueries({ queryKey: ["recruiting", "assessments", candidateId] });
+    },
+  });
+}

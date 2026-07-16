@@ -43,6 +43,7 @@ import { needsFollowUp, isFollowUpLocked, followUpUnlockAt } from "@/lib/recruit
 import { formatDistanceToNow } from "date-fns";
 import { MediaAttachment } from "@/components/MediaAttachment";
 import { PositionFitPicker } from "./PositionFitPicker";
+import { SkillsTestCard } from "./SkillsTestCard";
 import type { Stage } from "@/lib/recruiting/stages";
 
 interface Props {
@@ -573,6 +574,10 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   )}
                 </div>
               </div>
+
+              <Separator />
+
+              <SkillsTestCard candidateId={candidate.id} />
 
               <Separator />
 

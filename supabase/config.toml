@@ -31,3 +31,6 @@ verify_jwt = false
 [functions.import-spiffs]
 verify_jwt = false
 
+
+[functions.skills-assessment]
+verify_jwt = false
