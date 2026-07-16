@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prueba de habilidades — JOI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --ink:#0f2038; --muted:#5b6b7f;
+    --line:#e3e8ef; --navy:#0f1c2c;
+    --brand:#FFA700; --brand-dark:#e08e00; --brand-ink:#0f2038;
+    --accent:#fb7331; --link:#b45309;
+    --good:#16a34a; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7;
+    --bad:#dc2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.45}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
+  button{font-family:inherit;font-size:15px;cursor:pointer;border-radius:8px;border:1px solid transparent;padding:9px 16px}
+  .btn-primary{background:var(--brand);color:var(--brand-ink);font-weight:700}
+  .btn-primary:hover{background:var(--brand-dark)}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{background:#f8fafc}
+  input[type=text],select{font-family:inherit;font-size:15px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;width:100%;background:#fff}
+  input[type=text]:focus,select:focus{outline:2px solid var(--brand);border-color:var(--brand)}
+
+  .screen{display:none}
+  .screen.active{display:block}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px;margin-top:24px;
+    box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .card h1{margin:0 0 6px;font-size:24px}
+  .card h2{margin:0 0 14px;font-size:20px}
+  .lead{color:var(--muted);font-size:16px;margin:0 0 20px}
+  .steps{margin:0 0 22px;padding-left:20px;color:#334155}
+  .steps li{margin:6px 0}
+  .note{background:#fff7e6;border:1px solid #ffe0a3;color:#7a4d00;border-radius:10px;padding:12px 14px;font-size:14px;margin:18px 0}
+
+  .taskbar{position:sticky;top:0;z-index:30;background:var(--navy);color:#fff;border-radius:12px;
+    padding:14px 16px;margin-bottom:14px;box-shadow:0 6px 18px rgba(15,28,44,.22)}
+  .taskbar .tnum{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);font-weight:700}
+  .taskbar .ttext{font-size:16px;font-weight:600;margin-top:2px}
+  .taskbar .trow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .taskbar input[type=text]{max-width:220px;background:#fff;color:#0f172a}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:#1e293b;color:#cbd5e1;border-radius:999px;
+    padding:5px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+  .hintlink{background:none;border:none;color:#ffce7a;font-size:13px;text-decoration:underline;padding:4px 0}
+  .hintbox{background:var(--warn-bg);color:#78350f;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:14px;margin-top:8px;display:none}
+
+  .crm{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .crm-top{display:flex;align-items:center;gap:10px;background:var(--navy);color:#fff;padding:11px 16px;font-weight:600}
+  .crm-top .mark{width:24px;height:24px;display:grid;place-items:center}
+  .brandband{background:var(--navy);margin:-28px -28px 22px;padding:20px 28px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between}
+  .brandband .tagline{color:#ffce7a;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .crm-body{padding:18px}
+  .searchrow{display:flex;gap:10px;margin-bottom:14px}
+  .searchrow input{max-width:340px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:#f8fafc}
+  .list-scroll{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .empty{padding:24px;text-align:center;color:var(--muted)}
+
+  .backlink{background:none;border:none;color:var(--link);font-size:14px;font-weight:600;padding:0;margin-bottom:12px}
+  .detail-name{font-size:22px;font-weight:700;margin:0 0 2px}
+  .detail-sub{color:var(--muted);margin:0 0 18px}
+  .field{margin-bottom:14px;max-width:360px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  .saved-badge{display:none;color:var(--good);font-weight:600;font-size:14px;margin-left:10px}
+  .row-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ticket{margin-top:22px;padding-top:18px;border-top:1px dashed var(--line)}
+  .ticket h3{margin:0 0 10px;font-size:15px}
+
+  .backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:40}
+  .win{display:none;position:fixed;z-index:50;top:90px;left:50%;transform:translateX(-50%);
+    width:min(580px,92vw);background:#fff;border-radius:12px;box-shadow:0 20px 50px rgba(15,23,42,.35);border:1px solid var(--line)}
+  .win-top{display:flex;justify-content:space-between;align-items:center;background:#334155;color:#fff;
+    padding:10px 14px;border-radius:12px 12px 0 0;font-weight:600}
+  .win-top button{background:#475569;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:13px}
+  .win-body{padding:16px}
+  .ordernum{font-family:ui-monospace,Menlo,Consolas,monospace;background:#f1f5f9;padding:2px 6px;border-radius:5px;user-select:all}
+
+  .mobile-warn{display:none;background:var(--warn-bg);color:#78350f;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-top:16px;font-size:14px}
+  .step-box{background:#fff7e6;border:1px solid #ffe0a3;border-left:5px solid var(--brand);border-radius:10px;padding:16px;margin-top:10px}
+  .step-box .step-label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8a5a00;font-weight:800;margin:0 0 10px}
+  .step-box input[type=file]{font-size:15px}
+  .step-box .field{margin-bottom:8px}
+
+  .sumtable{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+  .sumtable th,.sumtable td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+  .tag{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600}
+  .tag.g{background:var(--good-bg);color:#166534}
+  .tag.w{background:var(--warn-bg);color:#78350f}
+  .protohint{font-size:13px;color:var(--muted);margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- INTRO -->
+  <section id="intro" class="screen active">
+    <div class="card">
+      <div class="brandband">
+        <svg width="104" height="49" viewBox="0 0 124 58" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="JOI">
+          <path d="M48.9816 22.8778C48.4366 20.895 47.5846 19.0089 46.4562 17.2872C44.6294 14.4803 42.1258 12.173 39.1737 10.5754C36.2215 8.97794 32.9146 8.14106 29.5543 8.14106C26.194 8.14106 22.8872 8.97794 19.935 10.5754C16.9829 12.173 14.4793 14.4803 12.6525 17.2872C11.5217 19.0085 10.6675 20.8946 10.1207 22.8778C9.16095 26.3579 9.16095 30.031 10.1207 33.5111C10.6674 35.4943 11.5216 37.3805 12.6525 39.1017C14.4801 41.9065 16.9836 44.2119 19.935 45.808C22.8865 47.4041 26.1921 48.2402 29.5511 48.2402C32.9101 48.2402 36.2158 47.4041 39.1672 45.808C42.1186 44.2119 44.6221 41.9065 46.4497 39.1017C48.0013 36.7267 49.0293 34.0513 49.4657 31.2519C49.9021 28.4526 49.7371 25.5929 48.9816 22.8617M43.6881 34.5164C42.4597 37.2239 40.4726 39.5211 37.965 41.1325C35.4574 42.7439 32.536 43.6011 29.5511 43.6011C26.5663 43.6011 23.6448 42.7439 21.1372 41.1325C18.6297 39.5211 16.6425 37.2239 15.4141 34.5164C13.9325 31.2302 13.6532 27.5316 14.6245 24.0618C15.5958 20.5921 17.7566 17.5701 20.7321 15.5198C23.7077 13.4695 27.3104 12.5202 30.9155 12.8365C34.5206 13.1529 37.9008 14.7149 40.4699 17.2518C41.8232 18.5851 42.9204 20.1532 43.7075 21.8789C44.6084 23.8688 45.0743 26.0264 45.0743 28.209C45.0743 30.3915 44.6084 32.5491 43.7075 34.539" fill="#FFA700"/>
+          <path d="M2.56087 28.2073C2.56218 30.957 3.60233 33.6056 5.4748 35.6273C7.34727 37.6491 9.91515 38.8962 12.6687 39.121C12.9656 39.1505 13.2638 39.1645 13.5622 39.1629H33.2857C33.7081 38.4856 33.9323 37.7045 33.9332 36.9073C33.9344 36.0614 33.6868 35.2337 33.2209 34.5261H13.546C12.3308 34.5294 11.1408 34.1813 10.1207 33.524C9.22301 32.9518 8.48439 32.164 7.9728 31.2333C7.46121 30.3025 7.19307 29.2586 7.19307 28.1977C7.19307 27.1367 7.46121 26.0928 7.9728 25.1621C8.48439 24.2313 9.22301 23.4436 10.1207 22.8713C10.6687 20.8896 11.5228 19.0047 12.6525 17.284C9.89896 17.5088 7.33108 18.7559 5.4586 20.7777C3.58613 22.7994 2.54599 25.448 2.54468 28.1977" fill="#FFA700"/>
+          <path d="M25.2014 36.9202C25.2014 38.0688 25.6599 39.1703 26.4759 39.9825C27.2919 40.7946 28.3987 41.2509 29.5527 41.2509C30.7068 41.2509 31.8136 40.7946 32.6296 39.9825C33.4456 39.1703 33.9041 38.0688 33.9041 36.9202C33.9041 35.7717 33.4456 34.6701 32.6296 33.858C31.8136 33.0458 30.7068 32.5896 29.5527 32.5896C28.3987 32.5896 27.2919 33.0458 26.4759 33.858C25.6599 34.6701 25.2014 35.7717 25.2014 36.9202Z" fill="#FFA700"/>
+          <path d="M64.8231 14.9511V43.5709C64.8231 45.0596 64.4594 46.1186 63.732 46.748C63.0046 47.3774 61.8337 47.6535 60.2192 47.5761V55.8186C64.7411 56.0892 68.078 55.23 70.2299 53.2408C72.3818 51.2516 73.4545 48.0294 73.4481 43.5741V14.9511H64.8231Z" fill="#fff"/>
+          <path d="M74.3159 7.28223C74.3211 7.9665 74.186 8.64464 73.9187 9.27514C73.6515 9.90565 73.2579 10.4753 72.7618 10.9491C72.291 11.4297 71.7265 11.8096 71.103 12.0656C70.4795 12.3216 69.8101 12.4482 69.1357 12.4378C68.4524 12.4487 67.7739 12.3227 67.1405 12.0675C66.5071 11.8123 65.9317 11.4329 65.4484 10.952C64.9652 10.4711 64.5841 9.89839 64.3276 9.26797C64.0712 8.63756 63.9446 7.96227 63.9556 7.28223C63.944 6.61149 64.0702 5.94546 64.3262 5.32492C64.5823 4.70438 64.963 4.14238 65.4449 3.67333C65.9213 3.18052 66.4938 2.78971 67.1274 2.52487C67.7609 2.26002 68.4421 2.12672 69.1293 2.13311C70.4935 2.16347 71.7935 2.71639 72.7584 3.67675C73.7233 4.6371 74.2789 5.93086 74.3094 7.28867" fill="#FFA700"/>
+          <path d="M103.36 40.0232C100.446 42.9232 96.8419 44.3732 92.5467 44.3732C88.2515 44.3732 84.647 42.9232 81.7331 40.0232C78.7804 37.0846 77.3041 33.4972 77.3041 29.261C77.2683 27.2703 77.6429 25.2934 78.4047 23.4524C79.1664 21.6113 80.2992 19.9452 81.7331 18.5568C84.6858 15.6181 88.2903 14.1488 92.5467 14.1488C96.8031 14.1488 100.408 15.6181 103.36 18.5568C104.794 19.9453 105.927 21.6114 106.688 23.4525C107.45 25.2935 107.825 27.2703 107.789 29.261C107.789 33.4972 106.313 37.0846 103.36 40.0232ZM85.9323 29.261C85.9323 31.2459 86.5647 32.8678 87.8295 34.1266C89.0964 35.3405 90.7865 36.0186 92.5451 36.0186C94.3036 36.0186 95.9938 35.3405 97.2606 34.1266C98.5255 32.8678 99.1579 31.2459 99.1579 29.261C99.1579 27.2761 98.5255 25.6543 97.2606 24.3955C95.9938 23.1816 94.3036 22.5034 92.5451 22.5034C90.7865 22.5034 89.0964 23.1816 87.8295 24.3955C86.5647 25.6543 85.9323 27.2761 85.9323 29.261Z" fill="#fff"/>
+          <path d="M120.27 14.9511H111.645V43.5709H120.27V14.9511Z" fill="#fff"/>
+          <path d="M121.132 7.28222C121.138 7.96669 121.004 8.64522 120.736 9.27592C120.469 9.90661 120.075 10.4761 119.578 10.9491C119.107 11.4297 118.542 11.8096 117.919 12.0656C117.295 12.3216 116.626 12.4482 115.951 12.4378C115.269 12.4469 114.591 12.3197 113.958 12.0639C113.326 11.808 112.751 11.4286 112.268 10.948C111.785 10.4675 111.404 9.89549 111.147 9.26588C110.89 8.63627 110.762 7.96177 110.771 7.28222C110.759 6.61083 110.886 5.94413 111.143 5.32337C111.4 4.70262 111.783 4.14101 112.267 3.67332C112.742 3.18008 113.313 2.78893 113.946 2.52402C114.578 2.25911 115.259 2.12606 115.945 2.1331C117.309 2.16346 118.609 2.71638 119.574 3.67673C120.539 4.63709 121.095 5.93085 121.125 7.28866" fill="#FFA700"/>
+        </svg>
+        <span class="tagline">Reclutamiento</span>
+      </div>
+      <h1>Prueba corta de computadora</h1>
+      <p class="lead">Gracias por tu interés en JOI. Esta es una pequeña prueba práctica para conocer cómo te manejas en un sistema como los que usamos en el trabajo. <strong>No necesitas experiencia previa</strong> — solo sigue las instrucciones que aparecen arriba en cada paso.</p>
+      <ul class="steps">
+        <li>Son <strong>6 tareas cortas</strong>. Toma unos 6–9 minutos.</li>
+        <li>Trabajarás sobre un sistema de práctica (no son datos reales).</li>
+        <li>Lee con calma cada instrucción — algunas tienen un detalle importante.</li>
+      </ul>
+      <div class="note">💻 Por favor haz esta prueba en una <strong>computadora</strong> (no en el celular). Así medimos lo que de verdad importa para el puesto.</div>
+      <div class="mobile-warn" id="mobileWarn">Parece que estás en un teléfono. Puedes continuar, pero te recomendamos abrir este enlace en una computadora.</div>
+      <button class="btn-primary" onclick="startTest()">Comenzar</button>
+    </div>
+  </section>
+
+  <!-- TEST -->
+  <section id="test" class="screen">
+    <div class="taskbar">
+      <div class="tnum" id="tnum">Tarea 1 de 4</div>
+      <div class="ttext" id="ttext">—</div>
+      <div class="trow" id="trow"></div>
+      <div class="hintbox" id="hintbox"></div>
+    </div>
+
+    <div class="crm">
+      <div class="crm-top">
+        <span class="mark">
+          <svg width="24" height="24" viewBox="0 0 58 58" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="JOI">
+            <path d="M48.9816 22.8778C48.4366 20.895 47.5846 19.0089 46.4562 17.2872C44.6294 14.4803 42.1258 12.173 39.1737 10.5754C36.2215 8.97794 32.9146 8.14106 29.5543 8.14106C26.194 8.14106 22.8872 8.97794 19.935 10.5754C16.9829 12.173 14.4793 14.4803 12.6525 17.2872C11.5217 19.0085 10.6675 20.8946 10.1207 22.8778C9.16095 26.3579 9.16095 30.031 10.1207 33.5111C10.6674 35.4943 11.5216 37.3805 12.6525 39.1017C14.4801 41.9065 16.9836 44.2119 19.935 45.808C22.8865 47.4041 26.1921 48.2402 29.5511 48.2402C32.9101 48.2402 36.2158 47.4041 39.1672 45.808C42.1186 44.2119 44.6221 41.9065 46.4497 39.1017C48.0013 36.7267 49.0293 34.0513 49.4657 31.2519C49.9021 28.4526 49.7371 25.5929 48.9816 22.8617M43.6881 34.5164C42.4597 37.2239 40.4726 39.5211 37.965 41.1325C35.4574 42.7439 32.536 43.6011 29.5511 43.6011C26.5663 43.6011 23.6448 42.7439 21.1372 41.1325C18.6297 39.5211 16.6425 37.2239 15.4141 34.5164C13.9325 31.2302 13.6532 27.5316 14.6245 24.0618C15.5958 20.5921 17.7566 17.5701 20.7321 15.5198C23.7077 13.4695 27.3104 12.5202 30.9155 12.8365C34.5206 13.1529 37.9008 14.7149 40.4699 17.2518C41.8232 18.5851 42.9204 20.1532 43.7075 21.8789C44.6084 23.8688 45.0743 26.0264 45.0743 28.209C45.0743 30.3915 44.6084 32.5491 43.7075 34.539" fill="#FFA700"/>
+            <path d="M2.56087 28.2073C2.56218 30.957 3.60233 33.6056 5.4748 35.6273C7.34727 37.6491 9.91515 38.8962 12.6687 39.121C12.9656 39.1505 13.2638 39.1645 13.5622 39.1629H33.2857C33.7081 38.4856 33.9323 37.7045 33.9332 36.9073C33.9344 36.0614 33.6868 35.2337 33.2209 34.5261H13.546C12.3308 34.5294 11.1408 34.1813 10.1207 33.524C9.22301 32.9518 8.48439 32.164 7.9728 31.2333C7.46121 30.3025 7.19307 29.2586 7.19307 28.1977C7.19307 27.1367 7.46121 26.0928 7.9728 25.1621C8.48439 24.2313 9.22301 23.4436 10.1207 22.8713C10.6687 20.8896 11.5228 19.0047 12.6525 17.284C9.89896 17.5088 7.33108 18.7559 5.4586 20.7777C3.58613 22.7994 2.54599 25.448 2.54468 28.1977" fill="#FFA700"/>
+            <path d="M25.2014 36.9202C25.2014 38.0688 25.6599 39.1703 26.4759 39.9825C27.2919 40.7946 28.3987 41.2509 29.5527 41.2509C30.7068 41.2509 31.8136 40.7946 32.6296 39.9825C33.4456 39.1703 33.9041 38.0688 33.9041 36.9202C33.9041 35.7717 33.4456 34.6701 32.6296 33.858C31.8136 33.0458 30.7068 32.5896 29.5527 32.5896C28.3987 32.5896 27.2919 33.0458 26.4759 33.858C25.6599 34.6701 25.2014 35.7717 25.2014 36.9202Z" fill="#FFA700"/>
+          </svg>
+        </span>
+        Sistema de Clientes — Práctica
+      </div>
+      <div class="crm-body">
+
+        <!-- LIST -->
+        <div id="listView">
+          <div class="searchrow">
+            <input type="text" id="search" placeholder="Buscar cliente por nombre…" autocomplete="off" />
+            <button class="btn-ghost" onclick="doSearch()">Buscar</button>
+          </div>
+          <div id="listNote" style="font-size:13px;color:var(--muted);margin:-4px 0 12px">Mostrando clientes recientes. Usa la búsqueda para encontrar a un cliente específico.</div>
+          <div class="list-scroll" id="listScroll">
+            <table>
+              <thead><tr><th>Nombre</th><th>Ciudad</th><th>Teléfono</th><th></th></tr></thead>
+              <tbody id="listBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- DETAIL -->
+        <div id="detailView" style="display:none">
+          <button class="backlink" onclick="backToList()">← Volver a la lista</button>
+          <div class="detail-name" id="dName">—</div>
+          <div class="detail-sub" id="dSub">—</div>
+
+          <div class="field">
+            <label>Correo</label>
+            <input type="text" id="dEmail" disabled />
+          </div>
+          <div class="field">
+            <label>Teléfono</label>
+            <input type="text" id="dPhone" />
+          </div>
+          <div class="field">
+            <label>Estado del cliente</label>
+            <select id="dEstado">
+              <option>Prospecto</option>
+              <option>Cliente activo</option>
+              <option>Inactivo</option>
+              <option>Suspendido</option>
+            </select>
+          </div>
+          <div class="row-inline">
+            <button class="btn-primary" onclick="saveDetail()">Guardar</button>
+            <span class="saved-badge" id="savedBadge">✓ Guardado</span>
+          </div>
+
+          <div class="ticket" id="ticketArea" style="display:none">
+            <h3>Ticket de atención</h3>
+            <div class="row-inline" style="margin-bottom:12px">
+              <button class="btn-ghost" id="orderBtn" onclick="toggleOrders()">📂 Abrir Historial de Pedidos</button>
+            </div>
+            <div class="field" id="refField" style="display:none">
+              <label>Referencia (número de pedido)</label>
+              <input type="text" id="refInput" placeholder="Pega aquí el número de pedido" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="ticket" id="docsArea" style="display:none">
+            <h3>Documentos del cliente</h3>
+            <div id="dlBlock" style="display:none">
+              <div class="row-inline" style="margin-bottom:10px">
+                <span>📄 instrucciones-cliente.txt</span>
+                <button class="btn-ghost" id="dlBtn" onclick="downloadDoc()">⬇ Descargar</button>
+              </div>
+            </div>
+            <div id="ulBlock" class="step-box" style="display:none">
+              <div class="step-label">⬆ Nuevo paso · subir archivo</div>
+              <div class="field">
+                <label>Selecciona el archivo que descargaste</label>
+                <input type="file" id="fileInput" />
+              </div>
+              <div id="ulStatus" style="font-size:14px;margin-top:4px"></div>
+              <button class="btn-ghost" id="ulContinue" style="display:none;margin-top:10px" onclick="finish()">Continuar de todos modos →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <p class="protohint">Prototipo · JOI · las respuestas no se guardan en esta versión de prueba</p>
+  </section>
+
+  <!-- END -->
+  <section id="end" class="screen">
+    <div class="card">
+      <h2>¡Listo! Terminaste la prueba ✅</h2>
+      <p class="lead">Gracias. El equipo de reclutamiento revisará tus resultados. No necesitas hacer nada más.</p>
+      <div id="reviewerBox" style="display:none;border-top:1px solid var(--line);margin-top:18px;padding-top:18px">
+        <strong>Resumen para el reclutador (sólo visible en el prototipo):</strong>
+        <table class="sumtable" id="sumTable"></table>
+        <p class="protohint">Estos son los datos "en crudo" que llegarían al perfil del candidato. Tú decides qué significa cada número — no hay aprobado/reprobado automático.</p>
+        <button class="btn-ghost" style="margin-top:8px" onclick="location.reload()">↻ Probar de nuevo</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Order window -->
+<div class="backdrop" id="backdrop"></div>
+<div class="win" id="orderWin">
+  <div class="win-top">Historial de Pedidos — Rosa Méndez (Tlaquepaque)
+    <button onclick="toggleOrders()">Cerrar ✕</button>
+  </div>
+  <div class="win-body">
+    <table>
+      <thead><tr><th>Fecha</th><th>Pedido</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr><td>12 jul 2026</td><td><span class="ordernum">A-4821</span></td><td><strong>$1,240.00</strong></td></tr>
+        <tr><td>28 may 2026</td><td><span class="ordernum">A-4610</span></td><td>$890.00</td></tr>
+        <tr><td>03 abr 2026</td><td><span class="ordernum">A-4402</span></td><td>$1,075.00</td></tr>
+      </tbody>
+    </table>
+    <p class="protohint" style="margin-top:12px">Fíjate bien en la fecha de cada pedido.</p>
+  </div>
+</div>
+
+<script>
+// ---------- data ----------
+const CUSTOMERS = [
+  {id:1,name:"Javier Ontiveros", city:"Guadalajara", phone:"33-2001-4412", email:"javier.o@correo.mx"},
+  {id:2,name:"María Fernanda Ruiz", city:"Zapopan", phone:"33-3311-8890", email:"mf.ruiz@correo.mx"},
+  {id:3,name:"Rosa Méndez", city:"Zapopan", phone:"33-4400-1177", email:"rosa.mendez.z@correo.mx"},      // decoy Rosa
+  {id:4,name:"Carlos Villanueva", city:"Guadalajara", phone:"33-7788-3410", email:"c.villanueva@correo.mx"},
+  {id:5,name:"Ana Sofía Lara", city:"Tonalá", phone:"33-1122-6655", email:"as.lara@correo.mx"},
+  {id:6,name:"Roberto Méndez Gil", city:"Zapopan", phone:"33-9090-2323", email:"rmgil@correo.mx"},
+  {id:7,name:"Rosa María Méndez", city:"Guadalajara", phone:"33-2727-3131", email:"rosam.mendez@correo.mx"}, // decoy Rosa
+  {id:8,name:"Diana Escobedo", city:"Guadalajara", phone:"33-4545-7878", email:"d.escobedo@correo.mx"},
+  {id:9,name:"Rosa Méndez", city:"Tlaquepaque", phone:"33-5544-1200", email:"rosa.mendez@correo.mx"},     // ★ TARGET
+  {id:10,name:"Luis Ángel Prado", city:"Tlajomulco", phone:"33-6767-1010", email:"la.prado@correo.mx"},
+  {id:11,name:"Patricia Novoa", city:"Zapopan", phone:"33-2323-9988", email:"p.novoa@correo.mx"},
+  {id:12,name:"Fernando Rosales", city:"Guadalajara", phone:"33-8181-5454", email:"f.rosales@correo.mx"},
+  {id:13,name:"Gabriela Méndez", city:"Tonalá", phone:"33-3030-6161", email:"g.mendez@correo.mx"},
+  {id:14,name:"Héctor Zúñiga", city:"Guadalajara", phone:"33-7373-2828", email:"h.zuniga@correo.mx"},
+  {id:15,name:"Sandra Ibáñez", city:"Zapopan", phone:"33-1919-4646", email:"s.ibanez@correo.mx"},
+];
+const TARGET_ID = 9;                 // Rosa Méndez de Tlaquepaque
+const REF_TARGET = "A-4402";         // número del pedido de abril
+const TOTAL_TARGET = 1075;           // total del pedido de abril
+
+// ---------- state ----------
+const M = {
+  overallStart:0, t:1, taskStart:0,
+  1:{usedSearch:false,scrolled:false,wrongOpens:0,sec:0,hints:0},
+  2:{editedPhone:false,phoneCorrect:false,statusCorrect:false,savedCorrect:false,sec:0,hints:0},
+  3:{openedWindow:false,switches:0,correct:false,wrongTries:0,sec:0,hints:0},
+  4:{pasteUsed:false,typedManually:false,correct:false,sec:0,hints:0},
+  5:{downloaded:false,codeCorrect:false,wrongTries:0,sec:0,hints:0},
+  6:{uploadedAny:false,correctFile:false,fileName:'',sec:0,hints:0},
+};
+let currentDetail=null;
+
+// downloadable practice file — the code inside proves they opened it
+const DOC_CODE="TIGRE-73";
+const DOC_NAME="instrucciones-cliente.txt";
+const DOC_TEXT="JOI — Archivo de práctica\n\nHola. Para confirmar que abriste este archivo,\nescribe la siguiente clave en la prueba:\n\n    CLAVE: "+DOC_CODE+"\n\nGracias.\n";
+
+const HINTS = {
+  1:"Escribe “Rosa Méndez” (o el teléfono 33-5544-1200) en la búsqueda. Si aparecen varias, abre la que tiene ese mismo teléfono.",
+  2:"Cambia el teléfono a 33-1234-5678, cambia el Estado a “Cliente activo”, y presiona Guardar. Son dos cambios antes de guardar.",
+  3:"Abre el Historial de Pedidos y busca el pedido de abril (no el de arriba). Su total es lo que va en la casilla.",
+  4:"En la ventana de pedidos, selecciona el número del pedido de abril, cópialo (Ctrl+C / Cmd+C) y pégalo en Referencia.",
+  5:"Presiona “Descargar”. Abre el archivo que se descargó en tu computadora y adentro verás una clave — escríbela aquí.",
+  6:"Presiona “Subir archivo” (o “Seleccionar archivo”), busca el archivo instrucciones-cliente.txt que descargaste, y selecciónalo.",
+};
+const TASKS = {
+  1:{num:"Tarea 1 de 6", text:"Rosa Méndez llamó desde el teléfono 33-5544-1200. Búscala y abre la ficha con ese número. (Ojo: hay más de una Rosa Méndez.)"},
+  2:{num:"Tarea 2 de 6", text:"Cambia su teléfono a 33-1234-5678, cambia el Estado del cliente a “Cliente activo”, y guarda."},
+  3:{num:"Tarea 3 de 6", text:"Abre su Historial de Pedidos y escribe aquí el total del pedido de ABRIL."},
+  4:{num:"Tarea 4 de 6", text:"Copia el número del pedido de ABRIL y pégalo en la casilla Referencia."},
+  5:{num:"Tarea 5 de 6", text:"Descarga el archivo “instrucciones-cliente.txt”, ábrelo en tu computadora y escribe aquí la clave que trae adentro."},
+  6:{num:"Tarea 6 de 6", text:"Sube el mismo archivo que descargaste (instrucciones-cliente.txt) usando el botón de abajo."},
+};
+
+// ---------- helpers ----------
+function $(id){return document.getElementById(id)}
+function now(){return Date.now()}
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
+if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){$('mobileWarn').style.display='block'}
+
+// ---------- list ----------
+function renderList(filter){
+  const body=$('listBody'); body.innerHTML="";
+  const f=(filter||"").trim().toLowerCase();
+  // Default (no search) shows a "recent" list that does NOT include the target —
+  // the applicant can only reach Rosa de Tlaquepaque by actually searching.
+  const source = f ? CUSTOMERS : CUSTOMERS.filter(c=>c.id!==TARGET_ID);
+  const note=$('listNote'); if(note){ note.textContent = f ? 'Resultados de la búsqueda' : 'Mostrando clientes recientes. Usa la búsqueda para encontrar a un cliente específico.' }
+  // Search matches name, phone, or email — so the caller's number leads straight to the right record.
+  const rows=source.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(f));
+  if(rows.length===0){body.innerHTML='<tr><td colspan="4" class="empty">Sin resultados</td></tr>';return}
+  rows.forEach(c=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${c.name}</td><td>${c.city}</td><td>${c.phone}</td>
+      <td><button class="btn-ghost">Abrir</button></td>`;
+    tr.querySelector('button').onclick=()=>openCustomer(c);
+    body.appendChild(tr);
+  });
+}
+function doSearch(){ M[1].usedSearch=true; renderList($('search').value) }
+$('search').oninput=()=>{ if($('search').value.length>0)M[1].usedSearch=true; renderList($('search').value) };
+$('listScroll').addEventListener('scroll',()=>{ if(M.t===1)M[1].scrolled=true },{passive:true});
+
+// ---------- flow ----------
+function startTest(){ M.overallStart=now(); showScreen('test'); gotoTask(1) }
+function gotoTask(n){
+  if(n>1){ M[M.t].sec=Math.round((now()-M.taskStart)/1000) }
+  M.t=n; M.taskStart=now();
+  const t=TASKS[n];
+  $('tnum').textContent=t.num; $('ttext').textContent=t.text; $('hintbox').style.display='none';
+  buildTaskRow(n);
+  $('docsArea').style.display='none';
+  if(n===1){ showList(); renderList(""); $('search').value=""; }
+  if(n===2){ $('ticketArea').style.display='none'; }
+  if(n===3){ $('ticketArea').style.display='block'; $('refField').style.display='none'; }
+  if(n===4){ $('ticketArea').style.display='block'; $('refField').style.display='block'; }
+  if(n===5){ $('ticketArea').style.display='none'; $('docsArea').style.display='block'; $('dlBlock').style.display='block'; $('ulBlock').style.display='none'; }
+  if(n===6){ $('ticketArea').style.display='none'; $('docsArea').style.display='block'; $('dlBlock').style.display='block';
+             $('ulBlock').style.display='block'; $('ulContinue').style.display='none'; $('ulStatus').textContent=''; $('fileInput').value=''; }
+}
+function buildTaskRow(n){
+  const row=$('trow'); row.innerHTML="";
+  const pill=document.createElement('span'); pill.className='pill'; pill.id='timerPill'; pill.textContent='⏱ 0s'; row.appendChild(pill);
+  if(n===3){
+    const inp=document.createElement('input'); inp.type='text'; inp.id='ansTotal'; inp.placeholder='Total del pedido';
+    const b=document.createElement('button'); b.className='btn-primary'; b.textContent='Comprobar'; b.onclick=checkTotal;
+    row.appendChild(inp); row.appendChild(b);
+  }
+  if(n===5){
+    const inp=document.createElement('input'); inp.type='text'; inp.id='ansCode'; inp.placeholder='Clave del archivo';
+    const b=document.createElement('button'); b.className='btn-primary'; b.textContent='Comprobar'; b.onclick=checkCode;
+    row.appendChild(inp); row.appendChild(b);
+  }
+  const h=document.createElement('button'); h.className='hintlink'; h.textContent='¿Necesitas ayuda?';
+  h.onclick=()=>{ M[n].hints++; $('hintbox').textContent='💡 '+HINTS[n]; $('hintbox').style.display='block' };
+  row.appendChild(h);
+}
+setInterval(()=>{ const p=$('timerPill'); if(p && M.taskStart){ p.textContent='⏱ '+Math.round((now()-M.taskStart)/1000)+'s' } },500);
+
+function showList(){ $('listView').style.display='block'; $('detailView').style.display='none' }
+function showDetail(){ $('listView').style.display='none'; $('detailView').style.display='block' }
+
+function openCustomer(c){
+  if(M.t===1 && c.id!==TARGET_ID){ M[1].wrongOpens++ }
+  currentDetail=c;
+  $('dName').textContent=c.name; $('dSub').textContent=c.city+' · Cliente';
+  $('dEmail').value=c.email; $('dPhone').value=c.phone; $('dEstado').value='Prospecto';
+  $('savedBadge').style.display='none';
+  showDetail();
+  if(M.t===1 && c.id===TARGET_ID){ gotoTask(2) }
+}
+function backToList(){ showList() }
+
+// task 2
+$('dPhone').addEventListener('input',()=>{ if(M.t===2)M[2].editedPhone=true; $('savedBadge').style.display='none' });
+$('dEstado').addEventListener('change',()=>{ $('savedBadge').style.display='none' });
+function saveDetail(){
+  const v=$('dPhone').value.replace(/\s/g,'');
+  const est=$('dEstado').value;
+  $('savedBadge').style.display='inline';
+  if(M.t===2){
+    M[2].phoneCorrect=(v==='33-1234-5678');
+    M[2].statusCorrect=(est==='Cliente activo');
+    M[2].savedCorrect=M[2].phoneCorrect && M[2].statusCorrect;
+    if(M[2].savedCorrect){ setTimeout(()=>gotoTask(3),450) }
+  }
+}
+
+// task 3
+function toggleOrders(){
+  const open=$('orderWin').style.display==='block';
+  if(open){ $('orderWin').style.display='none'; $('backdrop').style.display='none' }
+  else{
+    $('orderWin').style.display='block'; $('backdrop').style.display='block';
+    if(M.t===3){ M[3].openedWindow=true }
+    if(M.t===3||M.t===4){ M[M.t].switches++ }
+  }
+}
+$('backdrop').onclick=()=>toggleOrders();
+function checkTotal(){
+  const raw=($('ansTotal').value||'').replace(/[^0-9.]/g,'');
+  if(parseFloat(raw)===TOTAL_TARGET){ M[3].correct=true; if($('orderWin').style.display==='block')toggleOrders(); gotoTask(4) }
+  else{ M[3].wrongTries++; $('ansTotal').style.outline='2px solid var(--bad)'; setTimeout(()=>{$('ansTotal').style.outline=''},900) }
+}
+
+// task 4
+const ref=$('refInput');
+ref.addEventListener('paste',()=>{ if(M.t===4)M[4].pasteUsed=true });
+ref.addEventListener('input',(e)=>{
+  if(M.t!==4)return;
+  if(!M[4].pasteUsed && e.inputType && e.inputType.startsWith('insertText')) M[4].typedManually=true;
+  if(ref.value.trim().toUpperCase()===REF_TARGET){ M[4].correct=true; gotoTask(5) }
+});
+
+// task 5 — download & read the code inside
+function downloadDoc(){
+  M[5].downloaded=true;
+  const blob=new Blob([DOC_TEXT],{type:'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=DOC_NAME;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove() },1000);
+}
+function checkCode(){
+  const v=($('ansCode').value||'').trim().toUpperCase().replace(/\s/g,'');
+  if(v===DOC_CODE){ M[5].codeCorrect=true; gotoTask(6) }
+  else{ M[5].wrongTries++; $('ansCode').style.outline='2px solid var(--bad)'; setTimeout(()=>{$('ansCode').style.outline=''},900) }
+}
+
+// task 6 — upload that same file back
+$('fileInput').addEventListener('change',(e)=>{
+  const f=e.target.files && e.target.files[0];
+  if(!f)return;
+  M[6].uploadedAny=true; M[6].fileName=f.name;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const txt=String(reader.result||'');
+    const ok = txt.includes(DOC_CODE) || f.name.toLowerCase().includes('instrucciones');
+    M[6].correctFile=ok;
+    if(ok){ $('ulStatus').innerHTML='<span style="color:var(--good)">✓ Archivo correcto: '+f.name+'</span>'; setTimeout(finish,500) }
+    else{ $('ulStatus').innerHTML='<span style="color:var(--warn)">Subiste: '+f.name+' — no parece el archivo correcto. Puedes intentar de nuevo.</span>'; $('ulContinue').style.display='inline'; }
+  };
+  reader.onerror=()=>{ M[6].correctFile=false; $('ulStatus').textContent='No se pudo leer el archivo.'; $('ulContinue').style.display='inline'; };
+  reader.readAsText(f);
+});
+
+function finish(){
+  M[6].sec=Math.round((now()-M.taskStart)/1000);
+  if($('orderWin').style.display==='block')toggleOrders();
+  // Production: hand the raw metrics up to the JOI app to save (no recruiter
+  // summary shown to the applicant). The prototype's buildSummary() is unused here.
+  try{
+    if(window.parent){
+      window.parent.postMessage({
+        type:'joi-skills-result',
+        results:{ version:1, find:M[1], edit:M[2], windows:M[3], copypaste:M[4], download:M[5], upload:M[6] },
+        totalSeconds: Math.round((now()-M.overallStart)/1000)
+      }, '*');
+    }
+  }catch(e){}
+  showScreen('end');
+}
+function yn(b){ return b?'<span class="tag g">Sí</span>':'<span class="tag w">No</span>' }
+function buildSummary(){
+  const total=Math.round((now()-M.overallStart)/1000);
+  const rows=[
+    ['1 · Encontrar cliente (correcta)',
+      `Buscó: ${yn(M[1].usedSearch)} · Se desplazó: ${yn(M[1].scrolled)} · Abrió ficha equivocada: ${M[1].wrongOpens} ${M[1].wrongOpens?'<span class="tag w">'+M[1].wrongOpens+'</span>':''}`,
+      M[1].sec, M[1].hints],
+    ['2 · Editar dos campos y guardar',
+      `Teléfono correcto: ${yn(M[2].phoneCorrect)} · Estado correcto: ${yn(M[2].statusCorrect)} · Guardó: ${yn(M[2].savedCorrect)}`,
+      M[2].sec, M[2].hints],
+    ['3 · Moverse entre ventanas',
+      `Abrió ventana: ${yn(M[3].openedWindow)} · Total correcto: ${yn(M[3].correct)} · Intentos fallidos: ${M[3].wrongTries} · Cambios de ventana: ${M[3].switches}`,
+      M[3].sec, M[3].hints],
+    ['4 · Copiar y pegar (pedido correcto)',
+      `Pegó (no tecleó): ${yn(M[4].pasteUsed)} · Correcto: ${yn(M[4].correct)}${M[4].typedManually?' · <span class="tag w">tecleó a mano</span>':''}`,
+      M[4].sec, M[4].hints],
+    ['5 · Descargar y abrir archivo',
+      `Descargó: ${yn(M[5].downloaded)} · Encontró la clave: ${yn(M[5].codeCorrect)} · Intentos fallidos: ${M[5].wrongTries}`,
+      M[5].sec, M[5].hints],
+    ['6 · Subir archivo',
+      `Subió un archivo: ${yn(M[6].uploadedAny)} · Archivo correcto: ${yn(M[6].correctFile)}${M[6].fileName?' · <span style="color:var(--muted)">'+M[6].fileName+'</span>':''}`,
+      M[6].sec, M[6].hints],
+  ];
+  let html='<thead><tr><th>Tarea</th><th>Detalle</th><th>Tiempo</th><th>Ayudas</th></tr></thead><tbody>';
+  rows.forEach(r=>{ html+=`<tr><td><strong>${r[0]}</strong></td><td>${r[1]}</td><td>${r[2]}s</td><td>${r[3]}</td></tr>` });
+  html+=`<tr><td colspan="2" style="text-align:right"><strong>Tiempo total</strong></td><td colspan="2"><strong>${total}s</strong></td></tr></tbody>`;
+  $('sumTable').innerHTML=html;
+}
+</script>
+</body>
+</html>

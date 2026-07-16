@@ -16,6 +16,7 @@ import FacturaNueva from "@/pages/FacturaNueva";
 import FacturaDetalle from "@/pages/FacturaDetalle";
 import Auth from "@/pages/Auth";
 import ResetPassword from "@/pages/ResetPassword";
+import SkillsTest from "@/pages/SkillsTest";
 import NotFound from "@/pages/NotFound";
 import Timeclock from "@/pages/Timeclock";
 import EODForm from "@/pages/EODForm";
@@ -114,6 +115,7 @@ const App = () => (
         <Routes>
           <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/skills-test/:token" element={<SkillsTest />} />
 
           {/* Client portal — own layout, completely separate from AppLayout / AppSidebar */}
           <Route

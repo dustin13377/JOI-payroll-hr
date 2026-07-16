@@ -18,9 +18,14 @@ so nothing gets confused with your other projects (apex-digital, the-living-word
   ref gveewblbxqqrckwoxgvj) — NOT this app. Don't touch it.
 
 ## Hosting (Vercel)
-- Vercel team: sandoval028-ctrl's projects (team_TgZIxkTdx9kJf2hmKmZw1RdO)
-- This app does NOT appear under that team (only apex-digital + the-living-word do).
-- TODO: confirm where the recruiting tool is actually deployed.
+- Live URL: https://app.justoutsource.it  (recruiting at /recruiting; unauthenticated hits redirect to /auth)
+- Auto-deploys from GitHub `main` on push (confirmed 2026-07-07: pushing c2e8cef put the new
+  recruiting buttons into the live JS bundle without any manual deploy step).
+- To verify a deploy without logging in: fetch the /assets/index-*.js bundle from the live URL
+  and grep for a known new string (e.g. "offer_extended").
+- Vercel team visible to Claude (sandoval028-ctrl's projects, team_TgZIxkTdx9kJf2hmKmZw1RdO) only
+  shows apex-digital + the-living-word, so this app's Vercel project sits under a different
+  scope/account not exposed to the connector. The GitHub→Vercel integration still deploys it fine.
 
 ## Key tables (recruiting)
 - recruiting_candidates — candidate profiles (stage, final_status, source, notes)
