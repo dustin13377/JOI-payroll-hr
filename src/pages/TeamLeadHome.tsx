@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   useTeamRoster,
   usePendingTimeOffForTeam,
+  useUpcomingApprovedTimeOffForTeam,
   useTeamEODThisWeek,
   useUnderperformerAlerts,
   useTLCampaigns,
@@ -12,6 +13,7 @@ import {
   useEODProgress,
   useAgentBreakdown,
   type TLCampaign,
+  type PendingTimeOff,
 } from "@/hooks/useTeamLead";
 import {
   useNextUpcomingHoliday,
@@ -34,10 +36,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Clock, CalendarDays, TrendingUp, AlertTriangle, CheckCircle2, XCircle, FileText, Flag, ChevronDown, ChevronUp, CalendarCheck } from "lucide-react";
+import { Clock, CalendarDays, TrendingUp, AlertTriangle, CheckCircle2, XCircle, FileText, Flag, ChevronDown, ChevronUp, CalendarCheck, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { todayLocal, formatDateMX, formatDateMXLong } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
+import { googleCalendarAllDayUrl } from "@/lib/calendar";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 import { HomeHero } from "@/components/HomeHero";
 import { TodaysRosterCard } from "@/components/TodaysRosterCard";
@@ -575,47 +578,195 @@ function TimeOffSection({ employeeId }: { employeeId: string }) {
   );
 }
 
+const TIMEOFF_REASON_LABEL: Record<string, string> = {
+  vacation: "Vacation",
+  sick: "Sick leave",
+  personal: "Personal leave",
+  other: "Other",
+};
+
+function timeOffCalUrl(name: string, req: PendingTimeOff): string {
+  const label = TIMEOFF_REASON_LABEL[req.reason] ?? req.reason;
+  const title = `${name} \u2014 ${label}${req.is_paid ? "" : " (unpaid)"}`;
+  const details = `JOI time off \u2022 ${label} \u2022 ${req.is_paid ? "Paid" : "Unpaid"}`;
+  return googleCalendarAllDayUrl({ title, start: req.start_date, end: req.end_date, details });
+}
+
 /* ------------------------------------------------------------------ */
-/*  ApprovalsCard — unified container for Time Off / Holiday / Vacation */
+/*  TeamTimeOffCard — pending (approve/deny) + upcoming approved, each  */
+/*  row with a one-click "Add to Google Calendar" link. Both lists use  */
+/*  the union helper so cross-campaign covering TLs (e.g. Deysi) see     */
+/*  their whole team, not just direct reports.                          */
+/* ------------------------------------------------------------------ */
+function TeamTimeOffCard({ employeeId }: { employeeId: string }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const pending = usePendingTimeOffForTeam(employeeId);
+  const upcoming = useUpcomingApprovedTimeOffForTeam(employeeId);
+
+  const reviewMutation = useMutation({
+    mutationFn: async ({ requestId, status }: { requestId: string; status: "approved" | "denied" }) => {
+      const nextStatus = status === "approved" ? "pending_hr" : "denied";
+      const { error } = await supabase
+        .from("vacation_requests")
+        .update({
+          status: nextStatus,
+          tl_reviewed_by: user?.id ?? null,
+          tl_reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", requestId);
+      if (error) throw error;
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["team-timeoff-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["team-timeoff-approved"] });
+      queryClient.invalidateQueries({ queryKey: ["vacation_requests", "pending_count"] });
+      toast.success(status === "approved" ? "Sent to HR for final approval" : "Request denied");
+    },
+  });
+
+  const isLoading = pending.isLoading || upcoming.isLoading;
+  const pendingData = pending.data ?? [];
+  const approvedData = upcoming.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 pb-3">
+        <CalendarDays className="h-5 w-5 text-muted-foreground" />
+        <CardTitle className="text-lg">Team Time Off</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {isLoading && <LogoLoadingIndicator size="sm" />}
+
+        {!isLoading && (
+          <>
+            {/* Needs your approval */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                  Needs your approval ({pendingData.length})
+                </p>
+              </div>
+              {pendingData.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing waiting on you.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {pendingData.map((req) => {
+                    const name = getDisplayName({ work_name: req.workName, full_name: req.fullName });
+                    return (
+                      <li key={req.id} className="rounded-md border px-3 py-2 space-y-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div>
+                            <p className="text-sm font-medium">{name}</p>
+                            <p className="text-xs text-muted-foreground">{formatDateRange(req.start_date, req.end_date)}</p>
+                            <p className="text-xs text-muted-foreground italic mt-0.5">
+                              {TIMEOFF_REASON_LABEL[req.reason] ?? req.reason}{req.is_paid ? "" : " \u2022 unpaid"}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                              disabled={reviewMutation.isPending}
+                              onClick={() => reviewMutation.mutate({ requestId: req.id, status: "approved" })}
+                            >
+                              <CheckCircle2 className="mr-1 h-3 w-3" /> Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                              disabled={reviewMutation.isPending}
+                              onClick={() => reviewMutation.mutate({ requestId: req.id, status: "denied" })}
+                            >
+                              <XCircle className="mr-1 h-3 w-3" /> Deny
+                            </Button>
+                            <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                              <a href={timeOffCalUrl(name, req)} target="_blank" rel="noopener noreferrer">
+                                <CalendarPlus className="mr-1 h-3 w-3" /> Calendar
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* Upcoming approved — who's out */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+                <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                  Upcoming approved ({approvedData.length})
+                </p>
+              </div>
+              {approvedData.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No approved time off coming up.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {approvedData.map((req) => {
+                    const name = getDisplayName({ work_name: req.workName, full_name: req.fullName });
+                    return (
+                      <li key={req.id} className="rounded-md border px-3 py-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div>
+                            <p className="text-sm font-medium">{name}</p>
+                            <p className="text-xs text-muted-foreground">{formatDateRange(req.start_date, req.end_date)}</p>
+                            <p className="text-xs text-muted-foreground italic mt-0.5">
+                              {TIMEOFF_REASON_LABEL[req.reason] ?? req.reason}{req.is_paid ? "" : " \u2022 unpaid"}
+                            </p>
+                          </div>
+                          <Button asChild variant="outline" size="sm" className="h-7 text-xs shrink-0">
+                            <a href={timeOffCalUrl(name, req)} target="_blank" rel="noopener noreferrer">
+                              <CalendarPlus className="mr-1 h-3 w-3" /> Add to Calendar
+                            </a>
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Holiday Approvals — holiday-work requests per campaign. Time-off and */
+/*  vacation approvals now live in the Team Time Off card above.        */
 /* ------------------------------------------------------------------ */
 
 function ApprovalsCard({ employeeId }: { employeeId: string }) {
   const tlCampaigns = useTLCampaigns(employeeId);
-  const pendingTimeOff = usePendingTimeOffForTeam(employeeId);
-
-  const isLoading = pendingTimeOff.isLoading || tlCampaigns.isLoading;
-  const hasTimeOff = (pendingTimeOff.data ?? []).length > 0;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-2 pb-3">
         <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
-        <CardTitle className="text-lg">Approvals</CardTitle>
+        <CardTitle className="text-lg">Holiday Approvals</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        {isLoading && <LogoLoadingIndicator size="sm" />}
+        {tlCampaigns.isLoading && <LogoLoadingIndicator size="sm" />}
 
-        {!isLoading && (
+        {!tlCampaigns.isLoading && (
           <>
-            <TimeOffSection employeeId={employeeId} />
             {tlCampaigns.data?.map((c) => (
               <HolidaySection key={`hol-${c.id}`} campaign={c} />
             ))}
-            {tlCampaigns.data?.map((c) => (
-              <VacationSection key={`vac-${c.id}`} campaign={c} />
-            ))}
-            {/* Empty state — only show when nothing else is rendering.
-                The per-campaign sections auto-hide when empty, but we can't
-                know that from out here without lifting their queries. So
-                this banner shows when time-off is empty AND there are no
-                upcoming holidays anywhere (the most common empty case).
-                If a campaign has pending holiday/vacation, those sections
-                render above and this is just visual noise — acceptable. */}
-            {!hasTimeOff && (
-              <p className="text-sm text-muted-foreground">
-                Nothing pending in time-off. Holiday and vacation sections appear here when there's something to review.
-              </p>
-            )}
+            {/* Per-campaign HolidaySection auto-hides when empty. Time-off and
+                vacation approvals moved to the Team Time Off card above. */}
+            <p className="text-sm text-muted-foreground">
+              Holiday-work requests that need your review appear here.
+            </p>
           </>
         )}
       </CardContent>
@@ -832,10 +983,11 @@ export default function TeamLeadHome() {
         </div>
       )}
 
-      {/* Approvals — unified card. Internally renders Time Off section
-          (across all direct reports) plus per-campaign Holiday and Vacation
-          sub-sections. Replaces the previous 3 separate cards (or up to
-          2N+1 cards for TLs leading multiple campaigns). */}
+      {/* Team Time Off — pending (approve/deny) + upcoming approved, each
+          with a one-click Add-to-Google-Calendar link. */}
+      {employeeId && <TeamTimeOffCard employeeId={employeeId} />}
+
+      {/* Holiday approvals — holiday-work requests per campaign. */}
       {employeeId && <ApprovalsCard employeeId={employeeId} />}
 
       {/* Today's Roster — replaces the old Today's Attendance card.
