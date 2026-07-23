@@ -26,6 +26,7 @@ import Performance from "@/pages/Performance";
 import ShiftSettings from "@/pages/ShiftSettings";
 import Campaigns from "@/pages/Campaigns";
 import Recruiting from "@/pages/Recruiting";
+import Sales from "@/pages/Sales";
 import CampaignDetail from "@/pages/CampaignDetail";
 import TeamLeadHome from "@/pages/TeamLeadHome";
 import Account from "@/pages/Account";
@@ -55,6 +56,7 @@ import PrePayroll from "@/pages/admin/PrePayroll";
 import PrepayHistory from "@/pages/admin/PrepayHistory";
 import Spiffs from "@/pages/Spiffs";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
+import { RequireSalesAccess } from "@/components/RequireSalesAccess";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
 const queryClient = new QueryClient();
@@ -163,6 +165,7 @@ const App = () => (
                     <Route path="/settings/shifts" element={<RequireTeamLeadOrAbove><ShiftSettings /></RequireTeamLeadOrAbove>} />
                     <Route path="/campaigns" element={<RequireLeadership><Campaigns /></RequireLeadership>} />
                     <Route path="/recruiting" element={<RequireLeadership><Recruiting /></RequireLeadership>} />
+                    <Route path="/sales" element={<RequireSalesAccess><Sales /></RequireSalesAccess>} />
                     <Route path="/campaigns/:id" element={<RequireLeadership><CampaignDetail /></RequireLeadership>} />
                     <Route path="/settings/document-types" element={<RequireLeadership><DocumentTypes /></RequireLeadership>} />
                     <Route path="/settings/departments" element={<RequireLeadership><Departments /></RequireLeadership>} />

@@ -24,9 +24,11 @@ import {
   Megaphone,
   UserPlus,
   Banknote,
+  Target,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
+import { useSalesAccess } from "@/hooks/useSalesLeads";
 import { usePendingHrDocumentRequestsCount } from "@/hooks/useHrDocumentRequests";
 import { usePendingTimeOffCount } from "@/hooks/useTimeOffCount";
 import { usePendingAgentReviewsCount } from "@/hooks/useAgentReviews";
@@ -108,6 +110,7 @@ const agentItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const { signOut, user, isLeadership, isTeamLead, isAgent, isOwner } = useAuth();
+  const { data: hasSalesAccess } = useSalesAccess();
   const collapsed = state === "collapsed";
 
   // Sidebar badge counts — only fetched for leadership + TL. Agents don't
@@ -141,6 +144,12 @@ export function AppSidebar() {
     mainItems = teamLeadItems;
   } else if (isAgent) {
     mainItems = agentItems;
+  }
+
+  // Sales tab: only for allowlisted users (D + Joe for now), independent of
+  // their title tier. Appended so it shows regardless of which menu they get.
+  if (hasSalesAccess) {
+    mainItems = [...mainItems, { title: "Sales", url: "/sales", icon: Target }];
   }
 
   return (
