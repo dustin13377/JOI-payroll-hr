@@ -25,6 +25,7 @@ import {
   UserPlus,
   Banknote,
   Target,
+  Activity,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -282,6 +283,18 @@ export function AppSidebar() {
                     >
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       {!collapsed && <span>System Users</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to="/admin/usage"
+                      className="hover:bg-sidebar-accent"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold"
+                    >
+                      <Activity className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>Feature Usage</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
