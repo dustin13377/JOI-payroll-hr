@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calculator, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { formatMXN } from "@/lib/formatCurrency";
 import { useAuth } from "@/hooks/useAuth";
 import {
   SensitiveDataAckGate,
@@ -84,6 +85,20 @@ export function FiniquitoCalculatorCard({
 
   const set = (patch: Partial<FormState>) =>
     setForm((f) => ({ ...f, ...patch }));
+
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+
+  // Settlement scenarios for an exit negotiation. A "month" = daily wage × 30,
+  // so the 3-month tier equals the 90-day constitutional indemnización (LFT
+  // Art. 48); 2 and 1 month are negotiated-down offers. Shown ON TOP of the
+  // finiquito (aguinaldo/vacaciones/prima/devengados the employee is always
+  // owed), so the combined total is the full cash-out at each tier.
+  const dailyNum = parseFloat(form.salarioDiario) || 0;
+  const finiquitoNum = parseFloat(form.total) || 0;
+  const settlementTiers = [3, 2, 1].map((months) => {
+    const settlement = round2(dailyNum * 30 * months);
+    return { months, settlement, total: round2(settlement + finiquitoNum) };
+  });
 
   function autoCalculate() {
     const sd = parseFloat(form.salarioDiario);
@@ -281,6 +296,55 @@ export function FiniquitoCalculatorCard({
                   value={form.totalEnLetras}
                   onChange={(e) => set({ totalEnLetras: e.target.value })}
                 />
+              </div>
+
+              {/* Settlement scenarios — 3 / 2 / 1 months of salary as the
+                  separation offer, each shown on top of the finiquito. */}
+              <div className="space-y-2 rounded-lg border p-3">
+                <Label className="text-xs font-medium uppercase tracking-wider">
+                  Settlement scenarios
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Each tier = N months of salary (daily wage × 30 × N) plus the
+                  finiquito above. Enter a daily wage — and Auto-calculate the
+                  finiquito — to populate the totals.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Offer</th>
+                        <th className="py-2 px-3 font-medium text-right">
+                          Settlement
+                        </th>
+                        <th className="py-2 px-3 font-medium text-right">
+                          + Finiquito
+                        </th>
+                        <th className="py-2 pl-3 font-medium text-right">
+                          = Total payout
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {settlementTiers.map((t) => (
+                        <tr key={t.months} className="border-b last:border-0">
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            {t.months} {t.months === 1 ? "month" : "months"}
+                          </td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap">
+                            {formatMXN(t.settlement)}
+                          </td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap text-muted-foreground">
+                            {formatMXN(finiquitoNum)}
+                          </td>
+                          <td className="py-2 pl-3 text-right font-semibold whitespace-nowrap">
+                            {formatMXN(t.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </SensitiveDataAckGate>
