@@ -54,6 +54,7 @@ import { PersonalInfoCard } from "@/components/employee-profile/PersonalInfoCard
 import { ClockInHistoryCard } from "@/components/employee-profile/ClockInHistoryCard";
 import { CampaignHistoryCard } from "@/components/employee-profile/CampaignHistoryCard";
 import { PayrollHistoryCard } from "@/components/employee-profile/PayrollHistoryCard";
+import { FiniquitoCalculatorCard } from "@/components/employee-profile/FiniquitoCalculatorCard";
 import { ChangeCampaignDialog } from "@/components/ChangeCampaignDialog";
 import { RecruitingAttachmentsCard } from "@/components/employee-profile/RecruitingAttachmentsCard";
 
@@ -1055,6 +1056,17 @@ export default function EmpleadoPerfil() {
           employeeUuid={emp._uuid}
           employeeCode={emp.id}
           employeeName={emp._workName || emp.nombre}
+        />
+      )}
+
+      {/* Finiquito calculator — owner + admin only. Same LFT math + confidentiality
+          gate as Actas y Cartas; a scratchpad estimate, nothing is persisted. */}
+      {(isOwner || isAdmin) && emp._uuid && (
+        <FiniquitoCalculatorCard
+          employeeUuid={emp._uuid}
+          employeeName={emp._workName || emp.nombre}
+          monthlyBaseSalary={emp.sueldoBase}
+          hireDate={emp._hireDate}
         />
       )}
 
