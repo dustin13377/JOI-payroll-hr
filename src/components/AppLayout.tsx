@@ -1,8 +1,12 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { InterviewReminderBanner } from "@/components/InterviewReminderBanner";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  // Log each page view for feature-usage analytics (fire-and-forget, owner-read).
+  usePageTracking();
+
   return (
     <SidebarProvider>
       <div className="h-screen flex w-full overflow-hidden">

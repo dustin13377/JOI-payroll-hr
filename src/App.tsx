@@ -54,6 +54,7 @@ import PayrollHolidays from "@/pages/admin/PayrollHolidays";
 import ClientHolidays from "@/pages/admin/ClientHolidays";
 import PrePayroll from "@/pages/admin/PrePayroll";
 import PrepayHistory from "@/pages/admin/PrepayHistory";
+import Usage from "@/pages/admin/Usage";
 import Spiffs from "@/pages/Spiffs";
 import { RequireLeadership, RequireTeamLeadOrAbove, RequireClient, RequireOwner } from "@/components/RequireRole";
 import { RequireSalesAccess } from "@/components/RequireSalesAccess";
@@ -181,6 +182,7 @@ const App = () => (
                     <Route path="/comunicados" element={<Comunicados />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
+                    <Route path="/admin/usage" element={<RequireOwner><Usage /></RequireOwner>} />
                     {/* Payroll — owner-only. Entry point is Pre-Payroll (quincenal). */}
                     <Route path="/admin/payroll" element={<Navigate to="/admin/payroll/prepay" replace />} />
                     <Route path="/admin/payroll/prepay" element={<RequireOwner><PrePayroll /></RequireOwner>} />
