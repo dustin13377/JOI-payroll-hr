@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { edgeErrorMessage } from '@/lib/edge';
+import { moveEmployeeToCampaign, removeEmployeeFromCampaign } from '@/lib/campaignAssignment';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -401,11 +402,10 @@ export default function CampaignDetail() {
   // Remove agent from campaign
   const removeAgentMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      const { error } = await supabase
-        .from('employees')
-        .update({ campaign_id: null })
-        .eq('id', employeeId);
-      if (error) throw error;
+      // Closes the open assignment row AND clears campaign_id so billing history
+      // stays intact. (Nulling campaign_id alone strands an open assignment and
+      // keeps billing the agent to this campaign's client.)
+      await removeEmployeeFromCampaign({ employeeUuid: employeeId });
     },
     onSuccess: (_data, employeeId) => {
       const agent = assignedAgents.find((a) => a.id === employeeId);
@@ -419,11 +419,11 @@ export default function CampaignDetail() {
   // Assign employee to campaign
   const assignAgentMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      const { error } = await supabase
-        .from('employees')
-        .update({ campaign_id: id! })
-        .eq('id', employeeId);
-      if (error) throw error;
+      // Writes an employee_campaign_assignments row (effective today) AND updates
+      // campaign_id. Both are required — the invoice generator bills off the
+      // assignment table, not campaign_id, so skipping it drops the agent from
+      // the client's invoice.
+      await moveEmployeeToCampaign({ employeeUuid: employeeId, newCampaignId: id! });
     },
     onSuccess: (_data, employeeId) => {
       const emp = allEmployees.find((e) => e.id === employeeId);

@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from "react";
+import { parseLocalDate } from "@/lib/localDate";
 import { useEmployees, useAddEmployee, useAddEmployeesBulk, useActivePeriod, usePayrollRecords, recordToConfig, useInactiveEmployees, useReactivateEmployee, useCheckRehire, useResendInvite, type InactiveEmployeeRow } from "@/hooks/useSupabasePayroll";
 import { useUpdateCandidate } from "@/hooks/useRecruiting";
 import { calcularNomina, type Employee, type EmpTitle } from "@/types/payroll";
@@ -31,7 +32,11 @@ const NEW_HIRE_WINDOW_DAYS = 30;
 // Days since hire (whole days, local time). Returns null if no hire date.
 function daysSinceHire(hireDate: string | null | undefined): number | null {
   if (!hireDate) return null;
-  const start = new Date(hireDate);
+  // parseLocalDate treats "YYYY-MM-DD" as LOCAL midnight. Plain `new Date(hireDate)`
+  // parses as UTC midnight, which reads back a day EARLIER via the local getters in
+  // negative-UTC zones (Mexico UTC-6) — that made the badge show "Day 3" for someone
+  // hired yesterday. slice(0,10) guards against a stray time component.
+  const start = parseLocalDate(hireDate.slice(0, 10));
   if (isNaN(start.getTime())) return null;
   const today = new Date();
   // Normalize both to midnight so we count whole days.
