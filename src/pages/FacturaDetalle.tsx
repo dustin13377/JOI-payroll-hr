@@ -56,6 +56,7 @@ import {
   ArrowLeft, Printer, Send, CheckCircle, Trash2, Plus, Lock, Unlock, Loader2, Download, AlertTriangle, Mail, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PushToQuickbooksButton } from "@/components/invoice/PushToQuickbooksButton";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
 
 const BILL_FROM = "JOI\n5965 S 900 E, #300\nMurray, UT 84121";
@@ -252,6 +253,7 @@ export default function FacturaDetalle() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices
         </Button>
         <div className="flex gap-2">
+          <PushToQuickbooksButton invoice={invoice!} punchesByEmployee={punchesByEmployee} />
           {!isTerminal && (
             <Button
               variant="outline"
@@ -1187,29 +1189,66 @@ function fmtMonthDay(ymd: string): string {
   return `${m}/${d}`;
 }
 
-function buildDefaultSubject(invoice: Invoice & { client?: Client }): string {
-  const client = invoice.client?.name?.trim() || "Invoice";
-  return `${client} invoice ${fmtMonthDay(invoice.week_start)} - ${fmtMonthDay(invoice.week_end)}`;
-}
-
-function buildDefaultBody(invoice: Invoice): string {
-  const start = formatDateUSLong(invoice.week_start);
-  const end = formatDateUSLong(invoice.week_end);
-  return `Hello, here is the invoice for the week of ${start} – ${end}.
-You will find the invoice and time reports attached to this email.
-
-Please make payment available through wire transfer to the following account:
-
-Company name: JOI LLC
+// JOI wire/bank details — used in every invoice email body.
+const BANK_BLOCK = `Company name: JOI LLC
 Address: 5965 South 900 East #300, Salt Lake City, UT 84121
 Bank: Mountain America Credit Union
 Bank Routing Number: 324079555
 Bank account number: 13486233
-Bank address: 9800 S. Monroe St., Sandy, UT 84070
+Bank address: 9800 S. Monroe St., Sandy, UT 84070`;
 
---
+// First name of the client contact for the greeting, or null if we don't have one.
+function contactFirstName(name: string | null | undefined): string | null {
+  const first = name?.trim().split(/\s+/)[0];
+  return first || null;
+}
+
+function buildDefaultSubject(invoice: Invoice & { client?: Client }, isFirst: boolean): string {
+  const client = invoice.client?.name?.trim() || "Invoice";
+  const range = `${fmtMonthDay(invoice.week_start)} - ${fmtMonthDay(invoice.week_end)}`;
+  // First invoice to a new client gets a welcome subject; everything after is the standard line.
+  return isFirst ? `Welcome to JOI — ${client} invoice ${range}` : `${client} invoice ${range}`;
+}
+
+function buildDefaultBody(invoice: Invoice, isFirst: boolean, name: string | null): string {
+  const start = formatDateUSLong(invoice.week_start);
+  const end = formatDateUSLong(invoice.week_end);
+  const hi = name ? `Hi ${name},` : "Hello,";
+
+  if (isFirst) {
+    // First invoice to a new client — warm welcome, signed by the owner.
+    return `${hi}
+
+Welcome aboard, and thank you for choosing JOI. We're genuinely happy to have you and your team with us, and we're looking forward to building a strong partnership.
+
+To get us started, you'll find the invoice and time reports for the week of ${start} – ${end} attached to this email.
+
+Please make payment available through wire transfer to the following account:
+
+${BANK_BLOCK}
+
+If anything on the invoice or time reports needs a second look, just reply here — I'm always glad to help.
+
+Thanks again for the opportunity. Here's to a great start together.
+
 Diomedes D. Sandoval
-Owner of JOI`;
+Owner, JOI`;
+  }
+
+  // Recurring weekly invoice — signed by the accounting team.
+  return `${hi}
+
+Here is the invoice for the week of ${start} – ${end}. You'll find the invoice and time reports attached to this email.
+
+Please make payment available through wire transfer to the following account:
+
+${BANK_BLOCK}
+
+If you have any questions about the invoice or time reports, just reply here and we'll be happy to help.
+
+Thank you,
+Accounting Team
+JOI LLC`;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1239,7 +1278,35 @@ function SendInvoiceDialog({
 
   const recipients = useMemo(() => contacts.map((c) => c.email), [contacts]);
 
-  // Prefill subject/body once per open. Recipients come live from the query.
+  // Is this the client's FIRST invoice? (no earlier invoice by week_start.)
+  // Drives welcome-vs-recurring wording. null = still loading.
+  const [isFirstInvoice, setIsFirstInvoice] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setIsFirstInvoice(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", invoice.client_id)
+        .lt("week_start", invoice.week_start);
+      if (!cancelled) setIsFirstInvoice(error ? false : (count ?? 0) === 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, invoice.client_id, invoice.week_start]);
+
+  // Greeting name from the first saved contact, if any.
+  const greetingName = useMemo(
+    () => contactFirstName(contacts.find((c) => c.active !== false)?.name),
+    [contacts],
+  );
+
+  // Prefill subject/body once per open, after contacts + first-invoice check are ready.
   const prefilledRef = useRef(false);
   useEffect(() => {
     if (!open) {
@@ -1247,11 +1314,13 @@ function SendInvoiceDialog({
       return;
     }
     if (prefilledRef.current) return;
+    if (contactsLoading || isFirstInvoice === null) return; // wait for data
     prefilledRef.current = true;
-    setSubject(buildDefaultSubject(invoice));
-    setBody(buildDefaultBody(invoice));
+    const first = isFirstInvoice === true;
+    setSubject(buildDefaultSubject(invoice, first));
+    setBody(buildDefaultBody(invoice, first, greetingName));
     setNewEmail("");
-  }, [open]);
+  }, [open, contactsLoading, isFirstInvoice, greetingName]);
 
   const addEmail = () => {
     const e = newEmail.trim();
