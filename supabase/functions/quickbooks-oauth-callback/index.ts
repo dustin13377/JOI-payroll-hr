@@ -75,16 +75,17 @@ function htmlPage(title: string, body: string, redirectTo?: string): Response {
   const meta = redirectTo
     ? `<meta http-equiv="refresh" content="3;url=${redirectTo}">`
     : "";
-  return new Response(
-    `<!doctype html><html><head><meta charset="utf-8">${meta}
-     <meta name="viewport" content="width=device-width,initial-scale=1">
-     <title>${title}</title>
-     <style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;
-     max-width:520px;margin:80px auto;padding:0 20px;color:#111;line-height:1.5}
-     .ok{color:#0a7d33}.err{color:#b3261e}</style></head>
-     <body>${body}</body></html>`,
-    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
-  );
+  const html = `<!doctype html><html><head><meta charset="utf-8">${meta}` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>${title}</title>` +
+    `<style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;` +
+    `max-width:520px;margin:80px auto;padding:0 20px;color:#111;line-height:1.5}` +
+    `.ok{color:#0a7d33}.err{color:#b3261e}a{color:#2563eb}</style></head>` +
+    `<body>${body}</body></html>`;
+  const headers = new Headers();
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  return new Response(html, { status: 200, headers });
 }
 
 async function exchangeCode(code: string): Promise<Record<string, unknown>> {
@@ -217,7 +218,9 @@ Deno.serve(async (req) => {
     }
 
     return htmlPage("QuickBooks connected",
-      `<h2 class="ok">QuickBooks connected ✓</h2><p>Company ${realmId} is now linked. Returning you to the app…</p>`,
+      `<h2 class="ok">QuickBooks connected &#10003;</h2>` +
+      `<p>Company ${realmId} is now linked. Returning you to the app...</p>` +
+      `<p><a href="${APP_BASE_URL}/facturas">Continue to JOI &rarr;</a></p>`,
       `${APP_BASE_URL}/facturas`);
   }
 

@@ -54,9 +54,11 @@ export interface PushInvoiceArgs {
 
 export interface PushInvoiceResult {
   status: string;
+  action: "created" | "updated";
   quickbooks_invoice_id: string;
   total: number;
   pdf_attached: boolean;
+  qbo_url: string;
 }
 
 /** Push one invoice into QuickBooks as a single summary line + attached PDF. */

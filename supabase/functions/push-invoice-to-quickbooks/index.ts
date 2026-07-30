@@ -338,20 +338,49 @@ Deno.serve(async (req) => {
     };
     if (docNumber) invoicePayload.DocNumber = docNumber;
 
-    const created = await qbFetch(accessToken, realmId, `/invoice`, {
-      method: "POST",
-      body: JSON.stringify(invoicePayload),
-    });
-    const qbInvoiceId: string | undefined = created?.Invoice?.Id;
+    // Create vs update. If this invoice was already pushed, UPDATE the same QB
+    // invoice in place (fetch its SyncToken first) so re-pushing can never make
+    // a duplicate. If that QB invoice was since deleted, fall back to create.
+    let existing: { Id?: string; SyncToken?: string } | null = null;
+    if (invoice.quickbooks_invoice_id) {
+      try {
+        const got = await qbFetch(accessToken, realmId, `/invoice/${invoice.quickbooks_invoice_id}`);
+        existing = got?.Invoice ?? null;
+      } catch (_e) {
+        existing = null; // not found in QB → treat as a fresh create
+      }
+    }
+
+    let qbInvoiceId = "";
+    let action: "created" | "updated";
+    if (existing?.Id && existing?.SyncToken != null) {
+      const updatePayload = { ...invoicePayload, Id: existing.Id, SyncToken: existing.SyncToken, sparse: true };
+      const updated = await qbFetch(accessToken, realmId, `/invoice`, {
+        method: "POST", body: JSON.stringify(updatePayload),
+      });
+      qbInvoiceId = updated?.Invoice?.Id ?? existing.Id;
+      action = "updated";
+    } else {
+      const created = await qbFetch(accessToken, realmId, `/invoice`, {
+        method: "POST", body: JSON.stringify(invoicePayload),
+      });
+      qbInvoiceId = created?.Invoice?.Id;
+      action = "created";
+    }
     if (!qbInvoiceId) throw new Error("QuickBooks did not return an invoice id");
 
+    // Attach the PDF only on the first create, so re-pushes don't stack duplicate
+    // attachments. The original timesheet PDF stays on the invoice.
     let attached = false;
-    if (body.pdf_base64) {
+    if (action === "created" && body.pdf_base64) {
       attached = await attachPdf(
         accessToken, realmId, qbInvoiceId, body.pdf_base64,
         body.pdf_filename?.trim() || `${docNumber || "invoice"}.pdf`,
       );
     }
+
+    const appBase = QBO_ENV === "production" ? "https://qbo.intuit.com" : "https://sandbox.qbo.intuit.com";
+    const qboUrl = `${appBase}/app/invoice?txnId=${qbInvoiceId}`;
 
     await supabase.from("invoices").update({
       quickbooks_invoice_id: qbInvoiceId,
@@ -362,9 +391,11 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       status: "synced",
+      action,
       quickbooks_invoice_id: qbInvoiceId,
       total: totalRounded,
       pdf_attached: attached,
+      qbo_url: qboUrl,
     }), { status: 200, headers: jsonHeaders });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
