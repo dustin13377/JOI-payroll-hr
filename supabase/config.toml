@@ -34,3 +34,11 @@ verify_jwt = false
 
 [functions.skills-assessment]
 verify_jwt = false
+
+# QuickBooks OAuth: Intuit redirects the user's BROWSER back to this function
+# with no Supabase JWT (just ?code&realmId&state). The platform JWT check would
+# 401 that redirect before our code runs. The function authenticates itself:
+# the POST "authorize_url" path verifies the user's JWT + leadership role, and
+# the GET callback path verifies the CSRF `state` it stored at connect time.
+[functions.quickbooks-oauth-callback]
+verify_jwt = false
