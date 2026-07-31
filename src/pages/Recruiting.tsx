@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCandidates } from "@/hooks/useRecruiting";
-import { CandidateTable } from "@/components/recruiting/CandidateTable";
+import { CandidateTable, appliedRoleLabel } from "@/components/recruiting/CandidateTable";
 import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
 import { UpcomingInterviews } from "@/components/recruiting/UpcomingInterviews";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,20 @@ export default function Recruiting() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>(STAGE_FILTER_ACTIVE);
+  const [roleFilter, setRoleFilter] = useState<string>("all");
   const [copied, setCopied] = useState(false);
+
+  // Distinct job titles present across ALL candidates (not just the current
+  // stage view), so switching stages never empties the role dropdown. Uses the
+  // same label the table shows in its "Role" column, so options match rows.
+  const roleOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of candidates) {
+      const label = appliedRoleLabel(c);
+      if (label && label !== "—") set.add(label);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [candidates]);
 
   const copyBookingLink = async () => {
     try {
@@ -67,6 +80,7 @@ export default function Recruiting() {
       } else if (stageFilter !== "all") {
         if (c.stage !== stageFilter) return false;
       }
+      if (roleFilter !== "all" && appliedRoleLabel(c) !== roleFilter) return false;
       if (!q) return true;
       return (
         (c.full_name ?? "").toLowerCase().includes(q) ||
@@ -74,7 +88,7 @@ export default function Recruiting() {
         (c.city ?? "").toLowerCase().includes(q)
       );
     });
-  }, [candidates, search, stageFilter]);
+  }, [candidates, search, stageFilter, roleFilter]);
 
   return (
     <div className="space-y-4">
@@ -126,6 +140,17 @@ export default function Recruiting() {
             <SelectItem value="all">All stages</SelectItem>
             {STAGES.map((s) => (
               <SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-[240px]">
+            <SelectValue placeholder="All job titles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All job titles</SelectItem>
+            {roleOptions.map((role) => (
+              <SelectItem key={role} value={role}>{role}</SelectItem>
             ))}
           </SelectContent>
         </Select>
