@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StageBadge } from "./StageBadge";
+import { FollowupBadge } from "./FollowupBadge";
 import { fullName, type SalesLead } from "@/hooks/useSalesLeads";
 import { CheckCircle2, Loader2, AlertCircle, Globe } from "lucide-react";
 
@@ -50,6 +51,7 @@ export function LeadTable({
             <TableHead>Interested in</TableHead>
             <TableHead>Budget</TableHead>
             <TableHead>Stage</TableHead>
+            <TableHead>Follow-up</TableHead>
             <TableHead className="text-right">Received</TableHead>
           </TableRow>
         </TableHeader>
@@ -77,6 +79,7 @@ export function LeadTable({
               </TableCell>
               <TableCell className="text-sm">{lead.budget || "—"}</TableCell>
               <TableCell><StageBadge stage={lead.stage} /></TableCell>
+              <TableCell><FollowupBadge lead={lead} /></TableCell>
               <TableCell className="text-right text-xs text-muted-foreground">
                 {fmtDate(lead.created_at)}
               </TableCell>
