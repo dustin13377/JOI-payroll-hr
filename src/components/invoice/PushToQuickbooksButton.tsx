@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, BookText, CheckCircle2, AlertCircle, Link2 } from "lucide-react";
+import { Loader2, BookText, CheckCircle2, AlertCircle, Link2, ExternalLink } from "lucide-react";
 import type { Invoice, InvoiceLine, InvoicePunch, Client } from "@/hooks/useInvoices";
 import { buildInvoiceWithTimesheetPdfBase64 } from "@/lib/pdf/generateInvoiceWithTimesheetPdf";
 import {
@@ -38,6 +38,7 @@ export function PushToQuickbooksButton({
   const connect = useConnectQuickbooks();
   const push = usePushInvoiceToQuickbooks();
   const [building, setBuilding] = useState(false);
+  const [qbUrl, setQbUrl] = useState<string | null>(null);
 
   const syncState = invoice.quickbooks_sync_status ?? null;
 
@@ -70,12 +71,21 @@ export function PushToQuickbooksButton({
     push.mutate(
       { invoice_id: invoice.id, pdf_base64: pdf.base64, pdf_filename: pdf.filename },
       {
-        onSuccess: (r) =>
-          toast.success(
-            r.pdf_attached
-              ? "Pushed to QuickBooks (with timesheet PDF)"
-              : "Pushed to QuickBooks — the invoice is in QB, but the PDF attachment didn't take. You can retry.",
-          ),
+        onSuccess: (r) => {
+          setQbUrl(r.qbo_url);
+          const title = r.action === "updated" ? "Updated in QuickBooks" : "Added to QuickBooks";
+          const description =
+            r.action === "updated"
+              ? "Same invoice updated — no duplicate created."
+              : r.pdf_attached
+                ? "Timesheet PDF attached. Pushing again just updates this invoice — it won't duplicate."
+                : "Invoice is in QuickBooks, but the PDF didn't attach. Open it in QuickBooks to add the PDF.";
+          toast.success(title, {
+            description,
+            duration: 8000,
+            action: { label: "View in QuickBooks", onClick: () => window.open(r.qbo_url, "_blank") },
+          });
+        },
         onError: (e: any) => toast.error(e.message ?? "Push to QuickBooks failed"),
         onSettled: () => setBuilding(false),
       },
@@ -99,6 +109,16 @@ export function PushToQuickbooksButton({
         <Badge variant="secondary" className="bg-red-100 text-red-800">
           <AlertCircle className="mr-1 h-3 w-3" /> QB sync failed
         </Badge>
+      )}
+      {qbUrl && (
+        <a
+          href={qbUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center text-xs text-blue-600 hover:underline"
+        >
+          <ExternalLink className="mr-1 h-3 w-3" /> View in QuickBooks
+        </a>
       )}
 
       {status?.connected ? (
