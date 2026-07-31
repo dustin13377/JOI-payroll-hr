@@ -18,7 +18,7 @@ const ROLE_LABELS: Record<string, string> = {
  * value, works for any role); falls back to the legacy role_interest label for
  * older rows that predate applied_position.
  */
-function appliedRoleLabel(c: Candidate): string {
+export function appliedRoleLabel(c: Candidate): string {
   if (c.applied_position) return c.applied_position;
   if (c.role_interest) return ROLE_LABELS[c.role_interest] ?? c.role_interest;
   return "—";

@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useEditTimeClock } from "@/hooks/useSupabasePayroll";
+import { useTimeClockNotes } from "@/hooks/useTimeClockNotes";
+import { useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 /**
@@ -66,6 +69,10 @@ function fromDateAndTime(date: string, time: string): string | null {
 
 export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, date, existing }: EditPunchDialogProps) {
   const editPunch = useEditTimeClock();
+  const queryClient = useQueryClient();
+  // Prior edit notes for this employee's punch on this day (audit trail).
+  const { data: notes = [], isLoading: notesLoading } = useTimeClockNotes(employeeId, date, open);
+  const [showAllNotes, setShowAllNotes] = useState(false);
   const [clockIn, setClockIn] = useState("");
   const [clockOut, setClockOut] = useState("");
   const [lunchStart, setLunchStart] = useState("");
@@ -90,6 +97,7 @@ export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, 
       setBreak2End(toTimeInput(existing?.break2_end));
       setReason("");
       setShowAdvanced(false);
+      setShowAllNotes(false);
     }
   }, [open, existing]);
 
@@ -128,6 +136,8 @@ export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, 
         } else {
           toast.success(data.action === "insert" ? "Punch added" : "Punch updated");
         }
+        // Refresh the notes history so the note just saved is there next open.
+        queryClient.invalidateQueries({ queryKey: ["time-clock-notes", employeeId, date] });
         onOpenChange(false);
       },
       onError: (err) => {
@@ -212,9 +222,43 @@ export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, 
             </div>
           )}
 
+          {/* Notes history — prior edit reasons for this punch, newest first.
+              Shows the latest 3; the rest (up to 10) expand on demand. */}
+          {(notesLoading || notes.length > 0) && (
+            <div className="space-y-2">
+              <Label>Notes history</Label>
+              {notesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              ) : (
+                <>
+                  {(showAllNotes ? notes : notes.slice(0, 3)).map((n, i) => (
+                    <div key={i} className="rounded-md border bg-muted/30 p-2 text-sm">
+                      <p className="whitespace-pre-wrap">{n.reason}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {n.editor_name} · {format(new Date(n.edited_at), "MMM d, HH:mm")}
+                        {n.action === "insert" ? " · added punch" : " · edited punch"}
+                      </p>
+                    </div>
+                  ))}
+                  {notes.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllNotes((s) => !s)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline"
+                    >
+                      {showAllNotes
+                        ? "Show fewer"
+                        : `Show ${notes.length - 3} more note${notes.length - 3 === 1 ? "" : "s"}`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <div className="space-y-1">
             <Label htmlFor="reason">
-              Reason <span className="text-destructive">*</span>
+              Add a note <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="reason"
@@ -224,7 +268,7 @@ export function EditPunchDialog({ open, onOpenChange, employeeId, employeeName, 
               rows={3}
             />
             <p className="text-xs text-muted-foreground">
-              Required. This is logged in the audit trail.
+              Required. Saved to this punch's notes history above.
             </p>
           </div>
         </div>
