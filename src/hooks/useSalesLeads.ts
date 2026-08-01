@@ -37,6 +37,11 @@ export interface SalesLead {
   assigned_to: string | null;
   notes: string | null;
 
+  // Follow-up email sequence — written by the "run the leads" assistant.
+  followup_step: number | null;         // 0 = not emailed, 1-4 = last email sent
+  followup_last_sent_at: string | null; // date the last email went out (YYYY-MM-DD)
+  followup_paused: boolean | null;      // true = lead replied, needs a human
+
   // Website read ("business profile")
   profile_status: "pending" | "ready" | "failed" | "manual";
   profile_summary: string | null;
@@ -116,7 +121,17 @@ export function useUpdateSalesLead() {
     }: {
       id: string;
       patch: Partial<
-        Pick<SalesLead, "stage" | "notes" | "assigned_to" | "profile_status" | "profile_summary">
+        Pick<
+          SalesLead,
+          | "stage"
+          | "notes"
+          | "assigned_to"
+          | "profile_status"
+          | "profile_summary"
+          | "followup_step"
+          | "followup_last_sent_at"
+          | "followup_paused"
+        >
       >;
     }) => {
       const { data, error } = await (supabase as any)

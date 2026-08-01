@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { StageBadge } from "./StageBadge";
+import { FollowupBadge } from "./FollowupBadge";
 import { SALES_STAGES, SALES_STAGE_LABELS, type SalesStage } from "@/lib/sales/stages";
 import {
   useSalesLead,
@@ -101,6 +102,7 @@ export function LeadDrawer({
               )}
               <div className="flex items-center gap-2 pt-1">
                 <StageBadge stage={lead.stage} />
+                <FollowupBadge lead={lead} />
                 <Select value={lead.stage} onValueChange={(v) => changeStage(v as SalesStage)}>
                   <SelectTrigger className="h-7 w-[150px] text-xs">
                     <SelectValue />
