@@ -29,10 +29,16 @@ import {
   ArrowLeft, CalendarRange, AlertTriangle, CheckCircle2, Sparkles, Loader2, ChevronDown, ChevronRight, X, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { LogoLoadingIndicator } from "@/components/ui/LogoLoadingIndicator";
+import MonthlyGenerator from "@/components/invoice/MonthlyGenerator";
 import { toast } from "sonner";
+
+type GenMode = "weekly" | "monthly";
 
 export default function FacturaNueva() {
   const navigate = useNavigate();
+  // Weekly is the everyday action; Monthly (HFB-style flat-fee clients) is a
+  // once-a-month task. Default to weekly.
+  const [mode, setMode] = useState<GenMode>("weekly");
   const initialWeek = lastCompletedWeek();
   const [monday, setMonday] = useState<string>(initialWeek.monday);
   const sunday = useMemo(() => {
@@ -157,13 +163,40 @@ export default function FacturaNueva() {
       </Button>
 
       <div>
-        <h2 className="text-2xl font-bold">Generate week</h2>
+        <h2 className="text-2xl font-bold">Generate invoices</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Pulls days worked from the time clock and bill rates from each employee's profile.
-          One draft per client. Edit anything before sending.
+          {mode === "weekly"
+            ? "Weekly clients: pulls days worked from the time clock and bill rates from each employee's profile. One draft per client. Edit anything before sending."
+            : "Monthly clients (e.g. HFB): bills a flat fee per active agent for the month, then reconciles the prior month on the same invoice. One draft per client."}
         </p>
       </div>
 
+      {/* Weekly / Monthly toggle */}
+      <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+        <button
+          type="button"
+          onClick={() => setMode("weekly")}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            mode === "weekly" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Weekly
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("monthly")}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            mode === "monthly" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Monthly
+        </button>
+      </div>
+
+      {mode === "monthly" ? (
+        <MonthlyGenerator />
+      ) : (
+      <>
       {/* Week picker */}
       <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
@@ -276,6 +309,8 @@ export default function FacturaNueva() {
             </Card>
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   );

@@ -312,6 +312,133 @@ export function useGenerateWeekly() {
 }
 
 /* ----------------------------------------------------------------- */
+/*  Monthly preview + generate  (monthly-billed clients, e.g. HFB)     */
+/* ----------------------------------------------------------------- */
+
+/**
+ * One agent row from monthly_invoice_preview. A monthly client bills a FLAT
+ * fee per agent active in the month (flat_fee), then reconciles the prior
+ * month: missed-day credit (negative) + still-pending prior-month spiffs.
+ * net_amount = flat_fee + credit_amount + prior_spiff_amount.
+ */
+export interface MonthlyPreviewRow {
+  employee_id: string;
+  agent_name: string;
+  campaign_name: string | null;
+  daily_bill_rate: number;
+  active_weekdays: number;
+  flat_fee: number;
+  prior_missed_days: number;
+  credit_amount: number;
+  prior_spiff_amount: number;
+  net_amount: number;
+  existing_invoice_id: string | null;
+}
+
+export interface MonthlyClientPreview {
+  client_id: string;
+  client_name: string;
+  client_prefix: string;
+  monthly_flat_per_agent: number;
+  existing_invoice_id: string | null;
+  rows: MonthlyPreviewRow[];
+  agent_count: number;   // agents actually charged the flat fee this month
+  total_amount: number;  // sum of net_amount across all rows
+}
+
+/** Clients billed once a month rather than weekly. */
+export function useMonthlyClients() {
+  return useQuery({
+    queryKey: ["monthly-clients"],
+    queryFn: async (): Promise<Client[]> => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("billing_frequency", "monthly")
+        .order("name");
+      if (error) throw error;
+      return (data || []) as Client[];
+    },
+  });
+}
+
+/**
+ * Preview every monthly client's invoice for the given month. monthStart is
+ * any day in the target month (we pass the 1st). Runs monthly_invoice_preview
+ * once per monthly client and rolls the rows up into per-client cards.
+ */
+export function useMonthlyPreview(monthStart: string | null) {
+  return useQuery({
+    queryKey: ["monthly-preview", monthStart],
+    enabled: !!monthStart,
+    queryFn: async (): Promise<MonthlyClientPreview[]> => {
+      const { data: clients, error: cErr } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("billing_frequency", "monthly")
+        .order("name");
+      if (cErr) throw cErr;
+
+      const results = await Promise.all(
+        ((clients || []) as Client[]).map(async (c) => {
+          const { data, error } = await supabase.rpc("monthly_invoice_preview", {
+            p_client_id: c.id,
+            p_month_start: monthStart!,
+          });
+          if (error) throw error;
+          const rows = ((data as MonthlyPreviewRow[]) || []).map((r) => ({
+            ...r,
+            daily_bill_rate: Number(r.daily_bill_rate),
+            active_weekdays: Number(r.active_weekdays),
+            flat_fee: Number(r.flat_fee),
+            prior_missed_days: Number(r.prior_missed_days),
+            credit_amount: Number(r.credit_amount),
+            prior_spiff_amount: Number(r.prior_spiff_amount),
+            net_amount: Number(r.net_amount),
+          }));
+          const existing = rows.find((r) => r.existing_invoice_id)?.existing_invoice_id ?? null;
+          return {
+            client_id: c.id,
+            client_name: c.name,
+            client_prefix: c.prefix,
+            monthly_flat_per_agent: Number(c.monthly_flat_per_agent ?? 0),
+            existing_invoice_id: existing,
+            rows,
+            agent_count: rows.filter((r) => r.flat_fee > 0).length,
+            total_amount: rows.reduce((s, r) => s + r.net_amount, 0),
+          } as MonthlyClientPreview;
+        }),
+      );
+      return results.sort((a, b) => a.client_name.localeCompare(b.client_name));
+    },
+  });
+}
+
+/**
+ * Generate one monthly client's draft invoice. Server rejects if a month
+ * invoice already exists for that client, and marks prior-month pending
+ * spiffs as billed. Returns the created invoice id/number/totals.
+ */
+export function useGenerateMonthly() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ clientId, monthStart }: { clientId: string; monthStart: string }) => {
+      const { data, error } = await supabase.rpc("generate_monthly_invoice", {
+        p_client_id: clientId,
+        p_month_start: monthStart,
+      });
+      if (error) throw error;
+      return (data || []) as GenerateResult[];
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["monthly-preview"] });
+      qc.invalidateQueries({ queryKey: ["spiffs-week"] });
+    },
+  });
+}
+
+/* ----------------------------------------------------------------- */
 /*  Edit single invoice / lines                                        */
 /* ----------------------------------------------------------------- */
 
