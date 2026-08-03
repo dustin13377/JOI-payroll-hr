@@ -107,7 +107,7 @@ export function firstName(fullName: string | null | undefined): string {
 export function buildInterviewInviteMessage(
   fullName: string | null | undefined,
 ): string {
-  const name = firstName(fullName);
+  const name = greetingName(fullName);
   const greeting = name ? `Hola ${name},` : "Hola,";
   return (
     `${greeting} te escribo de JOI 👋 Vimos tu solicitud y nos gustaría ` +
@@ -125,7 +125,7 @@ export function buildInterviewInviteMessage(
 export function buildInterviewFollowUpMessage(
   fullName: string | null | undefined,
 ): string {
-  const name = firstName(fullName);
+  const name = greetingName(fullName);
   const greeting = name ? `Hola ${name},` : "Hola,";
   return (
     `${greeting} ¿seguimos con lo de la entrevista en JOI? Te dejo de nuevo ` +
