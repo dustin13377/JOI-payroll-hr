@@ -70,6 +70,10 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
   const [recruiterNotes, setRecruiterNotes] = useState("");
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [offerDate, setOfferDate] = useState("");
+  // Which WhatsApp send is waiting on the recruiter to confirm they actually
+  // hit send in WhatsApp. Nothing is written to the DB until they confirm, so
+  // a link that's opened but never sent leaves no trace on the candidate.
+  const [awaitingSend, setAwaitingSend] = useState<null | "invite" | "followup">(null);
 
   useEffect(() => {
     if (candidate) {
@@ -84,6 +88,12 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
       setEditing(false);
     }
   }, [candidate]);
+
+  // Drop any armed send-confirm when switching candidates so it can't carry
+  // over to the wrong person.
+  useEffect(() => {
+    setAwaitingSend(null);
+  }, [candidateId]);
 
   const recruiterNotesDirty =
     !!candidate && recruiterNotes !== (candidate.recruiter_notes ?? "");
@@ -183,6 +193,10 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
     }
   };
 
+  // Step 1 of the invite: open WhatsApp with the message pre-filled and arm the
+  // inline confirm. Opening happens synchronously on click so the browser
+  // doesn't block the popup. NOTHING is written to the DB here — the recruiter
+  // still has to actually send the message and then confirm below.
   const handleSendInvite = () => {
     if (!candidate) return;
     const phoneDigits = normalizePhone(candidate.phone);
@@ -191,27 +205,16 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
       return;
     }
     const message = buildInterviewInviteMessage(candidate.full_name);
-    // Open WhatsApp synchronously on click so the browser doesn't block the
-    // popup. The DB write happens after — the recruiter still taps send.
     window.open(
       buildWhatsAppUrl(phoneDigits, message),
       "_blank",
       "noopener,noreferrer",
     );
-    sendInvite.mutate(
-      { candidate: { id: candidate.id, stage: candidate.stage }, messageBody: message },
-      {
-        onSuccess: (res) =>
-          toast.success(res.advanced ? "Invite sent — moved to Contacted" : "Invite logged"),
-        onError: (e) =>
-          toast.error(`Couldn't log the invite: ${e instanceof Error ? e.message : "unknown"}`),
-      },
-    );
+    setAwaitingSend("invite");
   };
 
-  // Second-touch nudge for a candidate who was contacted but hasn't booked.
-  // Uses the shorter follow-up copy and does NOT change the stage — it only
-  // re-stamps last_contacted_at, which drops them off the follow-up list.
+  // Step 1 of the second-touch nudge — same deal: open WhatsApp, arm the
+  // confirm, write nothing yet.
   const handleSendFollowUp = () => {
     if (!candidate) return;
     const phoneDigits = normalizePhone(candidate.phone);
@@ -225,20 +228,51 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
       "_blank",
       "noopener,noreferrer",
     );
-    sendInvite.mutate(
-      {
-        candidate: { id: candidate.id, stage: candidate.stage },
-        messageBody: message,
-        templateKey: INTERVIEW_FOLLOWUP_TEMPLATE_KEY,
-        advanceStage: false,
-      },
-      {
-        onSuccess: () => toast.success("Follow-up logged"),
-        onError: (e) =>
-          toast.error(`Couldn't log the follow-up: ${e instanceof Error ? e.message : "unknown"}`),
-      },
-    );
+    setAwaitingSend("followup");
   };
+
+  // Step 2: the recruiter confirms they actually sent it. Only now do we log
+  // the message and stamp the candidate. Invite advances the stage to
+  // Contacted; the follow-up only re-stamps last_contacted_at (no stage move).
+  const handleConfirmSent = () => {
+    if (!candidate || !awaitingSend) return;
+    if (awaitingSend === "invite") {
+      sendInvite.mutate(
+        {
+          candidate: { id: candidate.id, stage: candidate.stage },
+          messageBody: buildInterviewInviteMessage(candidate.full_name),
+        },
+        {
+          onSuccess: (res) => {
+            toast.success(res.advanced ? "Invite sent — moved to Contacted" : "Invite logged");
+            setAwaitingSend(null);
+          },
+          onError: (e) =>
+            toast.error(`Couldn't log the invite: ${e instanceof Error ? e.message : "unknown"}`),
+        },
+      );
+    } else {
+      sendInvite.mutate(
+        {
+          candidate: { id: candidate.id, stage: candidate.stage },
+          messageBody: buildInterviewFollowUpMessage(candidate.full_name),
+          templateKey: INTERVIEW_FOLLOWUP_TEMPLATE_KEY,
+          advanceStage: false,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Follow-up logged");
+            setAwaitingSend(null);
+          },
+          onError: (e) =>
+            toast.error(`Couldn't log the follow-up: ${e instanceof Error ? e.message : "unknown"}`),
+        },
+      );
+    }
+  };
+
+  // Recruiter opened WhatsApp but didn't send — discard without touching the DB.
+  const handleCancelSend = () => setAwaitingSend(null);
 
   // Email follow-up (second channel). The edge function sends via Resend and
   // does the DB writes, so here we just fire it and report the result.
@@ -386,12 +420,12 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 Calendly link pre-filled; recruiter taps send). Hidden for
                 terminal candidates. Disabled when there's no usable phone.
               */}
-              {!isTerminal(candidate.stage) && (
+              {!isTerminal(candidate.stage) && awaitingSend !== "invite" && (
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={handleSendInvite}
-                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone)}
+                  disabled={sendInvite.isPending || awaitingSend !== null || !normalizePhone(candidate.phone)}
                   title={
                     normalizePhone(candidate.phone)
                       ? undefined
@@ -404,16 +438,50 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
               )}
 
               {/*
+                Inline confirm for the invite. Shown after WhatsApp is opened so
+                nothing is logged (and the stage isn't advanced) until the
+                recruiter confirms they actually sent the message.
+              */}
+              {awaitingSend === "invite" && (
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <p className="text-sm font-medium">Did you send the WhatsApp invite?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Confirm only after you tapped send in WhatsApp. Nothing is saved
+                    and the stage won't move to Contacted until you do.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      onClick={handleConfirmSent}
+                      disabled={sendInvite.isPending}
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Yes, mark as contacted
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleCancelSend}
+                      disabled={sendInvite.isPending}
+                    >
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Not yet
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/*
                 Follow-up nudge. Shown once a candidate is in "contacted" (i.e.
                 already invited) so the recruiter can send the shorter second
                 message right here. Disabled without a usable phone.
               */}
-              {candidate.stage === "contacted" && (
+              {candidate.stage === "contacted" && awaitingSend !== "followup" && (
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={handleSendFollowUp}
-                  disabled={sendInvite.isPending || !normalizePhone(candidate.phone) || followUpLocked}
+                  disabled={sendInvite.isPending || awaitingSend !== null || !normalizePhone(candidate.phone) || followUpLocked}
                   title={
                     !normalizePhone(candidate.phone)
                       ? "No valid WhatsApp number on file"
@@ -427,6 +495,36 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                 </Button>
               )}
 
+              {/* Inline confirm for the follow-up — same gate, but no stage move. */}
+              {awaitingSend === "followup" && (
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <p className="text-sm font-medium">Did you send the WhatsApp follow-up?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Confirm only after you tapped send in WhatsApp. Nothing is logged
+                    until you do.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      onClick={handleConfirmSent}
+                      disabled={sendInvite.isPending}
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Yes, log it
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleCancelSend}
+                      disabled={sendInvite.isPending}
+                    >
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Not yet
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/*
                 Email follow-up — second channel for a contacted candidate who
                 went quiet. Sends server-side via Resend. Disabled without an
@@ -437,7 +535,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   variant="outline"
                   className="w-full"
                   onClick={handleSendEmailFollowUp}
-                  disabled={sendEmail.isPending || !candidate.email || followUpLocked}
+                  disabled={sendEmail.isPending || awaitingSend !== null || !candidate.email || followUpLocked}
                   title={
                     !candidate.email
                       ? "No email on file"
