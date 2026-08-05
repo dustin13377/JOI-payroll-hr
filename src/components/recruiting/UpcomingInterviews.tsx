@@ -66,6 +66,22 @@ const OUTCOME_BADGE_VARIANT: Record<
   offer_extended: "default",
 };
 
+/**
+ * Positions that get a color-coded row while the interview is still live
+ * (upcoming or in progress). Keyed by the candidate's applied_position exactly
+ * as stored in recruiting_candidates. Full class strings so Tailwind keeps them.
+ */
+const POSITION_ROW_COLORS: Record<string, string> = {
+  "Junior Paid Media Specialist":
+    "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-400",
+  "Digital Marketing Production Designer":
+    "bg-purple-50 dark:bg-purple-950/30 border-l-2 border-l-purple-400",
+  "AI Operations Specialist":
+    "bg-green-50 dark:bg-green-950/30 border-l-2 border-l-green-400",
+  "AI Automation Specialist":
+    "bg-teal-50 dark:bg-teal-950/30 border-l-2 border-l-teal-400",
+};
+
 const EMBED_URL =
   "https://calendar.google.com/calendar/embed?src=humanresources%40justoutsource.it&ctz=America%2FMexico_City&mode=WEEK";
 
@@ -118,6 +134,15 @@ function eventKey(e: CalendarEvent): string {
 /** Has the event's start time already passed? (all-day events excluded) */
 function hasStarted(e: CalendarEvent): boolean {
   return !e.allDay && new Date(e.start).getTime() <= Date.now();
+}
+
+/**
+ * Interview start time is more than an hour in the past. Once past this cutoff
+ * we treat the slot as done and drop its row color even if no outcome was
+ * recorded. (all-day events excluded)
+ */
+function pastByAnHour(e: CalendarEvent): boolean {
+  return !e.allDay && new Date(e.start).getTime() + 60 * 60 * 1000 <= Date.now();
 }
 
 /**
@@ -307,8 +332,21 @@ export function UpcomingInterviews() {
             {events.map((e, i) => {
               const marked = outcomeByKey.get(eventKey(e));
               const position = positionForEvent(e, candidates);
+              // Color the row only while the interview is still live: matches a
+              // tracked position, no outcome recorded yet, and not yet an hour
+              // past its start time.
+              const rowColor =
+                position && !marked && !pastByAnHour(e)
+                  ? POSITION_ROW_COLORS[position] ?? ""
+                  : "";
               return (
-                <li key={i} className="py-1.5 flex items-baseline gap-3 text-sm">
+                <li
+                  key={i}
+                  className={
+                    "py-1.5 px-2 flex items-baseline gap-3 text-sm rounded-sm " +
+                    rowColor
+                  }
+                >
                   <span
                     className={
                       "w-24 shrink-0 tabular-nums " +
