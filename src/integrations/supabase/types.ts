@@ -231,6 +231,7 @@ export type Database = {
       }
       agent_coaching_notes: {
         Row: {
+          about_date: string | null
           agent_id: string
           author_id: string
           campaign_id: string
@@ -242,6 +243,7 @@ export type Database = {
           visible_to_agent: boolean
         }
         Insert: {
+          about_date?: string | null
           agent_id: string
           author_id: string
           campaign_id: string
@@ -253,6 +255,7 @@ export type Database = {
           visible_to_agent?: boolean
         }
         Update: {
+          about_date?: string | null
           agent_id?: string
           author_id?: string
           campaign_id?: string

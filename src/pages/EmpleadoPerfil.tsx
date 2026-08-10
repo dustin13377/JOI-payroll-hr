@@ -44,7 +44,7 @@ import {
 import { usePolicies, type PolicyDocument } from "@/hooks/usePolicies";
 import { useDepartments } from "@/hooks/useDepartments";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatDateMX } from "@/lib/localDate";
+import { formatDateMX, todayLocal, formatDateUSShort } from "@/lib/localDate";
 import { getDisplayName } from "@/lib/displayName";
 import HrDocumentRequestsCard from "@/components/employee-profile/HrDocumentRequestsCard";
 import UptrainingCard from "@/components/employee-profile/UptrainingCard";
@@ -1513,6 +1513,7 @@ function AgentLogCard({
   const [entryType, setEntryType] = useState<"note" | "verbal_warning">("note");
   const [noteText, setNoteText] = useState("");
   const [shareWithAgent, setShareWithAgent] = useState(false);
+  const [aboutDate, setAboutDate] = useState<string>(() => todayLocal());
   const [showAllEntries, setShowAllEntries] = useState(false);
   const ENTRIES_LIMIT = 5;
 
@@ -1529,6 +1530,7 @@ function AgentLogCard({
         campaignId,
         authorId: authorEmployeeId,
         visibleToAgent: shareWithAgent,
+        aboutDate: aboutDate || null,
       },
       {
         onSuccess: () => {
@@ -1537,6 +1539,7 @@ function AgentLogCard({
           setNoteText("");
           setEntryType("note");
           setShareWithAgent(false);
+          setAboutDate(todayLocal());
         },
         onError: (err) => toast.error((err as Error).message),
       }
@@ -1573,6 +1576,7 @@ function AgentLogCard({
                   setEntryType("note");
                   setNoteText("");
                   setShareWithAgent(false);
+                  setAboutDate(todayLocal());
                   setDialogOpen(true);
                 }}
               >
@@ -1611,7 +1615,7 @@ function AgentLogCard({
                           <Badge variant="outline" className="text-xs"><StickyNote className="mr-1 h-3 w-3" />Note</Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {formatDateMX(entry.created_at)}
+                          {entry.about_date ? formatDateUSShort(entry.about_date) : formatDateMX(entry.created_at)}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           — {entry.author?.full_name ?? "Unknown"}
@@ -1695,6 +1699,19 @@ function AgentLogCard({
                 placeholder="Describe the note or warning..."
                 rows={4}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="entry-about-date">Date this is about</Label>
+              <Input
+                id="entry-about-date"
+                type="date"
+                value={aboutDate}
+                max={todayLocal()}
+                onChange={(e) => setAboutDate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                The day this note refers to — shows up on that day in Clock-in History. Defaults to today.
+              </p>
             </div>
             {authorEmployeeId && (
               <label className="flex items-center gap-2 cursor-pointer">

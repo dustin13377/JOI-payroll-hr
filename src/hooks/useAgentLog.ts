@@ -9,6 +9,7 @@ export interface AgentLogEntry {
   entry_type: "note" | "verbal_warning";
   note: string;
   visible_to_agent: boolean;
+  about_date: string | null; // YYYY-MM-DD — the day this note is *about*
   created_at: string;
   updated_at: string;
   author?: { full_name: string } | null;
@@ -33,6 +34,35 @@ export function useAgentLogEntries(agentId: string | undefined | null) {
   });
 }
 
+/**
+ * Coaching notes whose about_date falls within a date range — feeds the
+ * Clock-in History calendar so a note shows up on the day it refers to.
+ * Keyed on the range so month navigation refetches cleanly.
+ */
+export function useAgentLogEntriesInRange(
+  agentId: string | undefined | null,
+  startDate: string,
+  endDate: string,
+) {
+  return useQuery({
+    queryKey: [QUERY_KEY, "range", agentId, startDate, endDate],
+    queryFn: async () => {
+      if (!agentId) return [];
+      const { data, error } = await supabase
+        .from("agent_coaching_notes")
+        .select("*, author:author_id(full_name)")
+        .eq("agent_id", agentId)
+        .not("about_date", "is", null)
+        .gte("about_date", startDate)
+        .lte("about_date", endDate)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as AgentLogEntry[];
+    },
+    enabled: !!agentId,
+  });
+}
+
 export function useCreateAgentLogEntry() {
   const qc = useQueryClient();
   return useMutation({
@@ -43,6 +73,7 @@ export function useCreateAgentLogEntry() {
       campaignId,
       authorId,
       visibleToAgent = false,
+      aboutDate = null,
     }: {
       agentId: string;
       entryType: "note" | "verbal_warning";
@@ -50,6 +81,7 @@ export function useCreateAgentLogEntry() {
       campaignId: string;
       authorId: string;
       visibleToAgent?: boolean;
+      aboutDate?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("agent_coaching_notes")
@@ -60,14 +92,16 @@ export function useCreateAgentLogEntry() {
           entry_type: entryType,
           note,
           visible_to_agent: visibleToAgent,
+          about_date: aboutDate,
         })
         .select("*, author:author_id(full_name)")
         .single();
       if (error) throw error;
       return data as AgentLogEntry;
     },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: [QUERY_KEY, vars.agentId] });
+    onSuccess: () => {
+      // Prefix match invalidates both the per-agent list and the calendar range query.
+      qc.invalidateQueries({ queryKey: [QUERY_KEY] });
     },
   });
 }
@@ -90,8 +124,9 @@ export function useToggleEntryVisibility() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: [QUERY_KEY, vars.agentId] });
+    onSuccess: () => {
+      // Prefix match invalidates both the per-agent list and the calendar range query.
+      qc.invalidateQueries({ queryKey: [QUERY_KEY] });
     },
   });
 }

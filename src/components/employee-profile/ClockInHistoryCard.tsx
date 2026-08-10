@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { todayLocal, parseLocalDate, formatDateUSShort } from "@/lib/localDate";
 import { useTimeClockNotes } from "@/hooks/useTimeClockNotes";
+import { useAgentLogEntriesInRange, type AgentLogEntry } from "@/hooks/useAgentLog";
 
 /**
  * Calendar-style clock-in history on EmpleadoPerfil.
@@ -233,17 +234,19 @@ function DayNotesSection({
   employeeUuid,
   date,
   dayOffNote,
+  coachingNotes = [],
 }: {
   employeeUuid: string;
   date: string;
   dayOffNote?: string | null;
+  coachingNotes?: AgentLogEntry[];
 }) {
   const { data: punchNotes = [], isLoading } = useTimeClockNotes(employeeUuid, date);
   const dayOff = dayOffNote?.trim();
-  const hasAny = !!dayOff || punchNotes.length > 0;
+  const hasAny = !!dayOff || coachingNotes.length > 0 || punchNotes.length > 0;
 
   return (
-    <div className="rounded-md border bg-muted/30 p-3">
+    <div className="rounded-md border-2 border-orange-400 bg-orange-50/50 p-3">
       <p className="text-sm font-medium mb-1.5">Notes on this day</p>
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading…</p>
@@ -257,6 +260,15 @@ function DayNotesSection({
               <p className="text-sm whitespace-pre-wrap">{dayOff}</p>
             </li>
           )}
+          {coachingNotes.map((e) => (
+            <li key={e.id}>
+              <p className="text-xs font-medium text-muted-foreground">
+                {e.entry_type === "verbal_warning" ? "Verbal warning" : "Note"} ·{" "}
+                {e.author?.full_name ?? "Unknown"}
+              </p>
+              <p className="text-sm whitespace-pre-wrap">{e.note}</p>
+            </li>
+          ))}
           {punchNotes.map((n, i) => (
             <li key={i}>
               <p className="text-xs text-muted-foreground">
@@ -403,6 +415,20 @@ export function ClockInHistoryCard({
     enabled: !!employeeUuid,
   });
 
+  // Coaching notes / verbal warnings whose "about_date" lands in this month —
+  // so a note filed about a given day shows up on that day's cell too.
+  const { data: coachingEntries = [] } = useAgentLogEntriesInRange(employeeUuid, monthStart, monthEnd);
+  const coachingByDate = useMemo(() => {
+    const m = new Map<string, AgentLogEntry[]>();
+    for (const e of coachingEntries) {
+      if (!e.about_date) continue;
+      const list = m.get(e.about_date) ?? [];
+      list.push(e);
+      m.set(e.about_date, list);
+    }
+    return m;
+  }, [coachingEntries]);
+
   const today = todayLocal();
   const rowByDate = useMemo(() => {
     const m = new Map<string, ClockRow>();
@@ -417,8 +443,9 @@ export function ClockInHistoryCard({
     for (const [date, info] of timeOffByDate) {
       if (info.notes && info.notes.trim()) s.add(date);
     }
+    for (const date of coachingByDate.keys()) s.add(date);
     return s;
-  }, [editedDates, timeOffByDate]);
+  }, [editedDates, timeOffByDate, coachingByDate]);
 
   // Build the 6-row x 7-col grid (some cells may be blank padding before/after month)
   const cells = useMemo(() => {
@@ -590,6 +617,7 @@ export function ClockInHistoryCard({
               employeeUuid={employeeUuid}
               date={chooser.date}
               dayOffNote={chooser.timeOff?.notes}
+              coachingNotes={coachingByDate.get(chooser.date)}
             />
 
             <div className="flex flex-col gap-2">
