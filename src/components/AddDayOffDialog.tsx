@@ -46,6 +46,7 @@ export interface ExistingDayOff {
   is_paid: boolean;
   start_date: string;
   end_date: string;
+  notes?: string | null;
 }
 
 interface Props {
