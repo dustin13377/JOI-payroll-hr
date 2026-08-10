@@ -410,6 +410,16 @@ export function ClockInHistoryCard({
     return m;
   }, [rows]);
 
+  // Days that carry any note → get the corner dot. A punch edit always records
+  // a reason (editedDates), and a day off may carry a note too.
+  const notedDates = useMemo(() => {
+    const s = new Set<string>(editedDates);
+    for (const [date, info] of timeOffByDate) {
+      if (info.notes && info.notes.trim()) s.add(date);
+    }
+    return s;
+  }, [editedDates, timeOffByDate]);
+
   // Build the 6-row x 7-col grid (some cells may be blank padding before/after month)
   const cells = useMemo(() => {
     const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
@@ -530,7 +540,7 @@ export function ClockInHistoryCard({
             const status = classifyDay(cell.date, row, shift, hireDate, lastWorkedDay, today, holidays, timeOffByDate);
             const day = Number(cell.date.slice(-2));
             const isToday = cell.date === today;
-            const wasEdited = editedDates.has(cell.date);
+            const hasNotes = notedDates.has(cell.date);
             // Manager+ can click future days to plan a day off
             const isClickable = canManageDayOff || status.kind !== "future";
             return (
@@ -539,7 +549,7 @@ export function ClockInHistoryCard({
                 type="button"
                 onClick={() => handleCellClick(cell.date!, row)}
                 disabled={!isClickable}
-                title={`${cell.date} — ${statusLabel(status)}`}
+                title={`${cell.date} — ${statusLabel(status)}${hasNotes ? " · has notes" : ""}`}
                 className={`
                   relative aspect-square rounded-md text-sm font-medium
                   flex items-center justify-center
@@ -550,10 +560,10 @@ export function ClockInHistoryCard({
                 `}
               >
                 {day}
-                {wasEdited && (
+                {hasNotes && (
                   <span
                     className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-600 ring-1 ring-white"
-                    aria-label="Edited"
+                    aria-label="Has notes"
                   />
                 )}
               </button>
