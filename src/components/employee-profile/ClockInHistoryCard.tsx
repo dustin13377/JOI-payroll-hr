@@ -14,6 +14,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { todayLocal, parseLocalDate, formatDateUSShort } from "@/lib/localDate";
+import { useTimeClockNotes } from "@/hooks/useTimeClockNotes";
+import { useAgentLogEntriesInRange, type AgentLogEntry } from "@/hooks/useAgentLog";
 
 /**
  * Calendar-style clock-in history on EmpleadoPerfil.
@@ -222,6 +224,66 @@ function statusLabel(s: DayStatus): string {
   }
 }
 
+/**
+ * All notes attached to a single day, shown inside the day popup.
+ * Combines the day-off note (vacation_requests.notes) with every punch-edit
+ * reason (time_clock_audit, via the SECURITY DEFINER get_time_clock_notes RPC,
+ * which is readable by the employee's team lead and leadership alike).
+ */
+function DayNotesSection({
+  employeeUuid,
+  date,
+  dayOffNote,
+  coachingNotes = [],
+}: {
+  employeeUuid: string;
+  date: string;
+  dayOffNote?: string | null;
+  coachingNotes?: AgentLogEntry[];
+}) {
+  const { data: punchNotes = [], isLoading } = useTimeClockNotes(employeeUuid, date);
+  const dayOff = dayOffNote?.trim();
+  const hasAny = !!dayOff || coachingNotes.length > 0 || punchNotes.length > 0;
+
+  return (
+    <div className="rounded-md border-2 border-orange-400 bg-orange-50/50 p-3">
+      <p className="text-sm font-medium mb-1.5">Notes on this day</p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : !hasAny ? (
+        <p className="text-xs text-muted-foreground">No notes for this day.</p>
+      ) : (
+        <ul className="space-y-2.5 max-h-48 overflow-y-auto">
+          {dayOff && (
+            <li>
+              <p className="text-xs font-medium text-sky-700">Day off</p>
+              <p className="text-sm whitespace-pre-wrap">{dayOff}</p>
+            </li>
+          )}
+          {coachingNotes.map((e) => (
+            <li key={e.id}>
+              <p className="text-xs font-medium text-muted-foreground">
+                {e.entry_type === "verbal_warning" ? "Verbal warning" : "Note"} ·{" "}
+                {e.author?.full_name ?? "Unknown"}
+              </p>
+              <p className="text-sm whitespace-pre-wrap">{e.note}</p>
+            </li>
+          ))}
+          {punchNotes.map((n, i) => (
+            <li key={i}>
+              <p className="text-xs text-muted-foreground">
+                {n.editor_name} · {n.action === "insert" ? "created" : "edited"} punch ·{" "}
+                {new Date(n.edited_at).toLocaleString()}
+              </p>
+              <p className="text-sm whitespace-pre-wrap">{n.reason}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ClockInHistoryCard({
   employeeUuid,
   employeeName,
@@ -331,7 +393,7 @@ export function ClockInHistoryCard({
       const m = new Map<string, TimeOffInfo>();
       const { data, error } = await supabase
         .from("vacation_requests")
-        .select("id, start_date, end_date, request_type, is_paid")
+        .select("id, start_date, end_date, request_type, is_paid, notes")
         .eq("employee_id", employeeUuid)
         .eq("status", "approved")
         .lte("start_date", monthEnd)
@@ -353,12 +415,37 @@ export function ClockInHistoryCard({
     enabled: !!employeeUuid,
   });
 
+  // Coaching notes / verbal warnings whose "about_date" lands in this month —
+  // so a note filed about a given day shows up on that day's cell too.
+  const { data: coachingEntries = [] } = useAgentLogEntriesInRange(employeeUuid, monthStart, monthEnd);
+  const coachingByDate = useMemo(() => {
+    const m = new Map<string, AgentLogEntry[]>();
+    for (const e of coachingEntries) {
+      if (!e.about_date) continue;
+      const list = m.get(e.about_date) ?? [];
+      list.push(e);
+      m.set(e.about_date, list);
+    }
+    return m;
+  }, [coachingEntries]);
+
   const today = todayLocal();
   const rowByDate = useMemo(() => {
     const m = new Map<string, ClockRow>();
     for (const r of rows) m.set(r.date, r);
     return m;
   }, [rows]);
+
+  // Days that carry any note → get the corner dot. A punch edit always records
+  // a reason (editedDates), and a day off may carry a note too.
+  const notedDates = useMemo(() => {
+    const s = new Set<string>(editedDates);
+    for (const [date, info] of timeOffByDate) {
+      if (info.notes && info.notes.trim()) s.add(date);
+    }
+    for (const date of coachingByDate.keys()) s.add(date);
+    return s;
+  }, [editedDates, timeOffByDate, coachingByDate]);
 
   // Build the 6-row x 7-col grid (some cells may be blank padding before/after month)
   const cells = useMemo(() => {
@@ -394,20 +481,15 @@ export function ClockInHistoryCard({
   function handleCellClick(dateStr: string, row: ClockRow | undefined) {
     const timeOff = timeOffByDate.get(dateStr);
 
-    if (!canManageDayOff) {
-      // TLs: punch editing only, past/today only (original behavior)
-      if (dateStr > today) return;
-      setEditTarget({ date: dateStr, row });
-      return;
-    }
-
     if (dateStr > today) {
-      // Future: nothing to punch-edit — go straight to add/remove day off
-      setDayOffTarget({ date: dateStr, timeOff });
+      // Future: nothing to punch-edit. Only manager+ can plan a day off here;
+      // TLs can't reach a future cell (isClickable gates them out).
+      if (canManageDayOff) setDayOffTarget({ date: dateStr, timeOff });
       return;
     }
 
-    // Past/today: let the manager pick between punches and day off
+    // Past/today: open the day popup for everyone (TL + manager+). It shows the
+    // day's notes plus the actions available to this role.
     setChooser({ date: dateStr, row, timeOff });
   }
 
@@ -485,7 +567,7 @@ export function ClockInHistoryCard({
             const status = classifyDay(cell.date, row, shift, hireDate, lastWorkedDay, today, holidays, timeOffByDate);
             const day = Number(cell.date.slice(-2));
             const isToday = cell.date === today;
-            const wasEdited = editedDates.has(cell.date);
+            const hasNotes = notedDates.has(cell.date);
             // Manager+ can click future days to plan a day off
             const isClickable = canManageDayOff || status.kind !== "future";
             return (
@@ -494,7 +576,7 @@ export function ClockInHistoryCard({
                 type="button"
                 onClick={() => handleCellClick(cell.date!, row)}
                 disabled={!isClickable}
-                title={`${cell.date} — ${statusLabel(status)}`}
+                title={`${cell.date} — ${statusLabel(status)}${hasNotes ? " · has notes" : ""}`}
                 className={`
                   relative aspect-square rounded-md text-sm font-medium
                   flex items-center justify-center
@@ -505,10 +587,10 @@ export function ClockInHistoryCard({
                 `}
               >
                 {day}
-                {wasEdited && (
+                {hasNotes && (
                   <span
                     className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-600 ring-1 ring-white"
-                    aria-label="Edited"
+                    aria-label="Has notes"
                   />
                 )}
               </button>
@@ -527,9 +609,17 @@ export function ClockInHistoryCard({
             <DialogHeader>
               <DialogTitle>{formatDateUSShort(chooser.date)}</DialogTitle>
               <DialogDescription>
-                What do you want to do for {employeeName} on this day?
+                Notes and actions for {employeeName} on this day.
               </DialogDescription>
             </DialogHeader>
+
+            <DayNotesSection
+              employeeUuid={employeeUuid}
+              date={chooser.date}
+              dayOffNote={chooser.timeOff?.notes}
+              coachingNotes={coachingByDate.get(chooser.date)}
+            />
+
             <div className="flex flex-col gap-2">
               <Button
                 variant="outline"
@@ -540,15 +630,17 @@ export function ClockInHistoryCard({
               >
                 Edit punches
               </Button>
-              <Button
-                variant={chooser.timeOff ? "destructive" : "default"}
-                onClick={() => {
-                  setDayOffTarget({ date: chooser.date, timeOff: chooser.timeOff });
-                  setChooser(null);
-                }}
-              >
-                {chooser.timeOff ? "Remove day off" : "Add day off"}
-              </Button>
+              {canManageDayOff && (
+                <Button
+                  variant={chooser.timeOff ? "destructive" : "default"}
+                  onClick={() => {
+                    setDayOffTarget({ date: chooser.date, timeOff: chooser.timeOff });
+                    setChooser(null);
+                  }}
+                >
+                  {chooser.timeOff ? "Remove day off" : "Add day off"}
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>
