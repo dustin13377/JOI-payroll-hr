@@ -38,3 +38,11 @@ supabase/.temp/
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Generated HR/payroll artifacts at repo root — employee and candidate PII
+# (names, salaries, phone numbers). Blank templates under docs/reference/
+# stay tracked. index.html is NOT covered: Vite needs it.
+/*.pdf
+/*.xlsx
+/*.csv
+/JOI_Candidate_Followups.html
