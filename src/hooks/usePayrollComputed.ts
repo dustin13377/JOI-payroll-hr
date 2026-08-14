@@ -30,7 +30,9 @@ export type PayrollDayStatus =
   | "vacation"
   | "holiday"
   | "holiday_worked"
-  | "extra";
+  | "extra"
+  /** Scheduled, but the day hasn't finished yet — can't be an absence. */
+  | "upcoming";
 
 /** A scheduled day with this many net hours or more pays as a full day. */
 const FULL_DAY_MIN_HOURS = 6;
@@ -252,6 +254,22 @@ export function usePayrollComputed(
       // All dates in the period
       const allDates = dateRange(pStart, pEnd);
 
+      // Last day that has actually finished. The period window runs to its end
+      // date regardless of today's date, so without this every remaining
+      // scheduled day counts as an absence — e.g. previewing 1–15 on the 14th
+      // docked the whole weekend crew for the 15th, a Saturday nobody had
+      // worked yet. Absences are only counted up to (and including) yesterday;
+      // today is still in progress, so an agent who hasn't punched yet isn't
+      // absent. At lock time the whole period is in the past and this is a
+      // no-op. Note this deliberately does NOT shrink scheduledDays — a day
+      // removed from the schedule would make today's punch read as an unplanned
+      // extra day and pay an overtime premium.
+      const lastSettledDate = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return fmtDate(d);
+      })();
+
       // 6. Compute per employee
       const results: ComputedPayroll[] = employees.map((emp: any) => {
         const uuid: string = emp.id;
@@ -319,6 +337,7 @@ export function usePayrollComputed(
         // Unpaid leave therefore docks exactly like an absence.
         let daysAbsent = 0;
         for (const d of scheduledDays) {
+          if (d > lastSettledDate) continue; // day hasn't finished — not an absence
           if (!clocked.has(d) && !paidLeaveDates.has(d)) daysAbsent++;
         }
 
@@ -385,6 +404,8 @@ export function usePayrollComputed(
                 : "worked"
               : paidLeaveDates.has(d)
               ? "vacation"
+              : d > lastSettledDate
+              ? "upcoming" // day hasn't finished yet — not docked, not an absence
               : "missed"; // unpaid leave shows as missed because it docks
           } else {
             status = clocked.has(d) ? "extra" : paidLeaveDates.has(d) ? "vacation" : "off";

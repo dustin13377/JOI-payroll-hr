@@ -28,6 +28,7 @@ import {
   Lock,
   ChevronLeft,
   ChevronRight,
+  Landmark,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -58,6 +59,10 @@ function cellClass(kind: string): string {
     case "holiday":
     case "holiday_worked":
       return "bg-violet-100 text-violet-700";
+    // Scheduled but not yet finished. Dashed outline rather than a fill so it
+    // reads as "no verdict yet" instead of being mistaken for a day off.
+    case "upcoming":
+      return "border border-dashed border-muted-foreground/40 text-muted-foreground";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -65,6 +70,7 @@ function cellClass(kind: string): string {
 
 function netTotal(
   list?: {
+    employeeId: string;
     monthlyBaseSalary: number;
     kpiBonusAmount: number;
     daysAbsent: number;
@@ -73,7 +79,10 @@ function netTotal(
     timeOffDays: number;
     holidayDaysWorked: number;
     partialDayDeduction: number;
-  }[]
+  }[],
+  // Advance instalments by employee. Must match what the per-row cards use, or
+  // the month total silently disagrees with the sum of the rows under it.
+  advanceByEmp?: Map<string, number>
 ): number {
   return (list ?? []).reduce((s, c) => {
     const { makeupDays, overtimeDays } = classifyOffDays(c.daysAbsent, c.extraDaysWorked);
@@ -91,6 +100,7 @@ function netTotal(
         // No achieved-toggle on this screen yet — everyone gets it for now (Part 2 adds the toggle).
         kpiBonus: c.kpiBonusAmount / 2,
         partialDayDeduction: c.partialDayDeduction,
+        advanceDeduction: advanceByEmp?.get(c.employeeId) ?? 0,
       }).net
     );
   }, 0);
@@ -174,7 +184,6 @@ export default function PrePayroll() {
   const pp2q = usePayrollComputed(monthInfo?.pp2.id, monthInfo?.pp2.start, monthInfo?.pp2.end);
   const computed = (activeHalf === "pp1" ? pp1q.data : pp2q.data) ?? [];
   const computedLoading = activeHalf === "pp1" ? pp1q.isLoading : pp2q.isLoading;
-  const monthTotal = netTotal(pp1q.data) + netTotal(pp2q.data);
   const lock = usePrepayLock();
   const { toast } = useToast();
 
@@ -201,6 +210,78 @@ export default function PrePayroll() {
     return m;
   }, [spiffRows]);
 
+  // Outstanding salary advances / personal loans. The instalment is capped at
+  // the remaining balance by the view, so the last period takes only what is
+  // left and a settled advance contributes nothing.
+  const { data: advanceRows = [] } = useQuery({
+    queryKey: ["prepay-advances", sel?.id],
+    enabled: !!sel,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("v_employee_advance_balances")
+        .select("advance_id, employee_id, per_period_amount, balance")
+        .eq("status", "active")
+        .gt("balance", 0);
+      if (error) throw error;
+      return (data ?? []) as {
+        advance_id: string;
+        employee_id: string;
+        per_period_amount: number;
+        balance: number;
+      }[];
+    },
+  });
+
+  // Already-taken instalments for THIS period. Without this, re-opening a
+  // locked period would show the deduction a second time.
+  const { data: takenRows = [] } = useQuery({
+    queryKey: ["prepay-advance-taken", sel?.id],
+    enabled: !!sel?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employee_advance_deductions")
+        .select("advance_id")
+        .eq("period_id", sel!.id);
+      if (error) throw error;
+      return (data ?? []) as { advance_id: string }[];
+    },
+  });
+
+  const advanceByEmp = useMemo(() => {
+    const taken = new Set(takenRows.map((t) => t.advance_id));
+    const m = new Map<string, number>();
+    for (const a of advanceRows) {
+      if (taken.has(a.advance_id)) continue;
+      const due = Math.min(Number(a.per_period_amount), Number(a.balance));
+      if (due > 0) m.set(a.employee_id, (m.get(a.employee_id) ?? 0) + due);
+    }
+    return m;
+  }, [advanceRows, takenRows]);
+
+  // Caption for the advance chip: what will still be owed after this
+  // instalment, so the balance is visible on the payroll screen itself rather
+  // than living in someone's head.
+  const advanceSubByEmp = useMemo(() => {
+    const taken = new Set(takenRows.map((t) => t.advance_id));
+    const m = new Map<string, string>();
+    for (const a of advanceRows) {
+      if (taken.has(a.advance_id)) continue;
+      const due = Math.min(Number(a.per_period_amount), Number(a.balance));
+      if (due <= 0) continue;
+      const left = Number(a.balance) - due;
+      m.set(a.employee_id, left > 0 ? `${formatMXN(left)} left` : "final payment");
+    }
+    return m;
+  }, [advanceRows, takenRows]);
+
+  // Advances are applied only to the half currently on screen. The other half
+  // is a different pay period with its own instalment, and we don't know yet
+  // whether it will still have a balance to take, so guessing would make the
+  // month total disagree with the rows underneath it.
+  const monthTotal =
+    netTotal(pp1q.data, activeHalf === "pp1" ? advanceByEmp : undefined) +
+    netTotal(pp2q.data, activeHalf === "pp2" ? advanceByEmp : undefined);
+
   const rows = useMemo(() => {
     return computed
       .map((c) => {
@@ -220,6 +301,7 @@ export default function PrePayroll() {
           kpiBonus: c.kpiBonusAmount / 2,
           // Short scheduled days (<6h worked) pay only hours worked.
           partialDayDeduction: c.partialDayDeduction,
+          advanceDeduction: advanceByEmp.get(c.employeeId) ?? 0,
         });
         let mkLeft = makeupDays;
         const bar = c.days.map((d) => {
@@ -265,12 +347,29 @@ export default function PrePayroll() {
         vacation_premium: r.vacationPremium,
         holiday_pay: r.holidayPay,
         spiff_mxn: r.spiffMxn,
+        advance_deduction: r.advanceDeduction,
         net: r.net,
       }));
+
+      // Book an instalment only for advances that actually landed on a line in
+      // this run, so the ledger can never move for someone who wasn't charged.
+      const chargedEmployees = new Set(
+        rows.filter(({ r }) => r.advanceDeduction > 0).map(({ c }) => c.employeeId)
+      );
+      const takenIds = new Set(takenRows.map((t) => t.advance_id));
+      const advanceCharges = advanceRows
+        .filter((a) => chargedEmployees.has(a.employee_id) && !takenIds.has(a.advance_id))
+        .map((a) => ({
+          advance_id: a.advance_id,
+          amount: Math.min(Number(a.per_period_amount), Number(a.balance)),
+        }))
+        .filter((a) => a.amount > 0);
+
       const [py, pm] = period.start_date.split("-").map(Number);
       const res = await lock.mutateAsync({
         period: { id: period.id, year: py, month: pm, half: period.half as "PP1" | "PP2" },
         lines,
+        advanceCharges,
       });
       toast({ title: "Period locked", description: `Froze ${lines.length} employees. Opened ${res.nextPeriodCode}.` });
     } catch (e) {
@@ -443,6 +542,15 @@ export default function PrePayroll() {
                 <Chip icon={<Umbrella className="h-4 w-4" />} label="Vacation +25%" value={r.vacationPremium} sign="+" sub={c.timeOffDays ? `${c.timeOffDays} days` : "none"} />
                 <Chip icon={<Clock className="h-4 w-4" />} label="Overtime" value={r.overtimePay} sign="+" sub={overtimeDays ? `${overtimeDays} × $1,000` : "none"} />
                 <Chip icon={<Gift className="h-4 w-4" />} label="Spiff" value={r.spiffMxn} sign="+" sub={spiffUsd ? `$${spiffUsd} USD @17` : "none"} />
+                {r.advanceDeduction > 0 && (
+                  <Chip
+                    icon={<Landmark className="h-4 w-4" />}
+                    label="Advance"
+                    value={r.advanceDeduction}
+                    sign="-"
+                    sub={advanceSubByEmp.get(c.employeeId) ?? "repayment"}
+                  />
+                )}
               </div>
             </div>
           ))}
