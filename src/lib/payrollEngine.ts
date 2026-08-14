@@ -45,6 +45,14 @@ export interface EngineInputs {
   customDeduction?: number;
   /** Peso amount docked for short (<6h) scheduled days. Caller-computed. */
   partialDayDeduction?: number;
+  /**
+   * Repayment of a salary advance / personal loan this period. Kept separate
+   * from customDeduction so the payslip says why the money came off, and so a
+   * one-off adjustment can never be mistaken for a loan instalment.
+   * Source of truth is advance_due_for_period() — it caps at the remaining
+   * balance and returns 0 once settled.
+   */
+  advanceDeduction?: number;
 }
 
 export interface EngineResult {
@@ -60,6 +68,7 @@ export interface EngineResult {
   kpiBonus: number;
   customDeduction: number;
   partialDayDeduction: number;
+  advanceDeduction: number;
   net: number;
 }
 
@@ -99,6 +108,7 @@ export function computeNetPay(i: EngineInputs): EngineResult {
   const kpiBonus = r2(i.kpiBonus ?? 0);
   const customDeduction = r2(i.customDeduction ?? 0);
   const partialDayDeduction = r2(i.partialDayDeduction ?? 0);
+  const advanceDeduction = r2(i.advanceDeduction ?? 0);
 
   const net = r2(
     base -
@@ -111,7 +121,8 @@ export function computeNetPay(i: EngineInputs): EngineResult {
       spiffMxn +
       kpiBonus -
       customDeduction -
-      partialDayDeduction
+      partialDayDeduction -
+      advanceDeduction
   );
 
   return {
@@ -127,6 +138,7 @@ export function computeNetPay(i: EngineInputs): EngineResult {
     kpiBonus,
     customDeduction,
     partialDayDeduction,
+    advanceDeduction,
     net,
   };
 }
