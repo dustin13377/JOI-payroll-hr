@@ -1,3 +1,38 @@
+export interface ParsedAttribution {
+  // What the ad promised the applicant: the position= parameter prefilled on
+  // the landing URL. Prefer first-touch, fall back to last-touch.
+  ad_position: string | null;
+
+  ft_source: string | null;
+  ft_medium: string | null;
+  ft_campaign: string | null;
+  ft_content: string | null;
+  ft_term: string | null;
+  ft_channel: string | null;
+  ft_placement: string | null;
+  ft_landing: string | null;
+  ft_query: string | null;
+
+  lt_source: string | null;
+  lt_medium: string | null;
+  lt_campaign: string | null;
+  lt_content: string | null;
+  lt_term: string | null;
+  lt_channel: string | null;
+  lt_placement: string | null;
+  lt_landing: string | null;
+  lt_query: string | null;
+
+  pageview_count: number | null;
+  session_count: number | null;
+  touch_path: string | null;
+  time_to_conversion: string | null;
+
+  // Any attribution-looking field the snippet sends that we have not given a
+  // column to. Kept so a future snippet change is visible instead of silent.
+  extra_fields: Record<string, string>;
+}
+
 export interface ParsedApplication {
   full_name: string | null;
   curp: string | null;
@@ -12,8 +47,11 @@ export interface ParsedApplication {
     | null;
   // Exact "Position you are applying for" value from the form, stored verbatim.
   // Unlike role_interest (a fixed 5-value enum), this accepts ANY role — so new
-  // roles added via the Job Postings plugin are never dropped. This is what the
-  // recruiting UI shows as the applied-for role.
+  // roles added via the Job Postings plugin are never dropped.
+  //
+  // NOTE: this is the applicant's DROPDOWN choice and is secondary for
+  // reporting. It routinely disagrees with the ad they clicked. Report on
+  // attribution.ad_position instead.
   applied_position: string | null;
   english_level_self: "C1" | "C2" | "below_c1" | "unknown";
   applicant_notes: string | null;
@@ -21,21 +59,23 @@ export interface ParsedApplication {
   presentation_url: string | null; // Gravity Forms field-id=16 (audio or video)
   needs_manual_review: boolean; // true if no name or no phone
   parse_warnings: string[];
+  attribution: ParsedAttribution;
 }
 
 // ---------------------------------------------------------------------------
 // HTML utilities
 // ---------------------------------------------------------------------------
 
-/** Decode common HTML entities. */
+/** Decode common HTML entities. &amp; must be decoded LAST so that
+ * double-encoded input like "&amp;lt;" yields "&lt;" and not "<". */
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
-    .replace(/&nbsp;/g, " ");
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
 }
 
 /** Strip all HTML tags and decode entities, collapsing whitespace. */
@@ -73,20 +113,16 @@ function extractHref(s: string): string | null {
 function buildFieldMap(html: string): Map<string, string> {
   const map = new Map<string, string>();
 
-  // Strategy: split on </tr> boundaries, scan for a <strong>LABEL</strong>
-  // row, then take the text content of the immediately following row.
   const rows = html.split(/<\/tr>/i);
 
   for (let i = 0; i < rows.length - 1; i++) {
     const row = rows[i];
-    // Does this row contain a <strong>…</strong> that looks like a label?
     const labelMatch = row.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i);
     if (!labelMatch) continue;
 
     const label = stripTags(labelMatch[1]).trim().toUpperCase();
     if (!label) continue;
 
-    // The value lives in the next row — grab its raw HTML.
     const valueRow = rows[i + 1];
 
     map.set(label, valueRow);
@@ -143,9 +179,6 @@ function mapRoleInterest(
   }
   if (p === "Customer Reactivation Specialist") return "customer_reactivation";
   if (p === "Open") return null; // intentional — goes to raw_email_body
-  // Dropdown options (added to both forms 2026-06-10) and free-text answers
-  // are matched loosely. Note: the English "Funding Activation," option has a
-  // trailing comma in its value — contains-matching absorbs it.
   const low = p.toLowerCase();
   if (low.includes("ai automation")) return "ai_automation";
   if (low.includes("ai operations")) return "ai_operations";
@@ -161,20 +194,19 @@ function mapEnglishLevel(
 ): ParsedApplication["english_level_self"] {
   if (!level) return "unknown";
   const l = level.trim();
-  if (l === "Native" || l === "C2") return "C2";
-  if (l === "C1") return "C1";
-  if (/^[BA]/i.test(l)) return "below_c1";
+  if (/^(native|nativo|c2)$/i.test(l)) return "C2";
+  if (/^c1$/i.test(l)) return "C1";
+  // Only actual CEFR codes below C1 (A1, A2, B1, B2). The old pattern was
+  // /^[BA]/i, which wrongly classified "Advanced", "Bilingual", "Avanzado",
+  // and "Básico... " free text as below_c1. Free text we can't grade stays
+  // "unknown" so a human looks at it instead of the applicant being
+  // silently filtered.
+  if (/^[ab][12]\b/i.test(l)) return "below_c1";
   return "unknown";
 }
 
 /**
  * Normalize phone to E.164 (+52XXXXXXXXXX).
- *
- * Rules:
- * 1. Strip all non-digit characters (except leading + which we note first).
- * 2. If the result is 10 digits → prepend +52.
- * 3. If the result is 12 digits and starts with "52" → prepend +.
- * 4. Otherwise → store as-is with warning.
  */
 function normalizePhone(
   raw: string | null,
@@ -191,9 +223,7 @@ function normalizePhone(
   if (digits.length === 12 && digits.startsWith("52")) {
     return `+${digits}`;
   }
-  // If the original had a leading + and the digit count is reasonable, keep it.
   if (hasLeadingPlus && digits.length >= 10) {
-    // Already formatted — just re-attach the +
     warnings.push(
       `Unexpected phone digit count (${digits.length}): stored as +${digits}`,
     );
@@ -205,12 +235,177 @@ function normalizePhone(
 }
 
 // ---------------------------------------------------------------------------
+// Attribution
+// ---------------------------------------------------------------------------
+
+/**
+ * The site attribution snippet adds hidden fields to both application forms
+ * capturing first-touch and last-touch source data. Labels are title case
+ * ("First Source", "Last Campaign"), unlike the applicant-facing fields which
+ * are upper case. buildFieldMap upper-cases every key, so lookups here are
+ * upper-cased too.
+ *
+ * These fields only exist on submissions after the snippet went live (roughly
+ * 2026-07-17). Older emails parse to all-null attribution, which is expected,
+ * not a bug. Do not attempt CPA analysis on submissions before that date.
+ */
+const ATTRIBUTION_LABELS = [
+  "FIRST SOURCE",
+  "FIRST MEDIUM",
+  "FIRST CAMPAIGN",
+  "FIRST CONTENT",
+  "FIRST TERM",
+  "FIRST CHANNEL",
+  "FIRST PLACEMENT",
+  "FIRST LANDING",
+  "FIRST QUERY",
+  "LAST SOURCE",
+  "LAST MEDIUM",
+  "LAST CAMPAIGN",
+  "LAST CONTENT",
+  "LAST TERM",
+  "LAST CHANNEL",
+  "LAST PLACEMENT",
+  "LAST LANDING",
+  "LAST QUERY",
+  "PAGEVIEW COUNT",
+  "SESSION COUNT",
+  "TOUCH PATH",
+  "TIME TO CONVERSION",
+];
+
+/**
+ * Every applicant-facing field label on both forms. Anything here is applicant
+ * data, never attribution, regardless of what prefix it happens to share with
+ * the snippet's labels. Add to this list when a field is added to either form.
+ */
+const APPLICANT_FIELD_LABELS = new Set([
+  "FIRST NAME",
+  "LAST NAME",
+  "NOMBRE COMPLETO",
+  "APELLIDOS",
+  "EMAIL",
+  "CORREO ELECTRÓNICO",
+  "CURP",
+  "WHATSAPP NUMBER",
+  "NÚMERO WHATSAPP",
+  "POSITION YOU ARE APPLYING FOR",
+  "VACANTE A LA QUE DESEA POSTULARSE",
+  "ENGLISH LEVEL",
+  "NIVEL DE INGLÉS",
+  "CURRICULUM VITAE",
+  "PRESENTATION",
+  "PRESENTACIÓN",
+  "LAST COMPANY YOU WORKED FOR",
+  "ÚLTIMA COMPAÑÍA PARA LA QUE TRABAJÓ",
+  "LENGTH OF EMPLOYMENT",
+  "TIEMPO DE ANTIGÜEDAD",
+  "REASON FOR LEAVING",
+  "MOTIVO DE BAJA",
+  "COMMUTE TIME",
+  "TIEMPO DE TRASLADO",
+  "SALARY EXPECTATION",
+  "EXPECTATIVA SALARIAL",
+  "AVAILABLE START DATE",
+  "DISPONIBILIDAD PARA COMENZAR",
+]);
+
+/** Pull a single parameter out of a captured query string.
+ * The (^|[?&]) prefix is MANDATORY so `position` cannot substring-match a
+ * longer parameter name like `ad_position`. Param name is escaped so a future
+ * caller passing a name containing regex metacharacters doesn't silently
+ * change the pattern. */
+function queryParam(queryString: string | null, param: string): string | null {
+  if (!queryString) return null;
+  const escaped = param.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = queryString.match(new RegExp(`(?:^|[?&])${escaped}=([^&]*)`));
+  if (!m) return null;
+  const raw = m[1].replace(/\+/g, " ");
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Malformed percent-encoding: keep the plus-decoded form rather than lose
+    // the value entirely.
+  }
+  return decoded.trim() || null;
+}
+
+function parseIntOrNull(v: string | null): number | null {
+  if (!v) return null;
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return null;
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseAttribution(map: Map<string, string>): ParsedAttribution {
+  const g = (label: string) => getValue(map, label);
+
+  const ft_query = g("First Query");
+  const lt_query = g("Last Query");
+
+  // Collect any attribution-shaped field we do not have a column for, so a
+  // change to the snippet shows up in the data instead of vanishing.
+  //
+  // The exclusion list must name every APPLICANT field, both form languages,
+  // because the FIRST/LAST prefix heuristic alone collides with real
+  // applicant labels: "LAST COMPANY YOU WORKED FOR" starts with "LAST " and
+  // an earlier version of this code copied applicant PII (employer names)
+  // into the attribution JSON on every English submission because of it.
+  const extra_fields: Record<string, string> = {};
+  for (const [label, rawRow] of map.entries()) {
+    const looksAttribution =
+      label.startsWith("FIRST ") ||
+      label.startsWith("LAST ") ||
+      label.endsWith(" COUNT") ||
+      label === "TOUCH PATH" ||
+      label === "TIME TO CONVERSION";
+    if (!looksAttribution) continue;
+    if (ATTRIBUTION_LABELS.includes(label)) continue;
+    if (APPLICANT_FIELD_LABELS.has(label)) continue;
+    const text = stripTags(rawRow).trim();
+    if (text) extra_fields[label] = text;
+  }
+
+  return {
+    ad_position:
+      queryParam(ft_query, "position") ?? queryParam(lt_query, "position"),
+
+    ft_source: g("First Source"),
+    ft_medium: g("First Medium"),
+    ft_campaign: g("First Campaign"),
+    ft_content: g("First Content"),
+    ft_term: g("First Term"),
+    ft_channel: g("First Channel"),
+    ft_placement: g("First Placement"),
+    ft_landing: g("First Landing"),
+    ft_query,
+
+    lt_source: g("Last Source"),
+    lt_medium: g("Last Medium"),
+    lt_campaign: g("Last Campaign"),
+    lt_content: g("Last Content"),
+    lt_term: g("Last Term"),
+    lt_channel: g("Last Channel"),
+    lt_placement: g("Last Placement"),
+    lt_landing: g("Last Landing"),
+    lt_query,
+
+    pageview_count: parseIntOrNull(g("Pageview Count")),
+    session_count: parseIntOrNull(g("Session Count")),
+    touch_path: g("Touch Path"),
+    time_to_conversion: g("Time To Conversion"),
+
+    extra_fields,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // applicant_notes builder
 // ---------------------------------------------------------------------------
 
 function buildNotes(map: Map<string, string>): string | null {
-  // Note: CV and Presentation URLs are stored in their own columns
-  // (cv_url, presentation_url), not stuffed into the notes blob.
   const lines: string[] = [];
 
   const add = (label: string, ...keys: string[]) => {
@@ -246,19 +441,20 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
   const map = buildFieldMap(htmlBody);
 
   // --- Basic fields ---
-  // English form: FIRST NAME / LAST NAME.
-  // Spanish form: NOMBRE COMPLETO / APELLIDOS.
   const firstName = getValue(map, "FIRST NAME", "NOMBRE COMPLETO");
   const lastName = getValue(map, "LAST NAME", "APELLIDOS");
+  // Guard against the Spanish form: NOMBRE COMPLETO is the FULL name, so if
+  // it already ends with APELLIDOS, concatenating would duplicate the
+  // surname ("Juan Pérez García Pérez García").
   const full_name =
     firstName && lastName
-      ? `${firstName} ${lastName}`.trim()
+      ? firstName.toLowerCase().endsWith(lastName.toLowerCase())
+        ? firstName.trim()
+        : `${firstName} ${lastName}`.trim()
       : (firstName ?? lastName ?? null);
 
   const curp = getValue(map, "CURP");
 
-  // Both forms render the applicant email as an "Email" field whose value is
-  // a mailto: link. Prefer the visible text; fall back to the mailto href.
   let email = getValue(map, "EMAIL", "CORREO ELECTRÓNICO");
   if (!email) {
     const mailto = getHref(map, "EMAIL", "CORREO ELECTRÓNICO");
@@ -266,7 +462,6 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
       email = mailto.slice("mailto:".length).trim() || null;
     }
   }
-  // Basic sanity check so junk never lands in the email column.
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     warnings.push(`Discarded invalid email value: "${email}"`);
     email = null;
@@ -280,9 +475,6 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
     "POSITION YOU ARE APPLYING FOR",
     "VACANTE A LA QUE DESEA POSTULARSE",
   );
-  // Keep the exact selection verbatim (except the "Open" catch-all, which means
-  // "no specific role"). role_interest still maps the legacy 5 for any old
-  // filters, but applied_position is the source of truth for display.
   const applied_position =
     position && position.trim() !== "Open" ? position.trim() : null;
   const role_interest = mapRoleInterest(position, warnings);
@@ -296,6 +488,25 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
 
   // --- Notes ---
   const applicant_notes = buildNotes(map);
+
+  // --- Attribution ---
+  const attribution = parseAttribution(map);
+
+  // Surface the ad/dropdown disagreement as a warning so it is visible in
+  // logs and in parse_warnings, rather than only showing up as a number that
+  // does not match the agency's. Compared case- and whitespace-insensitively
+  // so formatting drift between the ad URL and the dropdown option text does
+  // not produce false mismatches.
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  if (
+    attribution.ad_position &&
+    applied_position &&
+    norm(attribution.ad_position) !== norm(applied_position)
+  ) {
+    warnings.push(
+      `Ad promised "${attribution.ad_position}" but applicant selected "${applied_position}".`,
+    );
+  }
 
   // --- Manual review flag ---
   if (!full_name) warnings.push("Could not extract applicant name.");
@@ -315,5 +526,6 @@ export function parseApplicationEmail(htmlBody: string): ParsedApplication {
     presentation_url,
     needs_manual_review,
     parse_warnings: warnings,
+    attribution,
   };
 }
