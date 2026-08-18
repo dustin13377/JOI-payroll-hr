@@ -54,6 +54,9 @@ export interface Candidate {
   offer_start_date: string | null;
   offer_extended_at: string | null;
   offer_extended_by: string | null;
+  // When true, the Upcoming Interviews widget color-codes this candidate's
+  // calendar row so D can spot them. Replaces the old position-title map.
+  is_highlighted: boolean;
 }
 
 const CANDIDATES_KEY = ["recruiting", "candidates"] as const;

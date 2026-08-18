@@ -67,20 +67,13 @@ const OUTCOME_BADGE_VARIANT: Record<
 };
 
 /**
- * Positions that get a color-coded row while the interview is still live
- * (upcoming or in progress). Keyed by the candidate's applied_position exactly
- * as stored in recruiting_candidates. Full class strings so Tailwind keeps them.
+ * Row color for a live interview whose candidate has been flagged
+ * is_highlighted from the CandidateDrawer. Single amber accent — one flag,
+ * one look — so D doesn't have to babysit a title-to-color map every time a
+ * role gets renamed.
  */
-const POSITION_ROW_COLORS: Record<string, string> = {
-  "Junior Paid Media Specialist":
-    "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-400",
-  "Digital Marketing Production Designer":
-    "bg-purple-50 dark:bg-purple-950/30 border-l-2 border-l-purple-400",
-  "AI Operations Specialist":
-    "bg-green-50 dark:bg-green-950/30 border-l-2 border-l-green-400",
-  "AI Automation Specialist":
-    "bg-teal-50 dark:bg-teal-950/30 border-l-2 border-l-teal-400",
-};
+const HIGHLIGHT_ROW_COLOR =
+  "bg-amber-50 dark:bg-amber-950/30 border-l-2 border-l-amber-400";
 
 const EMBED_URL =
   "https://calendar.google.com/calendar/embed?src=humanresources%40justoutsource.it&ctz=America%2FMexico_City&mode=WEEK";
@@ -181,6 +174,17 @@ function positionForEvent(e: CalendarEvent, candidates: Candidate[]): string | n
     a.created_at >= b.created_at ? a : b,
   );
   return newest.applied_position;
+}
+
+/**
+ * True if any candidate matching this event has been flagged is_highlighted
+ * from the CandidateDrawer. Any match with the flag wins — safer than picking
+ * one row and getting it wrong when a person has re-applied.
+ */
+function isHighlightedForEvent(e: CalendarEvent, candidates: Candidate[]): boolean {
+  const name = extractEventName(e.summary);
+  if (!name) return false;
+  return matchCandidates(name, candidates).some((c) => c.is_highlighted);
 }
 
 /**
@@ -332,12 +336,13 @@ export function UpcomingInterviews() {
             {events.map((e, i) => {
               const marked = outcomeByKey.get(eventKey(e));
               const position = positionForEvent(e, candidates);
-              // Color the row only while the interview is still live: matches a
-              // tracked position, no outcome recorded yet, and not yet an hour
-              // past its start time.
+              // Color the row only while the interview is still live: the
+              // candidate has been flagged from the drawer, no outcome
+              // recorded yet, and not yet an hour past its start time.
+              const highlighted = isHighlightedForEvent(e, candidates);
               const rowColor =
-                position && !marked && !pastByAnHour(e)
-                  ? POSITION_ROW_COLORS[position] ?? ""
+                highlighted && !marked && !pastByAnHour(e)
+                  ? HIGHLIGHT_ROW_COLOR
                   : "";
               return (
                 <li

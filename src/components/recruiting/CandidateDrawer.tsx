@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { StageSelector } from "./StageSelector";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { UserPlus, MessageCircle, Mail, CalendarClock, CheckCircle2, XCircle } from "lucide-react";
+import { UserPlus, MessageCircle, Mail, CalendarClock, CheckCircle2, XCircle, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
 import {
@@ -74,6 +75,10 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
   // hit send in WhatsApp. Nothing is written to the DB until they confirm, so
   // a link that's opened but never sent leaves no trace on the candidate.
   const [awaitingSend, setAwaitingSend] = useState<null | "invite" | "followup">(null);
+  // Checkbox inside the "Yes, mark as contacted" confirm box: when true, the
+  // candidate gets flagged is_highlighted alongside the contacted stamp, so
+  // their row shows up color-coded on the Upcoming Interviews widget.
+  const [highlightOnConfirm, setHighlightOnConfirm] = useState(false);
 
   useEffect(() => {
     if (candidate) {
@@ -93,6 +98,7 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
   // over to the wrong person.
   useEffect(() => {
     setAwaitingSend(null);
+    setHighlightOnConfirm(false);
   }, [candidateId]);
 
   const recruiterNotesDirty =
@@ -237,6 +243,9 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
   const handleConfirmSent = () => {
     if (!candidate || !awaitingSend) return;
     if (awaitingSend === "invite") {
+      // Capture the highlight choice up-front so a mid-flight switch of the
+      // checkbox can't apply to a different candidate after the mutation lands.
+      const highlightNow = highlightOnConfirm && !candidate.is_highlighted;
       sendInvite.mutate(
         {
           candidate: { id: candidate.id, stage: candidate.stage },
@@ -246,6 +255,22 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
           onSuccess: (res) => {
             toast.success(res.advanced ? "Invite sent — moved to Contacted" : "Invite logged");
             setAwaitingSend(null);
+            setHighlightOnConfirm(false);
+            // Flip the highlight flag as a separate write so the invite path
+            // stays untouched. Failure here doesn't undo the invite — we just
+            // let the recruiter know so they can retry with the standalone
+            // toggle further down.
+            if (highlightNow) {
+              updateMutation.mutate(
+                { id: candidate.id, patch: { is_highlighted: true } },
+                {
+                  onError: (e) =>
+                    toast.error(
+                      `Highlight didn't save: ${e instanceof Error ? e.message : "unknown"}`,
+                    ),
+                },
+              );
+            }
           },
           onError: (e) =>
             toast.error(`Couldn't log the invite: ${e instanceof Error ? e.message : "unknown"}`),
@@ -339,6 +364,44 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   onChange={handleStageChange}
                   disabled={updateMutation.isPending}
                 />
+              </div>
+
+              {/*
+                Standalone highlight toggle. Independent of the invite flow so
+                D can flag/unflag anyone at any stage. The initial checkbox on
+                the invite confirm is a convenience shortcut; this is the
+                permanent control that survives after contact.
+              */}
+              <div className="flex items-center gap-3">
+                <Label className="w-24 text-sm">Highlight</Label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <Checkbox
+                    checked={candidate.is_highlighted}
+                    disabled={updateMutation.isPending}
+                    onCheckedChange={(v) =>
+                      updateMutation.mutate(
+                        { id: candidate.id, patch: { is_highlighted: v === true } },
+                        {
+                          onError: (e) =>
+                            toast.error(
+                              `Couldn't update: ${e instanceof Error ? e.message : "unknown"}`,
+                            ),
+                        },
+                      )
+                    }
+                  />
+                  <Star
+                    className={
+                      "h-3.5 w-3.5 " +
+                      (candidate.is_highlighted
+                        ? "text-amber-500 fill-amber-400"
+                        : "text-muted-foreground")
+                    }
+                  />
+                  <span className="text-muted-foreground">
+                    Color-code this candidate's row on the interview list
+                  </span>
+                </label>
               </div>
 
               {/*
@@ -449,6 +512,25 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                     Confirm only after you tapped send in WhatsApp. Nothing is saved
                     and the stage won't move to Contacted until you do.
                   </p>
+                  {/*
+                    Highlight opt-in: when checked, this candidate's row on the
+                    Upcoming Interviews widget gets color-coded so D can spot
+                    them at a glance. Hidden if already highlighted (nothing to
+                    add), and the standalone toggle below covers the "unstar
+                    later" case.
+                  */}
+                  {!candidate.is_highlighted && (
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                      <Checkbox
+                        checked={highlightOnConfirm}
+                        onCheckedChange={(v) => setHighlightOnConfirm(v === true)}
+                      />
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3" />
+                        Highlight this candidate on the interview list
+                      </span>
+                    </label>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       className="flex-1"
