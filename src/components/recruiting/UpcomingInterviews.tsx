@@ -188,18 +188,26 @@ function isHighlightedForEvent(e: CalendarEvent, candidates: Candidate[]): boole
 }
 
 /**
+ * Lowercase + strip diacritics so "garcía" matches "garcia" — Google Calendar
+ * event titles routinely lose the accents that live on the DB full_name.
+ */
+function norm(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+/**
  * Match the calendar name to candidates: every word of the event name must
- * appear in the candidate's full_name (case-insensitive). An exact full-name
- * match wins outright.
+ * appear in the candidate's full_name (case- and accent-insensitive). An
+ * exact full-name match wins outright.
  */
 function matchCandidates(name: string, candidates: Candidate[]): Candidate[] {
-  const lower = name.toLowerCase();
-  const exact = candidates.filter((c) => (c.full_name ?? "").toLowerCase() === lower);
+  const lower = norm(name);
+  const exact = candidates.filter((c) => norm(c.full_name ?? "") === lower);
   if (exact.length === 1) return exact;
   const words = lower.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
   return candidates.filter((c) => {
-    const full = (c.full_name ?? "").toLowerCase();
+    const full = norm(c.full_name ?? "");
     return words.every((w) => full.includes(w));
   });
 }
