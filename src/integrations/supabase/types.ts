@@ -1629,6 +1629,78 @@ export type Database = {
           },
         ]
       }
+      employee_advance_deductions: {
+        Row: {
+          advance_id: string
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string | null
+          period_id: string
+        }
+        Insert: {
+          advance_id: string
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string | null
+          period_id: string
+        }
+        Update: {
+          advance_id?: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string | null
+          period_id?: string
+        }
+        Relationships: []
+      }
+      employee_advances: {
+        Row: {
+          authorized_on: string | null
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          lender_employee_id: string | null
+          notes: string | null
+          organization_id: string
+          per_period_amount: number
+          principal_amount: number
+          status: string
+        }
+        Insert: {
+          authorized_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          lender_employee_id?: string | null
+          notes?: string | null
+          organization_id: string
+          per_period_amount: number
+          principal_amount: number
+          status?: string
+        }
+        Update: {
+          authorized_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          lender_employee_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          per_period_amount?: number
+          principal_amount?: number
+          status?: string
+        }
+        Relationships: []
+      }
       employee_documents: {
         Row: {
           document_type_id: string
@@ -2803,6 +2875,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      prepay_lines: {
+        Row: {
+          advance_deduction: number
+          base: number
+          created_at: string
+          employee_id: string
+          holiday_pay: number
+          id: string
+          kpi_bonus: number
+          makeup_credit: number
+          makeup_days: number
+          missed_days: number
+          missed_deduction: number
+          monthly_base: number
+          net: number
+          organization_id: string
+          overtime_days: number
+          overtime_pay: number
+          partial_day_deduction: number
+          period_id: string
+          spiff_mxn: number
+          sunday_pay: number
+          sundays_worked: number
+          vacation_days: number
+          vacation_premium: number
+        }
+        Insert: {
+          advance_deduction?: number
+          base?: number
+          created_at?: string
+          employee_id: string
+          holiday_pay?: number
+          id?: string
+          kpi_bonus?: number
+          makeup_credit?: number
+          makeup_days?: number
+          missed_days?: number
+          missed_deduction?: number
+          monthly_base?: number
+          net?: number
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number
+          partial_day_deduction?: number
+          period_id: string
+          spiff_mxn?: number
+          sunday_pay?: number
+          sundays_worked?: number
+          vacation_days?: number
+          vacation_premium?: number
+        }
+        Update: {
+          advance_deduction?: number
+          base?: number
+          created_at?: string
+          employee_id?: string
+          holiday_pay?: number
+          id?: string
+          kpi_bonus?: number
+          makeup_credit?: number
+          makeup_days?: number
+          missed_days?: number
+          missed_deduction?: number
+          monthly_base?: number
+          net?: number
+          organization_id?: string
+          overtime_days?: number
+          overtime_pay?: number
+          partial_day_deduction?: number
+          period_id?: string
+          spiff_mxn?: number
+          sunday_pay?: number
+          sundays_worked?: number
+          vacation_days?: number
+          vacation_premium?: number
+        }
+        Relationships: []
       }
       payroll_periods: {
         Row: {
@@ -4818,6 +4968,23 @@ export type Database = {
       }
     }
     Views: {
+      v_employee_advance_balances: {
+        Row: {
+          advance_id: string | null
+          authorized_on: string | null
+          balance: number | null
+          employee_id: string | null
+          lender_employee_id: string | null
+          notes: string | null
+          organization_id: string | null
+          per_period_amount: number | null
+          periods_deducted: number | null
+          principal_amount: number | null
+          repaid_amount: number | null
+          status: string | null
+        }
+        Relationships: []
+      }
       employees_client_view: {
         Row: {
           campaign_id: string | null
