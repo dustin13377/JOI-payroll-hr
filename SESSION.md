@@ -1,39 +1,37 @@
 # Session Handoff
 
-**Saved:** 2026-07-08T13:56:27-06:00
+**Saved:** 2026-08-18
 **Machine:** Diomedess-Mac-mini
 **Branch:** main
-**Last commit:** 714a273 Fix campaign change failing when a same-day assignment already exists
+**Last commit:** 60fdb91 Pre-lock warning: list people with unfinished scheduled days
 
 ## What we were doing
 
-Fixed a campaign-move failure for Sebastian Cordova (EMP-008). Moving him from HFB Setter to Torro MCA effective July 6 was throwing a check-constraint error. Root cause: a leftover future-dated assignment already started July 6, and the move code tried to end it the day before it began. Both a data fix and a code fix are done and pushed.
+Closed out the four payroll items D held over from Friday 2026-08-14 (Joe's list of nine flags, cleaned up to what still mattered after the weekend). Only one required code — the pre-lock warning against the Isaías/Alejandro scare. The other three were decisions/DB changes D made in the UI.
 
 ## Files in flight
 
-- `src/components/ChangeCampaignDialog.tsx` — COMMITTED/PUSHED (714a273). Rewrote the move mutation: it now fetches open assignments first, updates the row in place when one already starts on the effective date (same-day replacement), and only closes assignments that started strictly before the new date (added `.lt("start_date", effectiveDate)` guard).
-- Pre-existing uncommitted work NOT from this session (left dirty on purpose): `supabase/functions/send-invoice-email/index.ts`, `PROJECT.md`, plus untracked Resend files (`docs/RESEND_*.md`, `index.resend.ts`, `index.postmark.bak`, DNS/email drafts). These belong to the Resend migration thread — do not sweep into an unrelated commit.
+- `src/pages/admin/PrePayroll.tsx` — COMMITTED/PUSHED (60fdb91). `handleLock` now builds `upcomingByEmp` from each row's day bar (`kind === "upcoming"`) and, if non-empty, fires a `window.confirm` listing name + emp ID + day numbers BEFORE the normal lock confirm. Typecheck clean.
 
 ## Decisions made this session
 
-- Converted Sebastian's existing July 6 assignment row in place (SLOC Weekday → MCA) rather than inserting a new row, since no time was punched under it yet (no billing impact).
-- Also synced `employees.campaign_id` (was NULL) to MCA so the flat field matches the assignment history.
-- Fixed the bug in the frontend dialog only (YAGNI). A server-side DB guard was offered but deferred unless campaign moves start happening outside ChangeCampaignDialog.
-- Left the cosmetic "No prior assignment to close" warning as-is — it reads the drift-prone flat field but the real logic no longer depends on it.
+- **Ubaldo (EMP-010) — Aug 10 short day: "fixed"** per D. Assume he adjusted the punches / added a note; Aug 1–15 was already locked Monday 8:44am MX, so if a refund was owed it's a PP2 adjustment.
+- **Javier (EMP-001) — schedule fix: done in UI.** His `employees.campaign_id` moved SLOC Weekday → MCA effective 2026-08-14 (Campaign History shows "MCA · Torro · 08/14/2026 – Present"). MCA is Mon–Fri, so his Fridays now fold into base instead of paying as an extra day. He remains the manager over SLOC Weekend/Weekday/MCA via team_lead_campaigns. Memory `project_manager_campaigns` updated.
+- **Sthephe (JOI-0145) — legal question: done** per D (assumed run past lawyer or resolved).
+- **Lock-time warning — built and shipped.** Chose plain `window.confirm` over a dialog to match the existing lock UX and stay small (30 LOC, no new deps).
 
 ## Open todos
 
-- [ ] Confirm the deploy picked up 714a273 and re-test a same-day campaign move in prod (Vercel deploy handled by the external dev company — can't verify from here).
-- [ ] Optional: make the "No prior assignment to close" warning read actual open assignment rows instead of the flat field.
-- [ ] Optional: server-side same-day guard if campaign moves ever happen outside the dialog.
-- [ ] Separate thread: finish/commit the Resend migration work currently dirty in the tree.
+- [ ] Verify the deploy picked up 60fdb91 and try locking an OPEN period with any scheduled-but-not-finished day — the warning should list the affected people before the normal confirm.
+- [ ] Backfill provenance: someone backfilled Alejandro Guillen (JOI-0144) punches Aug 10–13 on Friday 2026-08-15 ~12:29pm. If those punches were a guess rather than a record, his $7,100 pay is wrong. Locked period → PP2 adjustment if needed.
+- [ ] Low priority: 75 pre-existing TypeScript errors, invisible because `npm run build` is `vite build` (no typecheck). Cleanup, not a fire.
 
 ## Next step when you come back
 
-Verify the deploy shipped 714a273, then open any employee already carrying a future-dated assignment and try changing their campaign to that same date — it should update in place instead of erroring.
+Nothing hot. If you want to see the new warning in action, open `/admin/payroll/prepay` mid-period, hit Close & Lock, and confirm the "about to be paid for scheduled days that haven't finished yet" dialog appears with the right people.
 
 ## Watch out for
 
-- The code fix is committed/pushed and type-checks clean, but was NOT run against a live same-day move in prod yet — the manual DB fix for Sebastian is what's verified, not the UI path.
-- The sandbox git checkout is stale (showed a4ae8ee as HEAD); origin/main is at 714a273. Trust your local machine, not the sandbox.
-- Resend migration changes are sitting uncommitted in the working tree — don't let a handoff or campaign-fix commit accidentally include them.
+- The warning keys off day `kind === "upcoming"`. Any future change to the `cellClass` day-bar values (rename "upcoming" to anything else) silently disables the guard. Cross-referenced in `project_prelock_warning` memory.
+- Locked periods stay locked (SHOW_UNLOCK_BUTTON=false). Aug 1–15 is closed — any fix landing now is a PP2 adjustment.
+- Do NOT run `git push` from the sandbox — always from D's machine.
