@@ -2,8 +2,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { StageBadge } from "./StageBadge";
 import { format } from "date-fns";
-import type { Candidate } from "@/hooks/useRecruiting";
-import { AlertTriangle } from "lucide-react";
+import type { Candidate, ApplicationStat } from "@/hooks/useRecruiting";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   b2b_setter: "B2B Setter",
@@ -26,10 +26,17 @@ export function appliedRoleLabel(c: Candidate): string {
 
 interface Props {
   candidates: Candidate[];
+  /**
+   * Per-candidate application count + latest submission date, from
+   * `recruiting_applications`. Optional so callers that don't care about
+   * repeat-applicant surfacing (or don't have the data yet on first paint)
+   * still render fine — the table falls back to created_at.
+   */
+  appStats?: Map<string, ApplicationStat>;
   onRowClick: (id: string) => void;
 }
 
-export function CandidateTable({ candidates, onRowClick }: Props) {
+export function CandidateTable({ candidates, appStats, onRowClick }: Props) {
   if (candidates.length === 0) {
     return (
       <div className="text-sm text-muted-foreground py-8 text-center">
@@ -54,13 +61,33 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {candidates.map((c) => (
+        {candidates.map((c) => {
+          const stat = appStats?.get(c.id);
+          const appliedAt = stat?.latestAt ?? c.created_at;
+          const isRepeat = (stat?.count ?? 0) > 1;
+          return (
           <TableRow
             key={c.id}
-            className="cursor-pointer hover:bg-muted/50"
+            className={`cursor-pointer hover:bg-muted/50 ${
+              isRepeat ? "bg-amber-50 hover:bg-amber-100" : ""
+            }`}
             onClick={() => onRowClick(c.id)}
           >
-            <TableCell className="font-medium">{c.full_name ?? "—"}</TableCell>
+            <TableCell className="font-medium">
+              <div className="flex items-center gap-2">
+                <span>{c.full_name ?? "—"}</span>
+                {isRepeat && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500 text-amber-700 gap-1 text-xs"
+                    title={`Applied ${stat!.count} times — first on ${format(new Date(stat!.firstAt), "MMM d, yyyy")}`}
+                  >
+                    <RotateCw className="h-3 w-3" />
+                    {stat!.count}×
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
             <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
             <TableCell>{appliedRoleLabel(c)}</TableCell>
             <TableCell>
@@ -79,7 +106,12 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
             <TableCell>{c.english_level_self}</TableCell>
             <TableCell>{c.city ?? "—"}</TableCell>
             <TableCell className="text-muted-foreground text-sm">
-              {format(new Date(c.created_at), "MMM d, HH:mm")}
+              {format(new Date(appliedAt), "MMM d, HH:mm")}
+              {isRepeat && (
+                <div className="text-xs text-muted-foreground/70">
+                  First: {format(new Date(stat!.firstAt), "MMM d")}
+                </div>
+              )}
             </TableCell>
             <TableCell>
               <StageBadge stage={c.stage} />
@@ -101,7 +133,8 @@ export function CandidateTable({ candidates, onRowClick }: Props) {
               )}
             </TableCell>
           </TableRow>
-        ))}
+          );
+        })}
       </TableBody>
     </Table>
   );

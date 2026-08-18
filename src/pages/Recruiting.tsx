@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useCandidates } from "@/hooks/useRecruiting";
+import { useCandidates, useApplicationStats } from "@/hooks/useRecruiting";
 import { CandidateTable, appliedRoleLabel } from "@/components/recruiting/CandidateTable";
 import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
 import { UpcomingInterviews } from "@/components/recruiting/UpcomingInterviews";
@@ -20,6 +20,10 @@ const STAGE_FILTER_FOLLOWUP = "needs_followup";
 
 export default function Recruiting() {
   const { data: candidates = [], isLoading, error } = useCandidates();
+  // Per-candidate application count + latest submission date, so re-applicants
+  // bubble to the top and the table shows the most recent apply date instead of
+  // the original one.
+  const { data: appStats } = useApplicationStats();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -68,9 +72,15 @@ export default function Recruiting() {
     }
   };
 
+  // Effective "applied at" for sorting: latest submission from appStats, or
+  // fall back to the candidate row's created_at when we have no stat yet (older
+  // rows created before recruiting_applications existed, or referral inserts).
+  const latestAppliedAt = (id: string, createdAt: string): string =>
+    appStats?.get(id)?.latestAt ?? createdAt;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return candidates.filter((c) => {
+    const rows = candidates.filter((c) => {
       if (stageFilter === STAGE_FILTER_ACTIVE) {
         if (c.stage === "hired" || c.stage === "passed" || c.stage === "withdrew" || c.stage === "ghosted") {
           return false;
@@ -88,7 +98,16 @@ export default function Recruiting() {
         (c.city ?? "").toLowerCase().includes(q)
       );
     });
-  }, [candidates, search, stageFilter, roleFilter]);
+    // Re-sort by latest application date DESC so re-applicants surface at the
+    // top the day they come back, instead of staying frozen at their original
+    // application date. Server order stays created_at DESC as a stable tiebreak
+    // for anything without stats (Array.prototype.sort is stable).
+    return [...rows].sort((a, b) => {
+      const bAt = latestAppliedAt(b.id, b.created_at);
+      const aAt = latestAppliedAt(a.id, a.created_at);
+      return bAt.localeCompare(aAt);
+    });
+  }, [candidates, search, stageFilter, roleFilter, appStats]);
 
   return (
     <div className="space-y-4">
@@ -160,7 +179,7 @@ export default function Recruiting() {
         <div className="text-sm text-destructive">Failed to load candidates: {error.message}</div>
       )}
 
-      <CandidateTable candidates={filtered} onRowClick={setSelectedId} />
+      <CandidateTable candidates={filtered} appStats={appStats} onRowClick={setSelectedId} />
 
       <CandidateDrawer candidateId={selectedId} onClose={handleCloseDrawer} />
     </div>
