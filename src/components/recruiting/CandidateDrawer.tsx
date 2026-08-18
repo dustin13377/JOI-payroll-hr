@@ -26,7 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { UserPlus, MessageCircle, Mail, CalendarClock, CheckCircle2, XCircle, Star } from "lucide-react";
+import { UserPlus, MessageCircle, Mail, CalendarClock, CheckCircle2, XCircle, Star, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { isTerminal } from "@/lib/recruiting/stages";
 import {
@@ -476,6 +476,24 @@ export function CandidateDrawer({ candidateId, onClose }: Props) {
                   <UserPlus className="mr-2 h-4 w-4" />
                   Hire as employee
                 </Button>
+              )}
+
+              {/*
+                Silent-failure guard: when a phone is on file but doesn't parse
+                (typo, extra digit, foreign format the normalizer doesn't know)
+                the WhatsApp buttons go disabled with only a tooltip explaining
+                why — which recruiters miss. Surface the reason inline so it's
+                obvious the phone needs an edit, not that the app is stuck.
+              */}
+              {candidate.phone && !normalizePhone(candidate.phone) && !isTerminal(candidate.stage) && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div>
+                    Phone number <code className="font-mono">{candidate.phone}</code> isn't in a format we recognize
+                    (expects a 10-digit MX number, or with country code).
+                    Edit the phone in the Contact section below to enable WhatsApp.
+                  </div>
+                </div>
               )}
 
               {/*

@@ -324,6 +324,36 @@ export default function PrePayroll() {
 
   async function handleLock() {
     if (!period || !sel || !monthInfo) return;
+
+    // Pre-lock warning: anyone about to be paid for a scheduled day that hasn't
+    // finished yet. Base pay is monthly/2 regardless, so an "upcoming" day is
+    // silently paid unless the lock is deferred (or the person is docked later
+    // in PP2). This is the Isaías/Alejandro scare from Aug 2026 — locking early
+    // pays no-shows because their missing days haven't crossed into "missed".
+    const upcomingByEmp = rows
+      .map(({ c, bar }) => {
+        const upcoming = bar.filter((d) => d.kind === "upcoming").map((d) => d.date);
+        return { name: c.fullName, empId: c.employeeDisplayId, upcoming };
+      })
+      .filter((x) => x.upcoming.length > 0);
+
+    if (upcomingByEmp.length > 0) {
+      const lines = upcomingByEmp
+        .map((x) => {
+          const dates = x.upcoming.map((d) => Number(d.split("-")[2])).join(", ");
+          return `  • ${x.name} (${x.empId}) — day${x.upcoming.length > 1 ? "s" : ""} ${dates}`;
+        })
+        .join("\n");
+      const warn = window.confirm(
+        `⚠️  Heads up — ${upcomingByEmp.length} ${
+          upcomingByEmp.length === 1 ? "person is" : "people are"
+        } about to be paid for scheduled days that haven't finished yet:\n\n${lines}\n\n` +
+          `Base pay includes these days. If someone doesn't show up, you can't dock them after the lock.\n\n` +
+          `Continue with the lock anyway?`
+      );
+      if (!warn) return;
+    }
+
     const ok = window.confirm(
       `Lock ${sel.label} (${monthInfo.monthName})? This freezes everyone's pay for this period and opens the next one.`
     );

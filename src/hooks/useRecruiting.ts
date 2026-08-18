@@ -61,6 +61,52 @@ export interface Candidate {
 
 const CANDIDATES_KEY = ["recruiting", "candidates"] as const;
 
+// ---------------------------------------------------------------------------
+// Application stats — every submission is now recorded append-only in
+// `recruiting_applications` (PR #112). The candidate row itself is preserved
+// so recruiter-owned fields don't get clobbered by a re-application, but that
+// also means candidate.created_at is the FIRST application date, not the most
+// recent. Without this hook the Recruiting list would keep sorting re-applicants
+// by their original date and never surface that they've come back.
+//
+// Volume today: ~365 rows across ~360 candidates, so a single grouped read +
+// client-side aggregation is fine. If this grows big enough to matter we can
+// swap to a Postgres view (v_candidate_application_stats).
+// ---------------------------------------------------------------------------
+export interface ApplicationStat {
+  count: number;
+  firstAt: string;
+  latestAt: string;
+}
+
+const APP_STATS_KEY = ["recruiting", "application-stats"] as const;
+
+export function useApplicationStats() {
+  return useQuery({
+    queryKey: APP_STATS_KEY,
+    queryFn: async (): Promise<Map<string, ApplicationStat>> => {
+      const { data, error } = await (supabase as any)
+        .from("recruiting_applications")
+        .select("candidate_id, received_at")
+        .order("received_at", { ascending: false });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ candidate_id: string; received_at: string }>;
+      const stats = new Map<string, ApplicationStat>();
+      for (const r of rows) {
+        const prev = stats.get(r.candidate_id);
+        if (!prev) {
+          stats.set(r.candidate_id, { count: 1, firstAt: r.received_at, latestAt: r.received_at });
+        } else {
+          prev.count += 1;
+          if (r.received_at < prev.firstAt) prev.firstAt = r.received_at;
+          if (r.received_at > prev.latestAt) prev.latestAt = r.received_at;
+        }
+      }
+      return stats;
+    },
+  });
+}
+
 export function useCandidates() {
   return useQuery({
     queryKey: CANDIDATES_KEY,
