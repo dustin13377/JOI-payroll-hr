@@ -79,6 +79,8 @@ function netTotal(
     timeOffDays: number;
     holidayDaysWorked: number;
     partialDayDeduction: number;
+    periodDays: number;
+    onStaffDays: number;
   }[],
   // Advance instalments by employee. Must match what the per-row cards use, or
   // the month total silently disagrees with the sum of the rows under it.
@@ -101,6 +103,11 @@ function netTotal(
         kpiBonus: c.kpiBonusAmount / 2,
         partialDayDeduction: c.partialDayDeduction,
         advanceDeduction: advanceByEmp?.get(c.employeeId) ?? 0,
+        // Prorate base for mid-period hires/terminations. Full-period employees
+        // give onStaffDays === periodDays so the engine returns the unchanged
+        // monthly/2 — this is a no-op for the 90%+ case.
+        periodDays: c.periodDays,
+        onStaffDays: c.onStaffDays,
       }).net
     );
   }, 0);
@@ -302,6 +309,11 @@ export default function PrePayroll() {
           // Short scheduled days (<6h worked) pay only hours worked.
           partialDayDeduction: c.partialDayDeduction,
           advanceDeduction: advanceByEmp.get(c.employeeId) ?? 0,
+          // Prorate base for mid-period hires/terminations. Full-period
+          // employees give onStaffDays === periodDays so the engine returns
+          // the unchanged monthly/2 — this is a no-op for the 90%+ case.
+          periodDays: c.periodDays,
+          onStaffDays: c.onStaffDays,
         });
         let mkLeft = makeupDays;
         const bar = c.days.map((d) => {
@@ -563,7 +575,12 @@ export default function PrePayroll() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Chip icon={<Wallet className="h-4 w-4" />} label="Base ½" value={r.base} />
+                <Chip
+                  icon={<Wallet className="h-4 w-4" />}
+                  label="Base ½"
+                  value={r.base}
+                  sub={c.onStaffDays < c.periodDays ? `${c.onStaffDays}/${c.periodDays} days on staff` : undefined}
+                />
                 <Chip icon={<Target className="h-4 w-4" />} label="KPI ½" value={r.kpiBonus} sign="+" sub={c.kpiBonusAmount ? `${formatMXN(c.kpiBonusAmount)}/mo` : "none"} />
                 <Chip icon={<CalendarMinus className="h-4 w-4" />} label="Missed" value={r.missedDeduction} sign="-" sub={c.daysAbsent ? `${c.daysAbsent} days` : "none"} />
                 <Chip icon={<Timer className="h-4 w-4" />} label="Short days" value={r.partialDayDeduction} sign="-" sub={c.partialDayCount ? `${c.partialDayCount} × <6h` : "none"} />

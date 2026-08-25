@@ -9,6 +9,9 @@
  *
  * Rules (quincenal, gross / pre-tax — accountant handles IMSS/ISR):
  *   base            = monthly / 2        (half-month; everyone is quincenal)
+ *                     Prorated to (onStaffDays / periodDays) when the employee
+ *                     was only on staff for part of the period (mid-period hire
+ *                     or termination). Full-period employees are unaffected.
  *   daily           = monthly / 30       (LFT salario diario)
  *   missed day      = − daily            (scheduled day absent)
  *   makeup day      = + daily            (off-day worked that covers a miss; no $1,000)
@@ -53,6 +56,15 @@ export interface EngineInputs {
    * balance and returns 0 once settled.
    */
   advanceDeduction?: number;
+  /**
+   * Calendar days in the pay period. Together with onStaffDays this prorates
+   * base for mid-period hires/terminations. Leave both undefined (or equal) to
+   * preserve the legacy flat monthly/2 behavior — full-period employees are
+   * unaffected either way.
+   */
+  periodDays?: number;
+  /** Calendar days the employee was on staff during the period (bounded by hire/term). */
+  onStaffDays?: number;
 }
 
 export interface EngineResult {
@@ -96,7 +108,22 @@ export function classifyOffDays(
 export function computeNetPay(i: EngineInputs): EngineResult {
   const monthly = i.monthlyBase || 0;
   const daily = monthly / 30;
-  const base = r2(monthly / 2);
+
+  // Base pay is normally monthly/2 (quincenal). Callers opt in to proration by
+  // passing BOTH periodDays and onStaffDays; when either is missing we fall
+  // back to the legacy flat monthly/2 so any caller that doesn't opt in stays
+  // identical to before. If both are supplied, the half-month is scaled by
+  // clamp01(onStaffDays / periodDays):
+  //   • fully on staff (16/16)  → base = monthly / 2  (unchanged)
+  //   • hired mid-period (8/16) → base = monthly / 4
+  //   • not on staff at all (0) → base = 0
+  const optedIn =
+    i.periodDays !== undefined &&
+    i.onStaffDays !== undefined &&
+    i.periodDays > 0;
+  const rawFraction = optedIn ? (i.onStaffDays as number) / (i.periodDays as number) : 1;
+  const baseFraction = Math.max(0, Math.min(1, rawFraction));
+  const base = r2((monthly / 2) * baseFraction);
 
   const missedDeduction = r2((i.missedDays ?? 0) * daily);
   const makeupCredit = r2((i.makeupDays ?? 0) * daily);

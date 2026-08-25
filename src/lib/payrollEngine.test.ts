@@ -14,6 +14,55 @@ describe("computeNetPay — base & daily", () => {
   });
 });
 
+describe("computeNetPay — base proration for mid-period hires/terminations", () => {
+  it("full-period employee is unchanged (opt-in with onStaffDays === periodDays)", () => {
+    const r = computeNetPay({ monthlyBase: 18000, periodDays: 16, onStaffDays: 16 });
+    expect(r.base).toBe(9000);
+    expect(r.net).toBe(9000);
+  });
+  it("legacy caller with neither field gets monthly/2 (backward compatible)", () => {
+    const r = computeNetPay({ monthlyBase: 18000 });
+    expect(r.base).toBe(9000);
+  });
+  it("mid-period hire (8 of 16 calendar days on staff) → half of half-month", () => {
+    // The Aug 24 hire case: PP2 = Aug 16–31 (16 days), on staff Aug 24–31 (8 days).
+    const r = computeNetPay({ monthlyBase: 18000, periodDays: 16, onStaffDays: 8 });
+    expect(r.base).toBe(4500);
+    expect(r.net).toBe(4500);
+  });
+  it("mid-period termination clamps at the last day on staff", () => {
+    // Terminated day 5 of a 15-day period → 5/15 = 1/3 of half-month.
+    const r = computeNetPay({ monthlyBase: 12000, periodDays: 15, onStaffDays: 5 });
+    expect(r.base).toBe(2000); // 12000/2 × 5/15
+  });
+  it("employee not on staff at all this period pays zero base", () => {
+    const r = computeNetPay({ monthlyBase: 18000, periodDays: 16, onStaffDays: 0 });
+    expect(r.base).toBe(0);
+    expect(r.net).toBe(0);
+  });
+  it("bad input (onStaffDays > periodDays) clamps at monthly/2 rather than paying more", () => {
+    const r = computeNetPay({ monthlyBase: 12000, periodDays: 15, onStaffDays: 999 });
+    expect(r.base).toBe(6000);
+  });
+  it("zero periodDays does not divide by zero — falls back to monthly/2", () => {
+    const r = computeNetPay({ monthlyBase: 12000, periodDays: 0, onStaffDays: 0 });
+    expect(r.base).toBe(6000);
+  });
+  it("only one of the two fields provided → falls back to monthly/2 (no half-configured proration)", () => {
+    expect(computeNetPay({ monthlyBase: 12000, periodDays: 16 }).base).toBe(6000);
+    expect(computeNetPay({ monthlyBase: 12000, onStaffDays: 8 }).base).toBe(6000);
+  });
+  it("prorated base composes correctly with a missed-day deduction", () => {
+    // Hired mid-period AND missed a day: base is prorated, miss docks daily (monthly/30).
+    const r = computeNetPay({
+      monthlyBase: 18000, periodDays: 16, onStaffDays: 8, missedDays: 1,
+    });
+    expect(r.base).toBe(4500);
+    expect(r.missedDeduction).toBe(600); // 18000/30
+    expect(r.net).toBe(3900);
+  });
+});
+
 describe("computeNetPay — partial (short) days", () => {
   it("docks the unworked fraction of a short day", () => {
     // Caller computes the peso amount upstream; engine just subtracts it.
