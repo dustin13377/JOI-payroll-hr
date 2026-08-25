@@ -19,6 +19,10 @@ export interface ComputedPayroll {
   partialDayCount: number;
   /** Peso amount docked across those short days (unworked fraction × daily). */
   partialDayDeduction: number;
+  /** Calendar days in the pay period (end − start + 1). */
+  periodDays: number;
+  /** Calendar days the employee was on staff during the period (bounded by hire/term). */
+  onStaffDays: number;
   days: { date: string; dow: number; status: PayrollDayStatus }[];
 }
 
@@ -284,6 +288,20 @@ export function usePayrollComputed(
         const termTs: string | null = (emp.terminated_at as string | null) ?? null;
         const termDate: string | null = termTs ? fmtDate(new Date(termTs)) : null;
 
+        // Proration window: how many CALENDAR days of the period the employee
+        // was on staff. Used by the engine to prorate base pay for mid-period
+        // hires/terminations. Full-period employees give onStaffDays ===
+        // periodDays and the engine returns the unchanged monthly/2.
+        const periodDays = allDates.length;
+        const effectiveStart = hireDate && hireDate > pStart ? hireDate : pStart;
+        const effectiveEnd = termDate && termDate < pEnd ? termDate : pEnd;
+        const onStaffDays = (() => {
+          if (effectiveEnd < effectiveStart) return 0;
+          const ms =
+            parseDate(effectiveEnd).getTime() - parseDate(effectiveStart).getTime();
+          return Math.round(ms / 86_400_000) + 1; // inclusive
+        })();
+
         // Scheduled days: dates whose day-of-week is in daysOfWeek, minus:
         //   - days before hire_date
         //   - days after termination_at
@@ -432,6 +450,8 @@ export function usePayrollComputed(
           timeOffDays: vacationPremiumDays,
           partialDayCount: partialDates.size,
           partialDayDeduction,
+          periodDays,
+          onStaffDays,
           days,
         };
       });
