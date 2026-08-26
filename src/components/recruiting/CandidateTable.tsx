@@ -2,8 +2,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { StageBadge } from "./StageBadge";
 import { format } from "date-fns";
-import type { Candidate, ApplicationStat } from "@/hooks/useRecruiting";
-import { AlertTriangle, RotateCw } from "lucide-react";
+import {
+  useAllClientApplicantPreferences,
+  type Candidate,
+  type ApplicationStat,
+} from "@/hooks/useRecruiting";
+import { AlertTriangle, RotateCw, UserCheck, Pause, X } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   b2b_setter: "B2B Setter",
@@ -37,6 +41,11 @@ interface Props {
 }
 
 export function CandidateTable({ candidates, appStats, onRowClick }: Props) {
+  // Client-driven row highlights: want_interview -> green, back_burner -> sky.
+  // Set by clients via the portal (ClientRoleDetail). Cached by react-query so
+  // multiple mounts share the fetch; safe to call at row-container level.
+  const { data: clientPrefs = new Map() } = useAllClientApplicantPreferences();
+
   if (candidates.length === 0) {
     return (
       <div className="text-sm text-muted-foreground py-8 text-center">
@@ -65,17 +74,59 @@ export function CandidateTable({ candidates, appStats, onRowClick }: Props) {
           const stat = appStats?.get(c.id);
           const appliedAt = stat?.latestAt ?? c.created_at;
           const isRepeat = (stat?.count ?? 0) > 1;
+          const pref = clientPrefs.get(c.id);
+          // Client preference takes precedence over the amber repeat-applicant
+          // shade — client signal is more actionable than "they came back."
+          // Rejected rows just get a strikethrough hint via the name cell; no
+          // full-row color (rejected candidates already get filtered on the
+          // client side, so on JOI's side we only need to know it happened).
+          const rowClass = (() => {
+            if (pref === "want_interview") return "bg-green-50 hover:bg-green-100";
+            if (pref === "back_burner") return "bg-sky-50 hover:bg-sky-100";
+            if (isRepeat) return "bg-amber-50 hover:bg-amber-100";
+            return "hover:bg-muted/50";
+          })();
           return (
           <TableRow
             key={c.id}
-            className={`cursor-pointer hover:bg-muted/50 ${
-              isRepeat ? "bg-amber-50 hover:bg-amber-100" : ""
-            }`}
+            className={`cursor-pointer ${rowClass}`}
             onClick={() => onRowClick(c.id)}
           >
             <TableCell className="font-medium">
               <div className="flex items-center gap-2">
-                <span>{c.full_name ?? "—"}</span>
+                <span className={pref === "reject" ? "line-through text-muted-foreground" : ""}>
+                  {c.full_name ?? "—"}
+                </span>
+                {pref === "want_interview" && (
+                  <Badge
+                    variant="outline"
+                    className="border-green-600 text-green-700 gap-1 text-xs"
+                    title="Client wants to interview this candidate"
+                  >
+                    <UserCheck className="h-3 w-3" />
+                    Client: interview
+                  </Badge>
+                )}
+                {pref === "back_burner" && (
+                  <Badge
+                    variant="outline"
+                    className="border-sky-600 text-sky-700 gap-1 text-xs"
+                    title="Client wants this candidate on the back burner"
+                  >
+                    <Pause className="h-3 w-3" />
+                    Client: back burner
+                  </Badge>
+                )}
+                {pref === "reject" && (
+                  <Badge
+                    variant="outline"
+                    className="border-rose-500 text-rose-700 gap-1 text-xs"
+                    title="Client rejected — mark reviewed"
+                  >
+                    <X className="h-3 w-3" />
+                    Client: rejected
+                  </Badge>
+                )}
                 {isRepeat && (
                   <Badge
                     variant="outline"

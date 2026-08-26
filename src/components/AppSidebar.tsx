@@ -26,6 +26,7 @@ import {
   Banknote,
   Target,
   Activity,
+  Inbox,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,6 +34,7 @@ import { useSalesAccess } from "@/hooks/useSalesLeads";
 import { usePendingHrDocumentRequestsCount } from "@/hooks/useHrDocumentRequests";
 import { usePendingTimeOffCount } from "@/hooks/useTimeOffCount";
 import { usePendingAgentReviewsCount } from "@/hooks/useAgentReviews";
+import { useOpenClientMessagesCount } from "@/hooks/useClientMessages";
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +52,9 @@ import {
 // Leadership (owner / admin / manager) — sees everything including pay
 const leadershipItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  // Client Messages sits right below Dashboard so an incoming note/question/
+  // write-up request from a client isn't lost below the fold in the HR block.
+  { title: "Client Messages", url: "/admin/client-messages", icon: Inbox },
   { title: "Employees", url: "/empleados", icon: Users },
   { title: "Payroll", url: "/admin/payroll", icon: DollarSign },
   { title: "Payroll History", url: "/historial", icon: History },
@@ -121,12 +126,16 @@ export function AppSidebar() {
   const { data: pendingHrDocCount = 0 } = usePendingHrDocumentRequestsCount(canApprove);
   const { data: pendingTimeOffCount = 0 } = usePendingTimeOffCount(canApprove);
   const { data: pendingReviewsCount = 0 } = usePendingAgentReviewsCount(canApprove);
+  // Client Messages inbox is leadership-only (RLS gates SELECT), so we only
+  // hit that count query for leadership sessions.
+  const { data: openClientMessagesCount = 0 } = useOpenClientMessagesCount(isLeadership);
   const badgeCounts: Record<string, number> = {
     "/hr/document-queue": pendingHrDocCount,
     // Sidebar badge moved here when /solicitudes was retired. Counts pending_tl +
     // pending_hr from the unified vacation_requests table.
     "/hr/time-off": pendingTimeOffCount,
     "/reviews": pendingReviewsCount,
+    "/admin/client-messages": openClientMessagesCount,
   };
 
   // Determine which items to show based on title

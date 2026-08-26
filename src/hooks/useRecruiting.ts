@@ -254,28 +254,142 @@ export function useAddPosition() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Client applicant preferences (internal view). Populated by the client
+// portal — recruiters here just READ to color candidate rows in the table.
+// See project_client_applicant_preferences memory + CandidateTable row bg.
+// ---------------------------------------------------------------------------
+
+export type ClientApplicantPref = "reject" | "back_burner" | "want_interview";
+
+interface ClientApplicantPrefRow {
+  candidate_id: string;
+  preference: ClientApplicantPref;
+  client_id: string;
+}
+
+const ALL_PREFS_KEY = ["recruiting", "client-applicant-preferences"] as const;
+
 /**
- * Assigns (or clears) the client this position recruits for. Applicants whose
- * `applied_position` matches this position's name become visible in the linked
- * client's portal automatically.
+ * Reads ALL client applicant preferences (leadership RLS returns everything).
+ * Returned as a Map keyed by candidate_id so the row renderer can lookup in
+ * O(1). Assumes one row per candidate (unique constraint on the table).
  */
-export function useUpdatePositionClient() {
+export function useAllClientApplicantPreferences() {
+  return useQuery({
+    queryKey: ALL_PREFS_KEY,
+    queryFn: async (): Promise<Map<string, ClientApplicantPref>> => {
+      const { data, error } = await (supabase as any)
+        .from("client_applicant_preferences")
+        .select("candidate_id, preference, client_id");
+      if (error) throw error;
+      const m = new Map<string, ClientApplicantPref>();
+      for (const r of (data ?? []) as ClientApplicantPrefRow[]) {
+        m.set(r.candidate_id, r.preference);
+      }
+      return m;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Roles -> client mapping (applied_position, not position_fits).
+//
+// `recruiting_positions` above is the tag list for position_fits (recruiter
+// categorization). This section maps candidate.applied_position — the exact
+// role string an applicant chose via the ad URL — to a client, which is what
+// actually drives the client portal ("show me applicants for our roles").
+//
+// A role is "known" if it appears as a distinct applied_position on any
+// candidate, OR if it's been assigned to a client (recruiting_role_clients).
+// The dialog lists the union so pre-launch clients like Copper Rock can have
+// roles registered before their first applicant lands.
+// ---------------------------------------------------------------------------
+
+export interface RoleWithClient {
+  role_name: string;
+  client_id: string | null;
+}
+
+const ROLES_KEY = ["recruiting", "roles"] as const;
+
+export function useRoles() {
+  return useQuery({
+    queryKey: ROLES_KEY,
+    queryFn: async (): Promise<RoleWithClient[]> => {
+      const [candidatesRes, mappingsRes] = await Promise.all([
+        supabase
+          .from("recruiting_candidates")
+          .select("applied_position")
+          .not("applied_position", "is", null),
+        (supabase as any)
+          .from("recruiting_role_clients")
+          .select("role_name, client_id"),
+      ]);
+      if (candidatesRes.error) throw candidatesRes.error;
+      if (mappingsRes.error) throw mappingsRes.error;
+
+      const map = new Map<string, string | null>();
+      for (const row of (mappingsRes.data ?? []) as Array<{
+        role_name: string;
+        client_id: string;
+      }>) {
+        map.set(row.role_name, row.client_id);
+      }
+      for (const row of (candidatesRes.data ?? []) as Array<{
+        applied_position: string | null;
+      }>) {
+        const name = row.applied_position?.trim();
+        if (!name) continue;
+        if (!map.has(name)) map.set(name, null);
+      }
+      return Array.from(map.entries())
+        .map(([role_name, client_id]) => ({ role_name, client_id }))
+        .sort((a, b) => a.role_name.localeCompare(b.role_name));
+    },
+  });
+}
+
+/**
+ * Assigns a role to a client (upsert). Applicants whose applied_position
+ * matches will start showing up in that client's portal.
+ */
+export function useAssignRoleClient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      positionId,
+      roleName,
       clientId,
     }: {
-      positionId: string;
-      clientId: string | null;
+      roleName: string;
+      clientId: string;
     }) => {
+      const trimmed = roleName.trim();
+      if (!trimmed) throw new Error("Role name is empty");
       const { error } = await (supabase as any)
-        .from("recruiting_positions")
-        .update({ client_id: clientId })
-        .eq("id", positionId);
+        .from("recruiting_role_clients")
+        .upsert({ role_name: trimmed, client_id: clientId }, { onConflict: "role_name" });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: POSITIONS_KEY }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  });
+}
+
+/**
+ * Removes a role's client assignment. The role stays "known" if any candidate
+ * still has it as their applied_position; otherwise it drops off the list.
+ */
+export function useUnassignRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (roleName: string) => {
+      const { error } = await (supabase as any)
+        .from("recruiting_role_clients")
+        .delete()
+        .eq("role_name", roleName);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
   });
 }
 

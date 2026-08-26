@@ -1,5 +1,9 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Users, BarChart3, CalendarCheck } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, CalendarCheck, MessageSquarePlus, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SendAgentFeedbackDialog } from "@/components/client/SendAgentFeedbackDialog";
+import { useMyAgentFeedback } from "@/hooks/useClientPortal";
 import {
   Card,
   CardContent,
@@ -27,11 +31,20 @@ import {
 
 export default function ClientCampaignDetail() {
   const { id: campaignId } = useParams<{ id: string }>();
+  const [feedbackTarget, setFeedbackTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data: campaigns = [], isLoading: campaignsLoading } = useClientCampaigns();
   const { data: employees = [], isLoading: employeesLoading } = useClientEmployees();
   const { data: eodLogs = [], isLoading: eodLoading } = useClientEodLogsThisWeek(campaignId);
   const { data: holidaySummary } = useClientHolidaySummary(campaignId);
+  const { data: myFeedback = [] } = useMyAgentFeedback();
+
+  // "Do I already have open feedback in flight for this agent?" — shows a
+  // small check next to the Send button so the client doesn't wonder if
+  // JOI got the previous one.
+  const openByEmployee = new Set(
+    myFeedback.filter((f) => f.status !== "resolved").map((f) => f.employee_id),
+  );
 
   const isLoading = campaignsLoading || employeesLoading || eodLoading;
 
@@ -83,11 +96,11 @@ export default function ClientCampaignDetail() {
       {/* Header */}
       <div>
         <Link
-          to="/client"
+          to="/client/team"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          All campaigns
+          Back to Team
         </Link>
         <h2 className="text-2xl font-bold tracking-tight">
           {campaign?.name ?? "Campaign"}
@@ -191,32 +204,75 @@ export default function ClientCampaignDetail() {
                   <TableHead>Name</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Send message</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {campaignEmployees.map((emp) => (
-                  <TableRow key={emp.id}>
-                    <TableCell className="font-medium">
-                      {emp.display_name ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground capitalize">
-                      {emp.title?.replace(/_/g, " ") ?? "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={emp.is_active ? "outline" : "secondary"}
-                        className="text-xs"
-                      >
-                        {emp.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {campaignEmployees.map((emp) => {
+                  const hasOpen = emp.id ? openByEmployee.has(emp.id) : false;
+                  return (
+                    <TableRow key={emp.id}>
+                      <TableCell className="font-medium">
+                        {emp.display_name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground capitalize">
+                        {emp.title?.replace(/_/g, " ") ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={emp.is_active ? "outline" : "secondary"}
+                          className="text-xs"
+                        >
+                          {emp.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="inline-flex items-center gap-2">
+                          {hasOpen && (
+                            <span
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                              title="You have a message in progress about this agent."
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              Sent
+                            </span>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              emp.id &&
+                              setFeedbackTarget({
+                                id: emp.id,
+                                name: emp.display_name ?? "this agent",
+                              })
+                            }
+                            disabled={!emp.id}
+                            className="gap-1"
+                          >
+                            <MessageSquarePlus className="h-3.5 w-3.5" />
+                            Send
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+
+      {/* Feedback dialog (portal-scoped, one at a time) */}
+      {feedbackTarget && (
+        <SendAgentFeedbackDialog
+          open={!!feedbackTarget}
+          onOpenChange={(o) => !o && setFeedbackTarget(null)}
+          employeeId={feedbackTarget.id}
+          employeeName={feedbackTarget.name}
+        />
+      )}
 
       {/* Section 3 — Upcoming holiday */}
       {holidaySummary && (
