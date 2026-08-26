@@ -4,12 +4,13 @@ import { useCandidates, useApplicationStats } from "@/hooks/useRecruiting";
 import { CandidateTable, appliedRoleLabel } from "@/components/recruiting/CandidateTable";
 import { CandidateDrawer } from "@/components/recruiting/CandidateDrawer";
 import { UpcomingInterviews } from "@/components/recruiting/UpcomingInterviews";
+import { ManagePositionsDialog } from "@/components/recruiting/ManagePositionsDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { STAGES, STAGE_LABELS } from "@/lib/recruiting/stages";
 import { needsFollowUp } from "@/lib/recruiting/followup";
-import { Check, Copy, ExternalLink, Search } from "lucide-react";
+import { Check, Copy, ExternalLink, Search, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
 const BOOKING_URL = "https://calendar.app.google/nw7EubnaE3gGhaaS8";
@@ -30,6 +31,7 @@ export default function Recruiting() {
   const [stageFilter, setStageFilter] = useState<string>(STAGE_FILTER_ACTIVE);
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [copied, setCopied] = useState(false);
+  const [managePositionsOpen, setManagePositionsOpen] = useState(false);
 
   // Distinct job titles present across ALL candidates (not just the current
   // stage view), so switching stages never empties the role dropdown. Uses the
@@ -121,6 +123,15 @@ export default function Recruiting() {
           </p>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setManagePositionsOpen(true)}
+            title="Assign each position to a client"
+          >
+            <Settings2 className="mr-2 h-4 w-4" />
+            Manage positions
+          </Button>
           <Button variant="outline" size="sm" onClick={copyBookingLink}>
             {copied ? (
               <Check className="mr-2 h-4 w-4 text-green-600" />
@@ -136,6 +147,11 @@ export default function Recruiting() {
           </Button>
         </div>
       </div>
+
+      <ManagePositionsDialog
+        open={managePositionsOpen}
+        onOpenChange={setManagePositionsOpen}
+      />
 
       <UpcomingInterviews />
 

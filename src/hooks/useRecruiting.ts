@@ -210,6 +210,10 @@ export function useCreateReferralCandidate() {
 export interface RecruitingPosition {
   id: string;
   name: string;
+  // Client this position recruits for. NULL = internal role. Applicants whose
+  // `applied_position` matches this name will show up in that client's portal.
+  // Types aren't regenerated yet; cast on the update path handles that.
+  client_id: string | null;
 }
 
 const POSITIONS_KEY = ["recruiting", "positions"] as const;
@@ -218,9 +222,9 @@ export function usePositions() {
   return useQuery({
     queryKey: POSITIONS_KEY,
     queryFn: async (): Promise<RecruitingPosition[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("recruiting_positions")
-        .select("id, name")
+        .select("id, name, client_id")
         .order("name");
       if (error) throw error;
       return (data ?? []) as RecruitingPosition[];
@@ -241,10 +245,35 @@ export function useAddPosition() {
         .single();
       if (error) {
         // Unique violation = someone already added it; treat as success.
-        if (error.code === "23505") return { id: "", name: trimmed };
+        if (error.code === "23505") return { id: "", name: trimmed } as RecruitingPosition;
         throw error;
       }
-      return data as RecruitingPosition;
+      return { ...(data as { id: string; name: string }), client_id: null } as RecruitingPosition;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: POSITIONS_KEY }),
+  });
+}
+
+/**
+ * Assigns (or clears) the client this position recruits for. Applicants whose
+ * `applied_position` matches this position's name become visible in the linked
+ * client's portal automatically.
+ */
+export function useUpdatePositionClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      positionId,
+      clientId,
+    }: {
+      positionId: string;
+      clientId: string | null;
+    }) => {
+      const { error } = await (supabase as any)
+        .from("recruiting_positions")
+        .update({ client_id: clientId })
+        .eq("id", positionId);
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: POSITIONS_KEY }),
   });
