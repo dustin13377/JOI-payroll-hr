@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { UserPlus, Users, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -27,13 +27,11 @@ export function ClientLayout({ children }: ClientLayoutProps) {
           />
           <div>
             <p className="text-xs font-bold tracking-tight">Client Portal</p>
-            <p className="text-[10px] uppercase tracking-widest text-sidebar-foreground/40 font-medium">
-              Read-only
-            </p>
           </div>
         </div>
 
-        {/* Nav */}
+        {/* Nav — two-tab split: hiring (Recruitment) vs live-agent management
+             (Team). Team is stubbed until write features ship. */}
         <nav className="flex-1 p-2 space-y-1">
           <Link
             to="/client"
@@ -42,8 +40,18 @@ export function ClientLayout({ children }: ClientLayoutProps) {
               isActive("/client") && "bg-sidebar-accent text-sidebar-primary font-semibold",
             )}
           >
-            <LayoutDashboard className="h-4 w-4 shrink-0" />
-            Dashboard
+            <UserPlus className="h-4 w-4 shrink-0" />
+            Recruitment
+          </Link>
+          <Link
+            to="/client/team"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent",
+              isActive("/client/team") && "bg-sidebar-accent text-sidebar-primary font-semibold",
+            )}
+          >
+            <Users className="h-4 w-4 shrink-0" />
+            Team
           </Link>
         </nav>
 

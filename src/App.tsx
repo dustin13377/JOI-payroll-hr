@@ -44,6 +44,8 @@ import HrTimeOff from "@/pages/HrTimeOff";
 // the new unified form at /vacation.
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientCampaignDetail from "@/pages/ClientCampaignDetail";
+import ClientTeam from "@/pages/ClientTeam";
+import ClientRoleDetail from "@/pages/ClientRoleDetail";
 import ProvisionOrg from "@/pages/ProvisionOrg";
 import AgentReviews from "@/pages/AgentReviews";
 import SystemUsers from "@/pages/SystemUsers";
@@ -52,6 +54,7 @@ import PayrollRates from "@/pages/admin/PayrollRates";
 import PayrollAgent from "@/pages/admin/PayrollAgent";
 import PayrollHolidays from "@/pages/admin/PayrollHolidays";
 import ClientHolidays from "@/pages/admin/ClientHolidays";
+import ClientMessages from "@/pages/admin/ClientMessages";
 import PrePayroll from "@/pages/admin/PrePayroll";
 import PrepayHistory from "@/pages/admin/PrepayHistory";
 import Usage from "@/pages/admin/Usage";
@@ -129,6 +132,8 @@ const App = () => (
                   <ClientLayout>
                     <Routes>
                       <Route index element={<ClientDashboard />} />
+                      <Route path="role/:roleName" element={<ClientRoleDetail />} />
+                      <Route path="team" element={<ClientTeam />} />
                       <Route path="campaign/:id" element={<ClientCampaignDetail />} />
                     </Routes>
                   </ClientLayout>
@@ -182,6 +187,7 @@ const App = () => (
                     <Route path="/comunicados" element={<Comunicados />} />
                     <Route path="/admin/provision-org" element={<RequireOwner><ProvisionOrg /></RequireOwner>} />
                     <Route path="/admin/system-users" element={<RequireOwner><SystemUsers /></RequireOwner>} />
+                    <Route path="/admin/client-messages" element={<RequireLeadership><ClientMessages /></RequireLeadership>} />
                     <Route path="/admin/usage" element={<RequireOwner><Usage /></RequireOwner>} />
                     {/* Payroll — owner-only. Entry point is Pre-Payroll (quincenal). */}
                     <Route path="/admin/payroll" element={<Navigate to="/admin/payroll/prepay" replace />} />
